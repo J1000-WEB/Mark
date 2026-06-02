@@ -1,6 +1,10 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import {
   attentionStores,
+  fmtNum,
   formatWon,
   markData,
   mergeRows,
@@ -22,10 +26,13 @@ function Kpi({ title, value, sub }: { title: string; value: string; sub?: string
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section className="rounded-3xl bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-xl font-black">{title}</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black">{title}</h2>
+        {right}
+      </div>
       {children}
     </section>
   );
@@ -51,8 +58,54 @@ function MiniBar({ label, value, max, sub }: { label: string; value: number; max
   );
 }
 
+function ProductList({ products }: { products: any[] }) {
+  if (!products?.length) return <Empty />;
+  return (
+    <div className="space-y-3">
+      {products.map((p, i) => (
+        <div key={`${p.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-4">
+          <div className="flex justify-between gap-4">
+            <div>
+              <p className="text-sm text-slate-500">#{i + 1} · {p.styleCode}</p>
+              <p className="font-black">{p.productName}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black">{fmtNum(p.weekNet)}개</p>
+              <p className="text-xs text-slate-500">금주 합계</p>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">전주 합계</p>
+              <p className="mt-1 font-bold">{fmtNum(p.prevNet)}개</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">수량 증감률</p>
+              <p className={`mt-1 font-bold ${p.qtyChangeRate < 0 ? "text-red-600" : "text-blue-600"}`}>
+                {p.qtyChangeRate >= 0 ? "+" : ""}{pct(p.qtyChangeRate)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">금주 매출</p>
+              <p className="mt-1 font-bold">{formatWon(p.weekAmount)}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-xs text-slate-500">매출 신장률</p>
+              <p className={`mt-1 font-bold ${p.amountChangeRate < 0 ? "text-red-600" : "text-blue-600"}`}>
+                {p.amountChangeRate >= 0 ? "+" : ""}{pct(p.amountChangeRate)}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
+  const [selectedStore, setSelectedStore] = useState(markData.weekly.productStoreNames?.[0] || "");
   const pageData = markData[active];
+
   const merged =
     active === "monthly"
       ? mergeRows(pageData.current.rows, pageData.prevMonth.rows, pageData.prevYear.rows)
@@ -60,23 +113,23 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
   const { core, shopInShop } = splitStores(merged);
   const coreTotals = totals(core);
-  const allTotals = totals(merged);
   const shopRows = shopSummary(shopInShop);
   const attention = attentionStores(core);
   const rankField = active === "daily" ? "daySales" : active === "monthly" ? "monthSales" : "weekSales";
   const ranking = salesRank(core, rankField);
   const maxSales = Math.max(1, ...ranking.map((r) => Number(r[rankField] || 0)));
-  const review = monthlyReview(core, shopInShop);
+  const review = monthlyReview(core);
+  const storeProducts = useMemo(() => markData.weekly.storeTopProducts?.[selectedStore] || [], [selectedStore]);
 
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark2.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark2.5</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
-              {active === "weekly" && "주간 · 차주(531) vs 일_전주"}
+              {active === "weekly" && "주간 · 차주(531) vs 전주(517) · 금년금주전주 상품 분석"}
               {active === "monthly" && "월간 · 위탁 제외 핵심매장 중심"}
             </p>
           </div>
@@ -85,7 +138,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
         <section className="rounded-3xl bg-white p-4 text-sm text-slate-600 shadow-sm">
           <b className="text-slate-900">현재 데이터:</b> 📊 매출 통합 대시보드 2026 (NEW).xlsx · 내장 데이터
-          <div className="mt-1 text-xs text-slate-500">위탁/샵인샵은 상단 KPI·관리매장·매장순위에서 제외하고 하단 별도 영역에서 관리합니다.</div>
+          <div className="mt-1 text-xs text-slate-500">오프라인_으로 시작하는 위탁/특수채널은 상단 수치분석에서 제외하고 하단 별도 영역에서 관리합니다.</div>
         </section>
 
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
@@ -103,7 +156,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           ) : active === "weekly" ? (
             <>
               <Kpi title="주간 목표" value={formatWon(coreTotals.weekTarget)} />
-              <Kpi title="주간 매출" value={formatWon(coreTotals.weekSales)} sub={`비교기간 대비 ${pct(coreTotals.weekChange)}`} />
+              <Kpi title="주간 매출" value={formatWon(coreTotals.weekSales)} sub={`전주 대비 ${pct(coreTotals.weekChange)}`} />
               <Kpi title="주간 달성률" value={pct(coreTotals.weekRate)} />
               <Kpi title="월 누적 매출" value={formatWon(coreTotals.monthSales)} sub={pct(coreTotals.monthRate)} />
             </>
@@ -122,36 +175,39 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             <Card title="매출관리 필요매장">
               <div className="space-y-4">
                 {attention.length === 0 && <Empty />}
-                {attention.map((r, i) => (
-                  <div key={r.storeName} className="rounded-2xl bg-slate-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-slate-500">#{i + 1}</p>
-                        <p className="text-lg font-black">{r.storeName}</p>
+                {attention.map((r, i) => {
+                  const change = active === "daily" ? r.dayChangeRate : r.weekChangeRate;
+                  return (
+                    <div key={r.storeName} className="rounded-2xl bg-slate-50 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-slate-500">#{i + 1}</p>
+                          <p className="text-lg font-black">{r.storeName}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-xl font-black ${change < 0 ? "text-red-600" : "text-blue-600"}`}>
+                            {change >= 0 ? "+" : ""}{pct(change)}
+                          </p>
+                          <p className="text-xs text-slate-500">전주 대비</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-xl font-black ${(active === "daily" ? r.dayChangeRate : r.weekChangeRate) < 0 ? "text-red-600" : "text-blue-600"}`}>
-                          {(active === "daily" ? r.dayChangeRate : r.weekChangeRate) >= 0 ? "+" : ""}{pct(active === "daily" ? r.dayChangeRate : r.weekChangeRate)}
-                        </p>
-                        <p className="text-xs text-slate-500">비교기간 대비</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-xl bg-white p-3">
+                          <p className="text-xs text-slate-500">{active === "daily" ? "전주 동요일" : "전주 매출"}</p>
+                          <p className="mt-1 font-bold">{formatWon(active === "daily" ? r.compareDaySales : r.compareWeekSales)}</p>
+                        </div>
+                        <div className="rounded-xl bg-white p-3">
+                          <p className="text-xs text-slate-500">{active === "daily" ? "현재 일매출" : "현재 주매출"}</p>
+                          <p className="mt-1 font-black">{formatWon(active === "daily" ? r.daySales : r.weekSales)}</p>
+                        </div>
+                        <div className="rounded-xl bg-white p-3">
+                          <p className="text-xs text-slate-500">달성률</p>
+                          <p className="mt-1 font-bold">{pct(active === "daily" ? r.dayRate : r.weekRate)}</p>
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                      <div className="rounded-xl bg-white p-3">
-                        <p className="text-xs text-slate-500">{active === "daily" ? "비교 일매출" : "비교 주매출"}</p>
-                        <p className="mt-1 font-bold">{formatWon(active === "daily" ? r.compareDaySales : r.compareWeekSales)}</p>
-                      </div>
-                      <div className="rounded-xl bg-white p-3">
-                        <p className="text-xs text-slate-500">{active === "daily" ? "현재 일매출" : "현재 주매출"}</p>
-                        <p className="mt-1 font-black">{formatWon(active === "daily" ? r.daySales : r.weekSales)}</p>
-                      </div>
-                      <div className="rounded-xl bg-white p-3">
-                        <p className="text-xs text-slate-500">달성률</p>
-                        <p className="mt-1 font-bold">{pct(active === "daily" ? r.dayRate : r.weekRate)}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
 
@@ -168,11 +224,35 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                       label={r.storeName}
                       value={current}
                       max={maxSales}
-                      sub={`비교 ${formatWon(prev)} · 전주비 ${change >= 0 ? "+" : ""}${pct(change)}`}
+                      sub={`전주 ${formatWon(prev)} · 전주비 ${change >= 0 ? "+" : ""}${pct(change)}`}
                     />
                   );
                 })}
               </div>
+            </Card>
+          </section>
+        )}
+
+        {active === "weekly" && (
+          <section className="grid gap-6 lg:grid-cols-2">
+            <Card title="전사 TOP 상품">
+              <ProductList products={markData.weekly.companyTopProducts || []} />
+            </Card>
+            <Card
+              title="점포별 TOP 상품"
+              right={
+                <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                  value={selectedStore}
+                  onChange={(e) => setSelectedStore(e.target.value)}
+                >
+                  {markData.weekly.productStoreNames?.map((name: string) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              }
+            >
+              <ProductList products={storeProducts} />
             </Card>
           </section>
         )}
@@ -219,8 +299,8 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             <div className="space-y-3 text-sm leading-6 text-slate-700">
               <p>• 위탁채널은 매출 규모보다 재고 회전과 상품 투입 필요 여부 중심으로 판단합니다.</p>
               <p>• 달성률이 높은 위탁채널은 재고 소진 속도가 빠를 가능성이 있어 추가 투입 후보로 관리합니다.</p>
-              <p>• 달성률이 낮은 위탁채널은 전사 베스트 상품 중심으로 상품 교체 또는 재고 순환을 검토합니다.</p>
-              <p>• 다음 단계에서 상품별 판매/재고 시트를 연결하면 채널별 추천 상품을 자동 산출할 수 있습니다.</p>
+              <p>• 전사 TOP 상품과 점포별 TOP 상품을 기준으로 위탁채널 투입 후보 상품을 검토하세요.</p>
+              <p>• 다음 단계에서 위탁채널별 재고 수량까지 연결하면 채널별 추천 상품을 자동 산출할 수 있습니다.</p>
             </div>
           </Card>
         </section>

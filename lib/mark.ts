@@ -2,20 +2,16 @@ import data from "./mark-data.json";
 
 export const markData = data as any;
 
-export const SHOP_IN_SHOP_STORES = [
-  "오프라인_롯데면세점",
-  "오프라인_무신사(강남)",
-  "오프라인_무신사(대구)",
-  "오프라인_무신사(백&캡클럽 서울숲)",
-  "오프라인_무신사(성수)",
-  "오프라인_무신사(수원)",
-  "오프라인_무신사(은평)",
-  "오프라인_무신사(홍대)",
-  "오프라인_한컬렉션",
-];
+export function isShopInShop(storeName: string) {
+  return String(storeName || "").startsWith("오프라인_");
+}
 
 export function formatWon(value: number) {
   return `${Math.round(value || 0).toLocaleString("ko-KR")}원`;
+}
+
+export function fmtNum(value: number) {
+  return Math.round(value || 0).toLocaleString("ko-KR");
 }
 
 export function pct(value: number) {
@@ -30,8 +26,8 @@ export function safeRate(current: number, previous: number) {
 
 export function splitStores(rows: any[]) {
   return {
-    core: rows.filter((r) => !SHOP_IN_SHOP_STORES.includes(r.storeName)),
-    shopInShop: rows.filter((r) => SHOP_IN_SHOP_STORES.includes(r.storeName)),
+    core: rows.filter((r) => !isShopInShop(r.storeName)),
+    shopInShop: rows.filter((r) => isShopInShop(r.storeName)),
   };
 }
 
@@ -85,19 +81,23 @@ export function totals(rows: any[]) {
 
 export function attentionStores(rows: any[]) {
   return [...rows]
+    .filter((r) => Number(r.weekSales || 0) > 0 || Number(r.compareWeekSales || 0) > 0)
     .map((r) => ({
       ...r,
       riskScore:
         Math.max(0, 85 - Number(r.weekRate || 0)) +
-        Math.max(0, -Number(r.weekChangeRate || 0)) +
-        Math.abs(Number(r.weekChangeRate || 0)) * 0.2,
+        Math.max(0, -Number(r.weekChangeRate || 0)) * 1.2 +
+        Math.abs(Number(r.weekChangeRate || 0)) * 0.15,
     }))
     .sort((a, b) => b.riskScore - a.riskScore)
     .slice(0, 8);
 }
 
 export function salesRank(rows: any[], field: string) {
-  return [...rows].sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0)).slice(0, 10);
+  return [...rows]
+    .filter((r) => Number(r[field] || 0) > 0)
+    .sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0))
+    .slice(0, 10);
 }
 
 export function shopSummary(rows: any[]) {
@@ -114,7 +114,7 @@ export function shopSummary(rows: any[]) {
     .sort((a, b) => Number(b.weekSales || 0) - Number(a.weekSales || 0));
 }
 
-export function monthlyReview(coreRows: any[], shopRows: any[]) {
+export function monthlyReview(coreRows: any[]) {
   const t = totals(coreRows);
   const worst = attentionStores(coreRows)[0];
   return [

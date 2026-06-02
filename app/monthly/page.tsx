@@ -1,5 +1,2 @@
 import MarkDashboard from "@/components/MarkDashboard";
-
-export default function Page() {
-  return <MarkDashboard active="monthly" />;
-}
+export default function Page(){return <MarkDashboard active="monthly"/>}

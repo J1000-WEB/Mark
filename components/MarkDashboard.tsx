@@ -3,17 +3,21 @@
 import { useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import {
-  attentionStores,
   fmtNum,
   formatWon,
   markData,
   mergeRows,
   monthlyReview,
   pct,
-  salesRank,
-  shopSummary,
+  positiveStores,
+  salesRankAll,
+  shopInventoryNote,
+  shopPositive,
+  shopWeak,
   splitStores,
   totals,
+  weakStores,
+  weeklyOneLine,
 } from "@/lib/mark";
 
 function Kpi({ title, value, sub }: { title: string; value: string; sub?: string }) {
@@ -42,23 +46,68 @@ function Empty() {
   return <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">표시할 데이터가 없습니다.</div>;
 }
 
-function MiniBar({ label, value, max, sub }: { label: string; value: number; max: number; sub?: string }) {
-  const width = max ? Math.max(4, (value / max) * 100) : 0;
+function StoreCard({ r, mode = "week" }: { r: any; mode?: "week" | "day" }) {
+  const current = mode === "day" ? r.daySales : r.weekSales;
+  const prev = mode === "day" ? r.compareDaySales : r.compareWeekSales;
+  const change = mode === "day" ? r.dayChangeRate : r.weekChangeRate;
+  const rate = mode === "day" ? r.dayRate : r.weekRate;
   return (
-    <div>
-      <div className="mb-1 flex justify-between gap-3 text-xs text-slate-500">
-        <span className="font-semibold text-slate-700">{label}</span>
-        <span>{formatWon(value)}</span>
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-black">{r.storeName}</p>
+          <p className="mt-1 text-xs text-slate-500">전주 {formatWon(prev)}</p>
+        </div>
+        <div className="text-right">
+          <p className={`font-black ${change < 0 ? "text-red-600" : "text-blue-600"}`}>
+            {change >= 0 ? "+" : ""}{pct(change)}
+          </p>
+          <p className="text-xs text-slate-500">전주비</p>
+        </div>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-slate-900" style={{ width: `${width}%` }} />
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div className="rounded-xl bg-white p-3">
+          <p className="text-xs text-slate-500">{mode === "day" ? "일매출" : "주간 매출"}</p>
+          <p className="mt-1 font-black">{formatWon(current)}</p>
+        </div>
+        <div className="rounded-xl bg-white p-3">
+          <p className="text-xs text-slate-500">달성률</p>
+          <p className="mt-1 font-bold">{pct(rate)}</p>
+        </div>
       </div>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </div>
   );
 }
 
-function ProductList({ products }: { products: any[] }) {
+function RankList({ rows, field, mode }: { rows: any[]; field: string; mode: "week" | "day" | "month" }) {
+  const max = Math.max(1, ...rows.map((r) => Number(r[field] || 0)));
+  return (
+    <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
+      {rows.map((r, i) => {
+        const current = Number(r[field] || 0);
+        const prev = mode === "day" ? r.compareDaySales : mode === "month" ? r.compareMonthSales : r.compareWeekSales;
+        const change = mode === "day" ? r.dayChangeRate : mode === "month" ? r.monthChangeRate : r.weekChangeRate;
+        const width = Math.max(4, (current / max) * 100);
+        return (
+          <div key={r.storeName}>
+            <div className="mb-1 flex justify-between gap-3 text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">#{i + 1} {r.storeName}</span>
+              <span>{formatWon(current)}</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-slate-900" style={{ width: `${width}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              전주 {formatWon(prev)} · 전주비 <span className={change < 0 ? "text-red-600" : "text-blue-600"}>{change >= 0 ? "+" : ""}{pct(change)}</span>
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProductList({ products, showContribution = false }: { products: any[]; showContribution?: boolean }) {
   if (!products?.length) return <Empty />;
   return (
     <div className="space-y-3">
@@ -75,29 +124,22 @@ function ProductList({ products }: { products: any[] }) {
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">전주 합계</p>
-              <p className="mt-1 font-bold">{fmtNum(p.prevNet)}개</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">수량 증감률</p>
-              <p className={`mt-1 font-bold ${p.qtyChangeRate < 0 ? "text-red-600" : "text-blue-600"}`}>
-                {p.qtyChangeRate >= 0 ? "+" : ""}{pct(p.qtyChangeRate)}
-              </p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">금주 매출</p>
-              <p className="mt-1 font-bold">{formatWon(p.weekAmount)}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">매출 신장률</p>
-              <p className={`mt-1 font-bold ${p.amountChangeRate < 0 ? "text-red-600" : "text-blue-600"}`}>
-                {p.amountChangeRate >= 0 ? "+" : ""}{pct(p.amountChangeRate)}
-              </p>
-            </div>
+            <Info label="전주 합계" value={`${fmtNum(p.prevNet)}개`} />
+            <Info label="수량 증감률" value={`${p.qtyChangeRate >= 0 ? "+" : ""}${pct(p.qtyChangeRate)}`} danger={p.qtyChangeRate < 0} />
+            <Info label="금주 매출" value={formatWon(p.weekAmount)} />
+            <Info label={showContribution ? "매출 기여도" : "매출 신장률"} value={showContribution ? pct(p.contributionRate) : `${p.amountChangeRate >= 0 ? "+" : ""}${pct(p.amountChangeRate)}`} danger={!showContribution && p.amountChangeRate < 0} />
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function Info({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`mt-1 font-bold ${danger ? "text-red-600" : "text-slate-800"}`}>{value}</p>
     </div>
   );
 }
@@ -113,23 +155,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
   const { core, shopInShop } = splitStores(merged);
   const coreTotals = totals(core);
-  const shopRows = shopSummary(shopInShop);
-  const attention = attentionStores(core);
+  const good = positiveStores(core, active === "daily" ? "daySales" : "weekSales");
+  const bad = weakStores(core, active === "daily" ? "daySales" : "weekSales");
+  const shopGood = shopPositive(shopInShop);
+  const shopBad = shopWeak(shopInShop);
   const rankField = active === "daily" ? "daySales" : active === "monthly" ? "monthSales" : "weekSales";
-  const ranking = salesRank(core, rankField);
-  const maxSales = Math.max(1, ...ranking.map((r) => Number(r[rankField] || 0)));
+  const ranking = salesRankAll(core, rankField);
   const review = monthlyReview(core);
   const storeProducts = useMemo(() => markData.weekly.storeTopProducts?.[selectedStore] || [], [selectedStore]);
+  const oneLine = weeklyOneLine(core);
 
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark2.5</h1>
+            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark2.6</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
-              {active === "weekly" && "주간 · 차주(531) vs 전주(517) · 금년금주전주 상품 분석"}
+              {active === "weekly" && "주간 · 압축 운영판 · 상품/위탁 분석 강화"}
               {active === "monthly" && "월간 · 위탁 제외 핵심매장 중심"}
             </p>
           </div>
@@ -144,6 +188,13 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
           {pageData.periodLabel}
         </section>
+
+        {active === "weekly" && (
+          <section className="rounded-3xl bg-blue-50 p-5 shadow-sm">
+            <p className="text-sm font-bold text-blue-700">이번 주 한 줄 결론</p>
+            <p className="mt-2 text-xl font-black text-blue-950">{oneLine}</p>
+          </section>
+        )}
 
         <section className="grid gap-4 md:grid-cols-4">
           {active === "daily" ? (
@@ -173,62 +224,20 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active !== "monthly" && (
           <section className="grid gap-6 lg:grid-cols-2">
             <Card title="매출관리 필요매장">
-              <div className="space-y-4">
-                {attention.length === 0 && <Empty />}
-                {attention.map((r, i) => {
-                  const change = active === "daily" ? r.dayChangeRate : r.weekChangeRate;
-                  return (
-                    <div key={r.storeName} className="rounded-2xl bg-slate-50 p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-slate-500">#{i + 1}</p>
-                          <p className="text-lg font-black">{r.storeName}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-xl font-black ${change < 0 ? "text-red-600" : "text-blue-600"}`}>
-                            {change >= 0 ? "+" : ""}{pct(change)}
-                          </p>
-                          <p className="text-xs text-slate-500">전주 대비</p>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                        <div className="rounded-xl bg-white p-3">
-                          <p className="text-xs text-slate-500">{active === "daily" ? "전주 동요일" : "전주 매출"}</p>
-                          <p className="mt-1 font-bold">{formatWon(active === "daily" ? r.compareDaySales : r.compareWeekSales)}</p>
-                        </div>
-                        <div className="rounded-xl bg-white p-3">
-                          <p className="text-xs text-slate-500">{active === "daily" ? "현재 일매출" : "현재 주매출"}</p>
-                          <p className="mt-1 font-black">{formatWon(active === "daily" ? r.daySales : r.weekSales)}</p>
-                        </div>
-                        <div className="rounded-xl bg-white p-3">
-                          <p className="text-xs text-slate-500">달성률</p>
-                          <p className="mt-1 font-bold">{pct(active === "daily" ? r.dayRate : r.weekRate)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 font-black text-blue-700">호조 매장 TOP3</h3>
+                  <div className="space-y-3">{good.map((r) => <StoreCard key={r.storeName} r={r} mode={active === "daily" ? "day" : "week"} />)}</div>
+                </div>
+                <div>
+                  <h3 className="mb-3 font-black text-red-700">부진 매장 TOP3</h3>
+                  <div className="space-y-3">{bad.map((r) => <StoreCard key={r.storeName} r={r} mode={active === "daily" ? "day" : "week"} />)}</div>
+                </div>
               </div>
             </Card>
 
             <Card title={active === "daily" ? "매장별 일매출 순위" : "매장별 주간 매출 순위"}>
-              <div className="space-y-4">
-                {ranking.length === 0 && <Empty />}
-                {ranking.map((r) => {
-                  const change = active === "daily" ? r.dayChangeRate : r.weekChangeRate;
-                  const current = Number(r[rankField] || 0);
-                  const prev = active === "daily" ? r.compareDaySales : r.compareWeekSales;
-                  return (
-                    <MiniBar
-                      key={r.storeName}
-                      label={r.storeName}
-                      value={current}
-                      max={maxSales}
-                      sub={`전주 ${formatWon(prev)} · 전주비 ${change >= 0 ? "+" : ""}${pct(change)}`}
-                    />
-                  );
-                })}
-              </div>
+              <RankList rows={ranking} field={rankField} mode={active === "daily" ? "day" : "week"} />
             </Card>
           </section>
         )}
@@ -236,7 +245,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active === "weekly" && (
           <section className="grid gap-6 lg:grid-cols-2">
             <Card title="전사 TOP 상품">
-              <ProductList products={markData.weekly.companyTopProducts || []} />
+              <ProductList products={markData.weekly.companyTopProducts || []} showContribution />
             </Card>
             <Card
               title="점포별 TOP 상품"
@@ -275,36 +284,63 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         )}
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card title="위탁/샵인샵 채널 현황">
+          <Card title="위탁 판매 현황">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h3 className="mb-3 font-black text-blue-700">위탁 호조 TOP3</h3>
+                <div className="space-y-3">
+                  {shopGood.map((r) => <ShopCard key={r.storeName} r={r} />)}
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-3 font-black text-red-700">위탁 부진 TOP3</h3>
+                <div className="space-y-3">
+                  {shopBad.map((r) => <ShopCard key={r.storeName} r={r} />)}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="위탁 상품 투입 제안">
             <div className="space-y-3">
-              {shopRows.length === 0 && <Empty />}
-              {shopRows.map((r) => (
-                <div key={r.storeName} className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <div className="flex justify-between gap-4">
+              {(markData.weekly.shopRecommendProducts || []).slice(0, 5).map((p: any, i: number) => (
+                <div key={`${p.styleCode}-${i}`} className="rounded-2xl bg-slate-50 p-4">
+                  <div className="flex justify-between gap-3">
                     <div>
-                      <p className="font-black">{r.storeName}</p>
-                      <p className="mt-1 text-sm text-slate-500">{r.inventoryNote}</p>
+                      <p className="text-sm text-slate-500">추천 #{i + 1} · {p.styleCode}</p>
+                      <p className="font-black">{p.productName}</p>
+                      <p className="mt-1 text-xs text-slate-500">위탁 판매 상위 상품 · 재고 확인 후 부족 시 추가 투입 검토</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-black">{formatWon(active === "daily" ? r.daySales : active === "monthly" ? r.monthSales : r.weekSales)}</p>
-                      <p className="text-xs text-slate-500">{active === "daily" ? "일매출" : active === "monthly" ? "월매출" : "주간 매출"}</p>
+                      <p className="font-black">{fmtNum(p.weekNet)}개</p>
+                      <p className="text-xs text-slate-500">위탁 금주 판매</p>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           </Card>
-
-          <Card title="위탁채널 재고/상품 운영 제안">
-            <div className="space-y-3 text-sm leading-6 text-slate-700">
-              <p>• 위탁채널은 매출 규모보다 재고 회전과 상품 투입 필요 여부 중심으로 판단합니다.</p>
-              <p>• 달성률이 높은 위탁채널은 재고 소진 속도가 빠를 가능성이 있어 추가 투입 후보로 관리합니다.</p>
-              <p>• 전사 TOP 상품과 점포별 TOP 상품을 기준으로 위탁채널 투입 후보 상품을 검토하세요.</p>
-              <p>• 다음 단계에서 위탁채널별 재고 수량까지 연결하면 채널별 추천 상품을 자동 산출할 수 있습니다.</p>
-            </div>
-          </Card>
         </section>
       </div>
     </main>
+  );
+}
+
+function ShopCard({ r }: { r: any }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="flex justify-between gap-4">
+        <div>
+          <p className="font-black">{r.storeName}</p>
+          <p className="mt-1 text-xs text-slate-500">{shopInventoryNote(r)}</p>
+        </div>
+        <div className="text-right">
+          <p className="font-black">{formatWon(r.weekSales)}</p>
+          <p className={`text-xs font-bold ${r.weekChangeRate < 0 ? "text-red-600" : "text-blue-600"}`}>
+            {r.weekChangeRate >= 0 ? "+" : ""}{pct(r.weekChangeRate)}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

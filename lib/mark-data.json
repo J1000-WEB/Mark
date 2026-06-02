@@ -2922,7 +2922,9 @@
         "weekAmount": 17806600.0,
         "prevAmount": 12741300.0,
         "qtyChangeRate": 44.054054054054056,
-        "amountChangeRate": 39.75497005800036
+        "amountChangeRate": 39.75497005800036,
+        "contributionRate": 4.371809823105536,
+        "storeCount": 21
       },
       {
         "styleCode": "WBE2L05513",
@@ -2932,7 +2934,9 @@
         "weekAmount": 17329400.0,
         "prevAmount": 12771500.0,
         "qtyChangeRate": 32.663316582914575,
-        "amountChangeRate": 35.68805543593157
+        "amountChangeRate": 35.68805543593157,
+        "contributionRate": 4.254649464160764,
+        "storeCount": 21
       },
       {
         "styleCode": "WBE2L03531",
@@ -2942,7 +2946,9 @@
         "weekAmount": 12645300.0,
         "prevAmount": 13858400.0,
         "qtyChangeRate": -8.358208955223882,
-        "amountChangeRate": -8.753535761704093
+        "amountChangeRate": -8.753535761704093,
+        "contributionRate": 3.1046267539067776,
+        "storeCount": 21
       },
       {
         "styleCode": "GF2LKC539",
@@ -2952,7 +2958,9 @@
         "weekAmount": 10207100.0,
         "prevAmount": 9754500.0,
         "qtyChangeRate": 7.2727272727272725,
-        "amountChangeRate": 4.6399097852273306
+        "amountChangeRate": 4.6399097852273306,
+        "contributionRate": 2.506009010446717,
+        "storeCount": 21
       },
       {
         "styleCode": "WBD3L04501",
@@ -2962,7 +2970,9 @@
         "weekAmount": 9844600.0,
         "prevAmount": 8806100.0,
         "qtyChangeRate": 10.852713178294573,
-        "amountChangeRate": 11.792961697005484
+        "amountChangeRate": 11.792961697005484,
+        "contributionRate": 2.4170093664452925,
+        "storeCount": 21
       },
       {
         "styleCode": "GF2LTS522",
@@ -2972,7 +2982,9 @@
         "weekAmount": 7119500.0,
         "prevAmount": 7578700.0,
         "qtyChangeRate": -5.614035087719298,
-        "amountChangeRate": -6.059086650744851
+        "amountChangeRate": -6.059086650744851,
+        "contributionRate": 1.7479530081879673,
+        "storeCount": 21
       },
       {
         "styleCode": "GF2LSH521",
@@ -2982,7 +2994,9 @@
         "weekAmount": 9708600.0,
         "prevAmount": 7720900.0,
         "qtyChangeRate": 29.651162790697676,
-        "amountChangeRate": 25.74440803533267
+        "amountChangeRate": 25.74440803533267,
+        "contributionRate": 2.3836191551785517,
+        "storeCount": 21
       },
       {
         "styleCode": "WBD3L04503",
@@ -2992,7 +3006,9 @@
         "weekAmount": 7499600.0,
         "prevAmount": 8609300.0,
         "qtyChangeRate": -13.83399209486166,
-        "amountChangeRate": -12.889549673028005
+        "amountChangeRate": -12.889549673028005,
+        "contributionRate": 1.8412737383533224,
+        "storeCount": 21
       },
       {
         "styleCode": "WBE2L04540",
@@ -3002,7 +3018,9 @@
         "weekAmount": 8008500.0,
         "prevAmount": 8456900.0,
         "qtyChangeRate": -5.286343612334802,
-        "amountChangeRate": -5.302179285553808
+        "amountChangeRate": -5.302179285553808,
+        "contributionRate": 1.9662169627183559,
+        "storeCount": 21
       },
       {
         "styleCode": "WBE2L01517",
@@ -3012,7 +3030,9 @@
         "weekAmount": 2767800.0,
         "prevAmount": 2345000.0,
         "qtyChangeRate": 17.24137931034483,
-        "amountChangeRate": 18.029850746268657
+        "amountChangeRate": 18.029850746268657,
+        "contributionRate": 0.679539902530045,
+        "storeCount": 20
       }
     ],
     "storeTopProducts": {
@@ -3025,7 +3045,9 @@
           "weekAmount": 2752000.0,
           "prevAmount": 630000.0,
           "qtyChangeRate": 377.77777777777777,
-          "amountChangeRate": 336.8253968253968
+          "amountChangeRate": 336.8253968253968,
+          "contributionRate": 11.516089885759719,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3035,7 +3057,9 @@
           "weekAmount": 1934000.0,
           "prevAmount": 700000.0,
           "qtyChangeRate": 210.0,
-          "amountChangeRate": 176.28571428571428
+          "amountChangeRate": 176.28571428571428,
+          "contributionRate": 8.09306607523957,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP525",
@@ -3045,7 +3069,9 @@
           "weekAmount": 1032000.0,
           "prevAmount": 215000.0,
           "qtyChangeRate": 380.0,
-          "amountChangeRate": 380.0
+          "amountChangeRate": 380.0,
+          "contributionRate": 4.318533707159895,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3055,7 +3081,9 @@
           "weekAmount": 648000.0,
           "prevAmount": 243000.0,
           "qtyChangeRate": 166.66666666666669,
-          "amountChangeRate": 166.66666666666669
+          "amountChangeRate": 166.66666666666669,
+          "contributionRate": 2.7116374440306314,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05512",
@@ -3065,7 +3093,9 @@
           "weekAmount": 713000.0,
           "prevAmount": 248000.0,
           "qtyChangeRate": 187.5,
-          "amountChangeRate": 187.5
+          "amountChangeRate": 187.5,
+          "contributionRate": 2.9836381135707413,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -3075,7 +3105,9 @@
           "weekAmount": 874000.0,
           "prevAmount": 190000.0,
           "qtyChangeRate": 360.0,
-          "amountChangeRate": 360.0
+          "amountChangeRate": 360.0,
+          "contributionRate": 3.6573628488931664,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04534",
@@ -3085,7 +3117,9 @@
           "weekAmount": 800000.0,
           "prevAmount": 440000.0,
           "qtyChangeRate": 81.81818181818183,
-          "amountChangeRate": 81.81818181818183
+          "amountChangeRate": 81.81818181818183,
+          "contributionRate": 3.3477005481859647,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3095,7 +3129,9 @@
           "weekAmount": 665000.0,
           "prevAmount": 385000.0,
           "qtyChangeRate": 72.72727272727273,
-          "amountChangeRate": 72.72727272727273
+          "amountChangeRate": 72.72727272727273,
+          "contributionRate": 2.782776080679583,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3105,7 +3141,9 @@
           "weekAmount": 595000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 240.0,
-          "amountChangeRate": 240.0
+          "amountChangeRate": 240.0,
+          "contributionRate": 2.489852282713311,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3115,7 +3153,9 @@
           "weekAmount": 627000.0,
           "prevAmount": 504000.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 24.404761904761905
+          "amountChangeRate": 24.404761904761905,
+          "contributionRate": 2.62376030464075,
+          "storeCount": 1
         }
       ],
       "롯데백화점 광복점": [
@@ -3127,7 +3167,9 @@
           "weekAmount": 1094100.0,
           "prevAmount": 1456300.0,
           "qtyChangeRate": -24.561403508771928,
-          "amountChangeRate": -24.871249055826407
+          "amountChangeRate": -24.871249055826407,
+          "contributionRate": 3.4307807605352028,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3137,7 +3179,9 @@
           "weekAmount": 1411200.0,
           "prevAmount": 2471700.0,
           "qtyChangeRate": -42.62295081967213,
-          "amountChangeRate": -42.905692438402724
+          "amountChangeRate": -42.905692438402724,
+          "contributionRate": 4.425114531822757,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -3147,7 +3191,9 @@
           "weekAmount": 435400.0,
           "prevAmount": 701400.0,
           "qtyChangeRate": -37.03703703703704,
-          "amountChangeRate": -37.924151696606785
+          "amountChangeRate": -37.924151696606785,
+          "contributionRate": 1.3652883128937277,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3157,7 +3203,9 @@
           "weekAmount": 1103000.0,
           "prevAmount": 2601600.0,
           "qtyChangeRate": -67.32673267326733,
-          "amountChangeRate": -57.60301353013531
+          "amountChangeRate": -57.60301353013531,
+          "contributionRate": 3.458688583191965,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3167,7 +3215,9 @@
           "weekAmount": 928200.0,
           "prevAmount": 1145800.0,
           "qtyChangeRate": -17.647058823529413,
-          "amountChangeRate": -18.991097922848667
+          "amountChangeRate": -18.991097922848667,
+          "contributionRate": 2.910566403371516,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -3177,7 +3227,9 @@
           "weekAmount": 950000.0,
           "prevAmount": 893000.0,
           "qtyChangeRate": 4.0,
-          "amountChangeRate": 6.382978723404255
+          "amountChangeRate": 6.382978723404255,
+          "contributionRate": 2.9789248903285284,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS523",
@@ -3187,7 +3239,9 @@
           "weekAmount": 802400.0,
           "prevAmount": 1033600.0,
           "qtyChangeRate": -21.875,
-          "amountChangeRate": -22.36842105263158
+          "amountChangeRate": -22.36842105263158,
+          "contributionRate": 2.5160940336838014,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK510",
@@ -3197,7 +3251,9 @@
           "weekAmount": 1113600.0,
           "prevAmount": 1279200.0,
           "qtyChangeRate": -14.285714285714285,
-          "amountChangeRate": -12.94559099437148
+          "amountChangeRate": -12.94559099437148,
+          "contributionRate": 3.4919271135472094,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -3207,7 +3263,9 @@
           "weekAmount": 868300.0,
           "prevAmount": 1366100.0,
           "qtyChangeRate": -36.84210526315789,
-          "amountChangeRate": -36.43949930458971
+          "amountChangeRate": -36.43949930458971,
+          "contributionRate": 2.722737349760275,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE3L01503",
@@ -3217,7 +3275,9 @@
           "weekAmount": 429600.0,
           "prevAmount": 557900.0,
           "qtyChangeRate": -22.58064516129032,
-          "amountChangeRate": -22.996952858935295
+          "amountChangeRate": -22.996952858935295,
+          "contributionRate": 1.3471011925106693,
+          "storeCount": 1
         }
       ],
       "롯데백화점 평촌점": [
@@ -3229,7 +3289,9 @@
           "weekAmount": 544000.0,
           "prevAmount": 408000.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 33.33333333333333
+          "amountChangeRate": 33.33333333333333,
+          "contributionRate": 6.568461724221203,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3239,7 +3301,9 @@
           "weekAmount": 490000.0,
           "prevAmount": 400000.0,
           "qtyChangeRate": 27.27272727272727,
-          "amountChangeRate": 22.5
+          "amountChangeRate": 22.5,
+          "contributionRate": 5.916445303066892,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE1L12504",
@@ -3249,7 +3313,9 @@
           "weekAmount": 532000.0,
           "prevAmount": 38000.0,
           "qtyChangeRate": 1300.0,
-          "amountChangeRate": 1300.0
+          "amountChangeRate": 1300.0,
+          "contributionRate": 6.423569186186912,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS531",
@@ -3259,7 +3325,9 @@
           "weekAmount": 360000.0,
           "prevAmount": 160000.0,
           "qtyChangeRate": 125.0,
-          "amountChangeRate": 125.0
+          "amountChangeRate": 125.0,
+          "contributionRate": 4.346776141028736,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3269,7 +3337,9 @@
           "weekAmount": 315000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 80.0,
-          "amountChangeRate": 80.0
+          "amountChangeRate": 80.0,
+          "contributionRate": 3.8034291234001447,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP537",
@@ -3279,7 +3349,9 @@
           "weekAmount": 196000.0,
           "prevAmount": 252000.0,
           "qtyChangeRate": -22.22222222222222,
-          "amountChangeRate": -22.22222222222222
+          "amountChangeRate": -22.22222222222222,
+          "contributionRate": 2.3665781212267567,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS528",
@@ -3289,7 +3361,9 @@
           "weekAmount": 224000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.7046607099734365,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3299,7 +3373,9 @@
           "weekAmount": 294000.0,
           "prevAmount": 168000.0,
           "qtyChangeRate": 75.0,
-          "amountChangeRate": 75.0
+          "amountChangeRate": 75.0,
+          "contributionRate": 3.549867181840135,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -3309,7 +3385,9 @@
           "weekAmount": 266000.0,
           "prevAmount": 342000.0,
           "qtyChangeRate": -22.22222222222222,
-          "amountChangeRate": -22.22222222222222
+          "amountChangeRate": -22.22222222222222,
+          "contributionRate": 3.211784593093456,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS513",
@@ -3319,7 +3397,9 @@
           "weekAmount": 120000.0,
           "prevAmount": 96000.0,
           "qtyChangeRate": 25.0,
-          "amountChangeRate": 25.0
+          "amountChangeRate": 25.0,
+          "contributionRate": 1.4489253803429125,
+          "storeCount": 1
         }
       ],
       "롯데아울렛 김해점": [
@@ -3331,7 +3411,9 @@
           "weekAmount": 3756000.0,
           "prevAmount": 665000.0,
           "qtyChangeRate": 515.7894736842105,
-          "amountChangeRate": 464.812030075188
+          "amountChangeRate": 464.812030075188,
+          "contributionRate": 9.743948945443224,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3341,7 +3423,9 @@
           "weekAmount": 2550000.0,
           "prevAmount": 385000.0,
           "qtyChangeRate": 645.4545454545454,
-          "amountChangeRate": 562.3376623376623
+          "amountChangeRate": 562.3376623376623,
+          "contributionRate": 6.615300801618804,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04501",
@@ -3351,7 +3435,9 @@
           "weekAmount": 2450000.0,
           "prevAmount": 385000.0,
           "qtyChangeRate": 536.3636363636364,
-          "amountChangeRate": 536.3636363636364
+          "amountChangeRate": 536.3636363636364,
+          "contributionRate": 6.355877240771007,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE3L01508",
@@ -3361,7 +3447,9 @@
           "weekAmount": 1344000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.4866526577943806,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05543",
@@ -3371,7 +3459,9 @@
           "weekAmount": 882000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.2881158066775624,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3381,7 +3471,9 @@
           "weekAmount": 1260000.0,
           "prevAmount": 245000.0,
           "qtyChangeRate": 414.28571428571433,
-          "amountChangeRate": 414.28571428571433
+          "amountChangeRate": 414.28571428571433,
+          "contributionRate": 3.2687368666822323,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE1L12504",
@@ -3391,7 +3483,9 @@
           "weekAmount": 1140000.0,
           "prevAmount": 190000.0,
           "qtyChangeRate": 500.0,
-          "amountChangeRate": 500.0
+          "amountChangeRate": 500.0,
+          "contributionRate": 2.957428593664877,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3401,7 +3495,9 @@
           "weekAmount": 945000.0,
           "prevAmount": 810000.0,
           "qtyChangeRate": 17.391304347826086,
-          "amountChangeRate": 16.666666666666664
+          "amountChangeRate": 16.666666666666664,
+          "contributionRate": 2.4515526500116738,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -3411,7 +3507,9 @@
           "weekAmount": 950000.0,
           "prevAmount": 532000.0,
           "qtyChangeRate": 78.57142857142857,
-          "amountChangeRate": 78.57142857142857
+          "amountChangeRate": 78.57142857142857,
+          "contributionRate": 2.464523828054064,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -3421,7 +3519,9 @@
           "weekAmount": 760000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 1.971619062443251,
+          "storeCount": 1
         }
       ],
       "롯데아울렛 서울역점": [
@@ -3433,7 +3533,9 @@
           "weekAmount": 980000.0,
           "prevAmount": 910000.0,
           "qtyChangeRate": 7.6923076923076925,
-          "amountChangeRate": 7.6923076923076925
+          "amountChangeRate": 7.6923076923076925,
+          "contributionRate": 4.1982607205586255,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -3443,7 +3545,9 @@
           "weekAmount": 1144000.0,
           "prevAmount": 616000.0,
           "qtyChangeRate": 85.71428571428571,
-          "amountChangeRate": 85.71428571428571
+          "amountChangeRate": 85.71428571428571,
+          "contributionRate": 4.9008268003255795,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -3453,7 +3557,9 @@
           "weekAmount": 350000.0,
           "prevAmount": 112000.0,
           "qtyChangeRate": 212.5,
-          "amountChangeRate": 212.5
+          "amountChangeRate": 212.5,
+          "contributionRate": 1.4993788287709378,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3463,7 +3569,9 @@
           "weekAmount": 1050000.0,
           "prevAmount": 809000.0,
           "qtyChangeRate": 31.57894736842105,
-          "amountChangeRate": 29.78986402966625
+          "amountChangeRate": 29.78986402966625,
+          "contributionRate": 4.498136486312814,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3473,7 +3581,9 @@
           "weekAmount": 875000.0,
           "prevAmount": 1173000.0,
           "qtyChangeRate": -24.242424242424242,
-          "amountChangeRate": -25.404944586530263
+          "amountChangeRate": -25.404944586530263,
+          "contributionRate": 3.7484470719273446,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3483,7 +3593,9 @@
           "weekAmount": 805000.0,
           "prevAmount": 578000.0,
           "qtyChangeRate": 43.75,
-          "amountChangeRate": 39.273356401384085
+          "amountChangeRate": 39.273356401384085,
+          "contributionRate": 3.4485713061731564,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3493,7 +3605,9 @@
           "weekAmount": 567000.0,
           "prevAmount": 1077000.0,
           "qtyChangeRate": -46.15384615384615,
-          "amountChangeRate": -47.353760445682454
+          "amountChangeRate": -47.353760445682454,
+          "contributionRate": 2.4289937026089192,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP525",
@@ -3503,7 +3617,9 @@
           "weekAmount": 860000.0,
           "prevAmount": 655000.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 31.297709923664126
+          "amountChangeRate": 31.297709923664126,
+          "contributionRate": 3.684187979265733,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS536",
@@ -3513,7 +3629,9 @@
           "weekAmount": 418000.0,
           "prevAmount": 132000.0,
           "qtyChangeRate": 216.66666666666666,
-          "amountChangeRate": 216.66666666666666
+          "amountChangeRate": 216.66666666666666,
+          "contributionRate": 1.7906867155035773,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3523,7 +3641,9 @@
           "weekAmount": 560000.0,
           "prevAmount": 425000.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 31.76470588235294
+          "amountChangeRate": 31.76470588235294,
+          "contributionRate": 2.3990061260335005,
+          "storeCount": 1
         }
       ],
       "서울숲 플래그십": [
@@ -3535,7 +3655,9 @@
           "weekAmount": 316800.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 6.49020732606736,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -3545,7 +3667,9 @@
           "weekAmount": 92400.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 1.8929771367696469,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04501",
@@ -3555,7 +3679,9 @@
           "weekAmount": 189000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.8719986888470044,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LOP511",
@@ -3565,7 +3691,9 @@
           "weekAmount": 321600.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 6.588543800704745,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK510",
@@ -3575,7 +3703,9 @@
           "weekAmount": 220800.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 4.523477833319676,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK517",
@@ -3585,7 +3715,9 @@
           "weekAmount": 190000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.8924854543964598,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -3595,7 +3727,9 @@
           "weekAmount": 164600.0,
           "prevAmount": 129500.0,
           "qtyChangeRate": 25.0,
-          "amountChangeRate": 27.104247104247104
+          "amountChangeRate": 27.104247104247104,
+          "contributionRate": 3.3721216094403017,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3605,7 +3739,9 @@
           "weekAmount": 162800.0,
           "prevAmount": 35000.0,
           "qtyChangeRate": 400.0,
-          "amountChangeRate": 365.1428571428571
+          "amountChangeRate": 365.1428571428571,
+          "contributionRate": 3.3352454314512823,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LKP511",
@@ -3615,7 +3751,9 @@
           "weekAmount": 154100.0,
           "prevAmount": 218500.0,
           "qtyChangeRate": -33.33333333333333,
-          "amountChangeRate": -29.47368421052631
+          "amountChangeRate": -29.47368421052631,
+          "contributionRate": 3.1570105711710235,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC541",
@@ -3625,7 +3763,9 @@
           "weekAmount": 123900.0,
           "prevAmount": 35200.0,
           "qtyChangeRate": 300.0,
-          "amountChangeRate": 251.98863636363637
+          "amountChangeRate": 251.98863636363637,
+          "contributionRate": 2.538310251577481,
+          "storeCount": 1
         }
       ],
       "성수 플래그십": [
@@ -3637,7 +3777,9 @@
           "weekAmount": 2032500.0,
           "prevAmount": 731700.0,
           "qtyChangeRate": 177.27272727272728,
-          "amountChangeRate": 177.77777777777777
+          "amountChangeRate": 177.77777777777777,
+          "contributionRate": 3.68028507949959,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04501",
@@ -3647,7 +3789,9 @@
           "weekAmount": 1887100.0,
           "prevAmount": 3767700.0,
           "qtyChangeRate": -49.107142857142854,
-          "amountChangeRate": -49.91374047827587
+          "amountChangeRate": -49.91374047827587,
+          "contributionRate": 3.417006629039939,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -3657,7 +3801,9 @@
           "weekAmount": 1675500.0,
           "prevAmount": 1330500.0,
           "qtyChangeRate": 25.0,
-          "amountChangeRate": 25.93010146561443
+          "amountChangeRate": 25.93010146561443,
+          "contributionRate": 3.033858622731396,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS505",
@@ -3667,7 +3813,9 @@
           "weekAmount": 1178000.0,
           "prevAmount": 897000.0,
           "qtyChangeRate": 31.428571428571427,
-          "amountChangeRate": 31.32664437012263
+          "amountChangeRate": 31.32664437012263,
+          "contributionRate": 2.1330262354984093,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS536",
@@ -3677,7 +3825,9 @@
           "weekAmount": 818400.0,
           "prevAmount": 185900.0,
           "qtyChangeRate": 333.33333333333337,
-          "amountChangeRate": 340.23668639053255
+          "amountChangeRate": 340.23668639053255,
+          "contributionRate": 1.4818919109778421,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3687,7 +3837,9 @@
           "weekAmount": 931500.0,
           "prevAmount": 2652500.0,
           "qtyChangeRate": -65.0,
-          "amountChangeRate": -64.88218661639962
+          "amountChangeRate": -64.88218661639962,
+          "contributionRate": 1.6866841582060852,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04505",
@@ -3697,7 +3849,9 @@
           "weekAmount": 896400.0,
           "prevAmount": 1032800.0,
           "qtyChangeRate": -12.903225806451612,
-          "amountChangeRate": -13.206816421378775
+          "amountChangeRate": -13.206816421378775,
+          "contributionRate": 1.6231279435490444,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -3707,7 +3861,9 @@
           "weekAmount": 965200.0,
           "prevAmount": 754300.0,
           "qtyChangeRate": 28.57142857142857,
-          "amountChangeRate": 27.95969773299748
+          "amountChangeRate": 27.95969773299748,
+          "contributionRate": 1.7477053671503096,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3717,7 +3873,9 @@
           "weekAmount": 655000.0,
           "prevAmount": 544300.0,
           "qtyChangeRate": 23.809523809523807,
-          "amountChangeRate": 20.3380488701084
+          "amountChangeRate": 20.3380488701084,
+          "contributionRate": 1.1860205299248372,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -3727,7 +3885,9 @@
           "weekAmount": 1407400.0,
           "prevAmount": 669700.0,
           "qtyChangeRate": 108.33333333333333,
-          "amountChangeRate": 110.15380020904884
+          "amountChangeRate": 110.15380020904884,
+          "contributionRate": 2.5484050287270468,
+          "storeCount": 1
         }
       ],
       "스타필드 고양점": [
@@ -3739,7 +3899,9 @@
           "weekAmount": 840000.0,
           "prevAmount": 1155000.0,
           "qtyChangeRate": -27.27272727272727,
-          "amountChangeRate": -27.27272727272727
+          "amountChangeRate": -27.27272727272727,
+          "contributionRate": 8.232065856526852,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3749,7 +3911,9 @@
           "weekAmount": 378000.0,
           "prevAmount": 162000.0,
           "qtyChangeRate": 133.33333333333331,
-          "amountChangeRate": 133.33333333333331
+          "amountChangeRate": 133.33333333333331,
+          "contributionRate": 3.7044296354370836,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC541",
@@ -3759,7 +3923,9 @@
           "weekAmount": 429000.0,
           "prevAmount": 313000.0,
           "qtyChangeRate": 44.44444444444444,
-          "amountChangeRate": 37.06070287539936
+          "amountChangeRate": 37.06070287539936,
+          "contributionRate": 4.2042336338690705,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -3769,7 +3935,9 @@
           "weekAmount": 182000.0,
           "prevAmount": 154000.0,
           "qtyChangeRate": 18.181818181818183,
-          "amountChangeRate": 18.181818181818183
+          "amountChangeRate": 18.181818181818183,
+          "contributionRate": 1.7836142689141514,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -3779,7 +3947,9 @@
           "weekAmount": 440000.0,
           "prevAmount": 176000.0,
           "qtyChangeRate": 150.0,
-          "amountChangeRate": 150.0
+          "amountChangeRate": 150.0,
+          "contributionRate": 4.31203449627597,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -3789,7 +3959,9 @@
           "weekAmount": 266000.0,
           "prevAmount": 342000.0,
           "qtyChangeRate": -22.22222222222222,
-          "amountChangeRate": -22.22222222222222
+          "amountChangeRate": -22.22222222222222,
+          "contributionRate": 2.6068208545668363,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LSH511",
@@ -3799,7 +3971,9 @@
           "weekAmount": 300000.0,
           "prevAmount": 50000.0,
           "qtyChangeRate": 500.0,
-          "amountChangeRate": 500.0
+          "amountChangeRate": 500.0,
+          "contributionRate": 2.9400235201881615,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP530",
@@ -3809,7 +3983,9 @@
           "weekAmount": 324000.0,
           "prevAmount": 270000.0,
           "qtyChangeRate": 20.0,
-          "amountChangeRate": 20.0
+          "amountChangeRate": 20.0,
+          "contributionRate": 3.1752254018032144,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -3819,7 +3995,9 @@
           "weekAmount": 354000.0,
           "prevAmount": 236000.0,
           "qtyChangeRate": 50.0,
-          "amountChangeRate": 50.0
+          "amountChangeRate": 50.0,
+          "contributionRate": 3.469227753822031,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK510",
@@ -3829,7 +4007,9 @@
           "weekAmount": 288000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.822422579380635,
+          "storeCount": 1
         }
       ],
       "스타필드 빌리지 운정점": [
@@ -3841,7 +4021,9 @@
           "weekAmount": 216000.0,
           "prevAmount": 72000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 200.0
+          "amountChangeRate": 200.0,
+          "contributionRate": 3.0091947617720813,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3851,7 +4033,9 @@
           "weekAmount": 243000.0,
           "prevAmount": 27000.0,
           "qtyChangeRate": 800.0,
-          "amountChangeRate": 800.0
+          "amountChangeRate": 800.0,
+          "contributionRate": 3.3853441069935917,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -3861,7 +4045,9 @@
           "weekAmount": 280000.0,
           "prevAmount": 145000.0,
           "qtyChangeRate": 100.0,
-          "amountChangeRate": 93.10344827586206
+          "amountChangeRate": 93.10344827586206,
+          "contributionRate": 3.9008080245193653,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS511",
@@ -3871,7 +4057,9 @@
           "weekAmount": 168000.0,
           "prevAmount": 72000.0,
           "qtyChangeRate": 133.33333333333331,
-          "amountChangeRate": 133.33333333333331
+          "amountChangeRate": 133.33333333333331,
+          "contributionRate": 2.340484814711619,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS523",
@@ -3881,7 +4069,9 @@
           "weekAmount": 238000.0,
           "prevAmount": 136000.0,
           "qtyChangeRate": 75.0,
-          "amountChangeRate": 75.0
+          "amountChangeRate": 75.0,
+          "contributionRate": 3.3156868208414596,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3891,7 +4081,9 @@
           "weekAmount": 294000.0,
           "prevAmount": 294000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 4.095848425745333,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -3901,7 +4093,9 @@
           "weekAmount": 217000.0,
           "prevAmount": 283000.0,
           "qtyChangeRate": -22.22222222222222,
-          "amountChangeRate": -23.32155477031802
+          "amountChangeRate": -23.32155477031802,
+          "contributionRate": 3.0231262190025077,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS505",
@@ -3911,7 +4105,9 @@
           "weekAmount": 162000.0,
           "prevAmount": 243000.0,
           "qtyChangeRate": -33.33333333333333,
-          "amountChangeRate": -33.33333333333333
+          "amountChangeRate": -33.33333333333333,
+          "contributionRate": 2.256896071329061,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -3921,7 +4117,9 @@
           "weekAmount": 295000.0,
           "prevAmount": 59000.0,
           "qtyChangeRate": 400.0,
-          "amountChangeRate": 400.0
+          "amountChangeRate": 400.0,
+          "contributionRate": 4.10977988297576,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS532",
@@ -3931,7 +4129,9 @@
           "weekAmount": 200000.0,
           "prevAmount": 280000.0,
           "qtyChangeRate": -28.57142857142857,
-          "amountChangeRate": -28.57142857142857
+          "amountChangeRate": -28.57142857142857,
+          "contributionRate": 2.7862914460852606,
+          "storeCount": 1
         }
       ],
       "신사 플래그십": [
@@ -3943,7 +4143,9 @@
           "weekAmount": 452500.0,
           "prevAmount": 523800.0,
           "qtyChangeRate": -14.285714285714285,
-          "amountChangeRate": -13.612065673921345
+          "amountChangeRate": -13.612065673921345,
+          "contributionRate": 1.8037086641793425,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -3953,7 +4155,9 @@
           "weekAmount": 549500.0,
           "prevAmount": 684600.0,
           "qtyChangeRate": -19.047619047619047,
-          "amountChangeRate": -19.734151329243353
+          "amountChangeRate": -19.734151329243353,
+          "contributionRate": 2.1903600242354666,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -3963,7 +4167,9 @@
           "weekAmount": 322800.0,
           "prevAmount": 228200.0,
           "qtyChangeRate": 44.44444444444444,
-          "amountChangeRate": 41.45486415425066
+          "amountChangeRate": 41.45486415425066,
+          "contributionRate": 1.2867119487228547,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS534",
@@ -3973,7 +4179,9 @@
           "weekAmount": 263900.0,
           "prevAmount": 239200.0,
           "qtyChangeRate": 10.0,
-          "amountChangeRate": 10.326086956521738
+          "amountChangeRate": 10.326086956521738,
+          "contributionRate": 1.0519308651423833,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -3983,7 +4191,9 @@
           "weekAmount": 434700.0,
           "prevAmount": 476700.0,
           "qtyChangeRate": -8.333333333333332,
-          "amountChangeRate": -8.81057268722467
+          "amountChangeRate": -8.81057268722467,
+          "contributionRate": 1.7327561465607961,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS517",
@@ -3993,7 +4203,9 @@
           "weekAmount": 283500.0,
           "prevAmount": 192000.0,
           "qtyChangeRate": 42.857142857142854,
-          "amountChangeRate": 47.65625
+          "amountChangeRate": 47.65625,
+          "contributionRate": 1.130058356452693,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -4003,7 +4215,9 @@
           "weekAmount": 132300.0,
           "prevAmount": 130900.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 1.06951871657754
+          "amountChangeRate": 1.06951871657754,
+          "contributionRate": 0.52736056634459,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LBL516",
@@ -4013,7 +4227,9 @@
           "weekAmount": 420000.0,
           "prevAmount": 225600.0,
           "qtyChangeRate": 80.0,
-          "amountChangeRate": 86.17021276595744
+          "amountChangeRate": 86.17021276595744,
+          "contributionRate": 1.6741605280780638,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH522",
@@ -4023,7 +4239,9 @@
           "weekAmount": 400800.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 1.5976274753659239,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH524",
@@ -4033,7 +4251,9 @@
           "weekAmount": 467100.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 1.8619056730125323,
+          "storeCount": 1
         }
       ],
       "신세계 광주점": [
@@ -4045,7 +4265,9 @@
           "weekAmount": 378000.0,
           "prevAmount": 378000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 8.262295081967213,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -4055,7 +4277,9 @@
           "weekAmount": 308000.0,
           "prevAmount": 274000.0,
           "qtyChangeRate": 16.666666666666664,
-          "amountChangeRate": 12.408759124087592
+          "amountChangeRate": 12.408759124087592,
+          "contributionRate": 6.732240437158469,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4065,7 +4289,9 @@
           "weekAmount": 210000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 20.0,
-          "amountChangeRate": 20.0
+          "amountChangeRate": 20.0,
+          "contributionRate": 4.590163934426229,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01521",
@@ -4075,7 +4301,9 @@
           "weekAmount": 84000.0,
           "prevAmount": 14000.0,
           "qtyChangeRate": 500.0,
-          "amountChangeRate": 500.0
+          "amountChangeRate": 500.0,
+          "contributionRate": 1.8360655737704918,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4085,7 +4313,9 @@
           "weekAmount": 175000.0,
           "prevAmount": 290000.0,
           "qtyChangeRate": -37.5,
-          "amountChangeRate": -39.6551724137931
+          "amountChangeRate": -39.6551724137931,
+          "contributionRate": 3.825136612021858,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4095,7 +4325,9 @@
           "weekAmount": 135000.0,
           "prevAmount": 54000.0,
           "qtyChangeRate": 150.0,
-          "amountChangeRate": 150.0
+          "amountChangeRate": 150.0,
+          "contributionRate": 2.9508196721311477,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS532",
@@ -4105,7 +4337,9 @@
           "weekAmount": 160000.0,
           "prevAmount": 40000.0,
           "qtyChangeRate": 300.0,
-          "amountChangeRate": 300.0
+          "amountChangeRate": 300.0,
+          "contributionRate": 3.4972677595628414,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC541",
@@ -4115,7 +4349,9 @@
           "weekAmount": 99000.0,
           "prevAmount": 144000.0,
           "qtyChangeRate": -25.0,
-          "amountChangeRate": -31.25
+          "amountChangeRate": -31.25,
+          "contributionRate": 2.1639344262295084,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK511",
@@ -4125,7 +4361,9 @@
           "weekAmount": 192000.0,
           "prevAmount": 64000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 200.0
+          "amountChangeRate": 200.0,
+          "contributionRate": 4.19672131147541,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS509",
@@ -4135,7 +4373,9 @@
           "weekAmount": 90000.0,
           "prevAmount": 60000.0,
           "qtyChangeRate": 50.0,
-          "amountChangeRate": 50.0
+          "amountChangeRate": 50.0,
+          "contributionRate": 1.9672131147540985,
+          "storeCount": 1
         }
       ],
       "신세계 대전점": [
@@ -4147,7 +4387,9 @@
           "weekAmount": 672000.0,
           "prevAmount": 1176000.0,
           "qtyChangeRate": -42.857142857142854,
-          "amountChangeRate": -42.857142857142854
+          "amountChangeRate": -42.857142857142854,
+          "contributionRate": 8.77742946708464,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS523",
@@ -4157,7 +4399,9 @@
           "weekAmount": 442000.0,
           "prevAmount": 272000.0,
           "qtyChangeRate": 62.5,
-          "amountChangeRate": 62.5
+          "amountChangeRate": 62.5,
+          "contributionRate": 5.77324973876698,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -4167,7 +4411,9 @@
           "weekAmount": 154000.0,
           "prevAmount": 210000.0,
           "qtyChangeRate": -26.666666666666668,
-          "amountChangeRate": -26.666666666666668
+          "amountChangeRate": -26.666666666666668,
+          "contributionRate": 2.0114942528735633,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01521",
@@ -4177,7 +4423,9 @@
           "weekAmount": 154000.0,
           "prevAmount": 112000.0,
           "qtyChangeRate": 37.5,
-          "amountChangeRate": 37.5
+          "amountChangeRate": 37.5,
+          "contributionRate": 2.0114942528735633,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -4187,7 +4435,9 @@
           "weekAmount": 440000.0,
           "prevAmount": 264000.0,
           "qtyChangeRate": 66.66666666666666,
-          "amountChangeRate": 66.66666666666666
+          "amountChangeRate": 66.66666666666666,
+          "contributionRate": 5.747126436781609,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS528",
@@ -4197,7 +4447,9 @@
           "weekAmount": 224000.0,
           "prevAmount": 96000.0,
           "qtyChangeRate": 133.33333333333331,
-          "amountChangeRate": 133.33333333333331
+          "amountChangeRate": 133.33333333333331,
+          "contributionRate": 2.9258098223615465,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS536",
@@ -4207,7 +4459,9 @@
           "weekAmount": 154000.0,
           "prevAmount": 22000.0,
           "qtyChangeRate": 600.0,
-          "amountChangeRate": 600.0
+          "amountChangeRate": 600.0,
+          "contributionRate": 2.0114942528735633,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS513",
@@ -4217,7 +4471,9 @@
           "weekAmount": 144000.0,
           "prevAmount": 72000.0,
           "qtyChangeRate": 100.0,
-          "amountChangeRate": 100.0
+          "amountChangeRate": 100.0,
+          "contributionRate": 1.8808777429467085,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4227,7 +4483,9 @@
           "weekAmount": 210000.0,
           "prevAmount": 280000.0,
           "qtyChangeRate": -25.0,
-          "amountChangeRate": -25.0
+          "amountChangeRate": -25.0,
+          "contributionRate": 2.74294670846395,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4237,7 +4495,9 @@
           "weekAmount": 210000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 20.0,
-          "amountChangeRate": 20.0
+          "amountChangeRate": 20.0,
+          "contributionRate": 2.74294670846395,
+          "storeCount": 1
         }
       ],
       "신세계 센텀시티점": [
@@ -4249,7 +4509,9 @@
           "weekAmount": 2380000.0,
           "prevAmount": 735000.0,
           "qtyChangeRate": 223.80952380952382,
-          "amountChangeRate": 223.80952380952382
+          "amountChangeRate": 223.80952380952382,
+          "contributionRate": 9.312881515104085,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4259,7 +4521,9 @@
           "weekAmount": 1963000.0,
           "prevAmount": 735000.0,
           "qtyChangeRate": 190.47619047619045,
-          "amountChangeRate": 167.07482993197277
+          "amountChangeRate": 167.07482993197277,
+          "contributionRate": 7.681170762247613,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -4269,7 +4533,9 @@
           "weekAmount": 1540000.0,
           "prevAmount": 1085000.0,
           "qtyChangeRate": 41.935483870967744,
-          "amountChangeRate": 41.935483870967744
+          "amountChangeRate": 41.935483870967744,
+          "contributionRate": 6.025982156832055,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4279,7 +4545,9 @@
           "weekAmount": 1016000.0,
           "prevAmount": 560000.0,
           "qtyChangeRate": 81.25,
-          "amountChangeRate": 81.42857142857143
+          "amountChangeRate": 81.42857142857143,
+          "contributionRate": 3.9755830333385505,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS505",
@@ -4289,7 +4557,9 @@
           "weekAmount": 729000.0,
           "prevAmount": 837000.0,
           "qtyChangeRate": -12.903225806451612,
-          "amountChangeRate": -12.903225806451612
+          "amountChangeRate": -12.903225806451612,
+          "contributionRate": 2.8525590859289403,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04534",
@@ -4299,7 +4569,9 @@
           "weekAmount": 1080000.0,
           "prevAmount": 400000.0,
           "qtyChangeRate": 170.0,
-          "amountChangeRate": 170.0
+          "amountChangeRate": 170.0,
+          "contributionRate": 4.226013460635468,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04547",
@@ -4309,7 +4581,9 @@
           "weekAmount": 631000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.469087494130537,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4319,7 +4593,9 @@
           "weekAmount": 770000.0,
           "prevAmount": 545000.0,
           "qtyChangeRate": 46.666666666666664,
-          "amountChangeRate": 41.284403669724774
+          "amountChangeRate": 41.284403669724774,
+          "contributionRate": 3.0129910784160274,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS536",
@@ -4329,7 +4605,9 @@
           "weekAmount": 418000.0,
           "prevAmount": 154000.0,
           "qtyChangeRate": 171.42857142857142,
-          "amountChangeRate": 171.42857142857142
+          "amountChangeRate": 171.42857142857142,
+          "contributionRate": 1.6356237282829862,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE3L11508",
@@ -4339,7 +4617,9 @@
           "weekAmount": 828000.0,
           "prevAmount": 322000.0,
           "qtyChangeRate": 157.14285714285714,
-          "amountChangeRate": 157.14285714285714
+          "amountChangeRate": 157.14285714285714,
+          "contributionRate": 3.239943653153858,
+          "storeCount": 1
         }
       ],
       "신세계 의정부점": [
@@ -4351,7 +4631,9 @@
           "weekAmount": 875000.0,
           "prevAmount": 805000.0,
           "qtyChangeRate": 8.695652173913043,
-          "amountChangeRate": 8.695652173913043
+          "amountChangeRate": 8.695652173913043,
+          "contributionRate": 9.429895462873155,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4361,7 +4643,9 @@
           "weekAmount": 560000.0,
           "prevAmount": 545000.0,
           "qtyChangeRate": 6.666666666666667,
-          "amountChangeRate": 2.7522935779816518
+          "amountChangeRate": 2.7522935779816518,
+          "contributionRate": 6.035133096238819,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4371,7 +4655,9 @@
           "weekAmount": 525000.0,
           "prevAmount": 910000.0,
           "qtyChangeRate": -42.30769230769231,
-          "amountChangeRate": -42.30769230769231
+          "amountChangeRate": -42.30769230769231,
+          "contributionRate": 5.657937277723893,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS513",
@@ -4381,7 +4667,9 @@
           "weekAmount": 216000.0,
           "prevAmount": 72000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 200.0
+          "amountChangeRate": 200.0,
+          "contributionRate": 2.3278370514064015,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP544",
@@ -4391,7 +4679,9 @@
           "weekAmount": 450000.0,
           "prevAmount": 150000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 200.0
+          "amountChangeRate": 200.0,
+          "contributionRate": 4.849660523763336,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4401,7 +4691,9 @@
           "weekAmount": 243000.0,
           "prevAmount": 216000.0,
           "qtyChangeRate": 12.5,
-          "amountChangeRate": 12.5
+          "amountChangeRate": 12.5,
+          "contributionRate": 2.6188166828322017,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC541",
@@ -4411,7 +4703,9 @@
           "weekAmount": 264000.0,
           "prevAmount": 165000.0,
           "qtyChangeRate": 60.0,
-          "amountChangeRate": 60.0
+          "amountChangeRate": 60.0,
+          "contributionRate": 2.8451341739411573,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05512",
@@ -4421,7 +4715,9 @@
           "weekAmount": 248000.0,
           "prevAmount": 155000.0,
           "qtyChangeRate": 60.0,
-          "amountChangeRate": 60.0
+          "amountChangeRate": 60.0,
+          "contributionRate": 2.6727017997629057,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP525",
@@ -4431,7 +4727,9 @@
           "weekAmount": 301000.0,
           "prevAmount": 258000.0,
           "qtyChangeRate": 16.666666666666664,
-          "amountChangeRate": 16.666666666666664
+          "amountChangeRate": 16.666666666666664,
+          "contributionRate": 3.2438840392283654,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH522",
@@ -4441,7 +4739,9 @@
           "weekAmount": 336000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.6210798577432914,
+          "storeCount": 1
         }
       ],
       "아이파크몰 용산점": [
@@ -4453,7 +4753,9 @@
           "weekAmount": 1190000.0,
           "prevAmount": 1365000.0,
           "qtyChangeRate": -12.82051282051282,
-          "amountChangeRate": -12.82051282051282
+          "amountChangeRate": -12.82051282051282,
+          "contributionRate": 5.511555740817934,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -4463,7 +4765,9 @@
           "weekAmount": 1102000.0,
           "prevAmount": 1026000.0,
           "qtyChangeRate": 7.4074074074074066,
-          "amountChangeRate": 7.4074074074074066
+          "amountChangeRate": 7.4074074074074066,
+          "contributionRate": 5.10397850956417,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -4473,7 +4777,9 @@
           "weekAmount": 1176000.0,
           "prevAmount": 966000.0,
           "qtyChangeRate": 21.73913043478261,
-          "amountChangeRate": 21.73913043478261
+          "amountChangeRate": 21.73913043478261,
+          "contributionRate": 5.446713908573017,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4483,7 +4789,9 @@
           "weekAmount": 764000.0,
           "prevAmount": 1105000.0,
           "qtyChangeRate": -31.428571428571427,
-          "amountChangeRate": -30.85972850678733
+          "amountChangeRate": -30.85972850678733,
+          "contributionRate": 3.5385114167940346,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01521",
@@ -4493,7 +4801,9 @@
           "weekAmount": 294000.0,
           "prevAmount": 266000.0,
           "qtyChangeRate": 10.526315789473683,
-          "amountChangeRate": 10.526315789473683
+          "amountChangeRate": 10.526315789473683,
+          "contributionRate": 1.3616784771432542,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -4503,7 +4813,9 @@
           "weekAmount": 798000.0,
           "prevAmount": 950000.0,
           "qtyChangeRate": -16.0,
-          "amountChangeRate": -16.0
+          "amountChangeRate": -16.0,
+          "contributionRate": 3.695984437960261,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4513,7 +4825,9 @@
           "weekAmount": 665000.0,
           "prevAmount": 420000.0,
           "qtyChangeRate": 58.333333333333336,
-          "amountChangeRate": 58.333333333333336
+          "amountChangeRate": 58.333333333333336,
+          "contributionRate": 3.079987031633551,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L04503",
@@ -4523,7 +4837,9 @@
           "weekAmount": 665000.0,
           "prevAmount": 1365000.0,
           "qtyChangeRate": -51.28205128205128,
-          "amountChangeRate": -51.28205128205128
+          "amountChangeRate": -51.28205128205128,
+          "contributionRate": 3.079987031633551,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -4533,7 +4849,9 @@
           "weekAmount": 704000.0,
           "prevAmount": 308000.0,
           "qtyChangeRate": 128.57142857142858,
-          "amountChangeRate": 128.57142857142858
+          "amountChangeRate": 128.57142857142858,
+          "contributionRate": 3.260617850030105,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04534",
@@ -4543,7 +4861,9 @@
           "weekAmount": 600000.0,
           "prevAmount": 1000000.0,
           "qtyChangeRate": -40.0,
-          "amountChangeRate": -40.0
+          "amountChangeRate": -40.0,
+          "contributionRate": 2.7789356676392942,
+          "storeCount": 1
         }
       ],
       "타임스퀘어 영등포점": [
@@ -4555,7 +4875,9 @@
           "weekAmount": 980000.0,
           "prevAmount": 1050000.0,
           "qtyChangeRate": -6.666666666666667,
-          "amountChangeRate": -6.666666666666667
+          "amountChangeRate": -6.666666666666667,
+          "contributionRate": 5.1443569553805775,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4565,7 +4887,9 @@
           "weekAmount": 910000.0,
           "prevAmount": 1195000.0,
           "qtyChangeRate": -21.21212121212121,
-          "amountChangeRate": -23.84937238493724
+          "amountChangeRate": -23.84937238493724,
+          "contributionRate": 4.776902887139108,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -4575,7 +4899,9 @@
           "weekAmount": 1534000.0,
           "prevAmount": 826000.0,
           "qtyChangeRate": 85.71428571428571,
-          "amountChangeRate": 85.71428571428571
+          "amountChangeRate": 85.71428571428571,
+          "contributionRate": 8.05249343832021,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -4585,7 +4911,9 @@
           "weekAmount": 968000.0,
           "prevAmount": 832000.0,
           "qtyChangeRate": 22.22222222222222,
-          "amountChangeRate": 16.346153846153847
+          "amountChangeRate": 16.346153846153847,
+          "contributionRate": 5.081364829396326,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4595,7 +4923,9 @@
           "weekAmount": 567000.0,
           "prevAmount": 702000.0,
           "qtyChangeRate": -19.230769230769234,
-          "amountChangeRate": -19.230769230769234
+          "amountChangeRate": -19.230769230769234,
+          "contributionRate": 2.9763779527559056,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4605,7 +4935,9 @@
           "weekAmount": 560000.0,
           "prevAmount": 988000.0,
           "qtyChangeRate": -42.857142857142854,
-          "amountChangeRate": -43.31983805668016
+          "amountChangeRate": -43.31983805668016,
+          "contributionRate": 2.9396325459317585,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LBL516",
@@ -4615,7 +4947,9 @@
           "weekAmount": 720000.0,
           "prevAmount": 192000.0,
           "qtyChangeRate": 275.0,
-          "amountChangeRate": 275.0
+          "amountChangeRate": 275.0,
+          "contributionRate": 3.779527559055118,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS513",
@@ -4625,7 +4959,9 @@
           "weekAmount": 336000.0,
           "prevAmount": 192000.0,
           "qtyChangeRate": 75.0,
-          "amountChangeRate": 75.0
+          "amountChangeRate": 75.0,
+          "contributionRate": 1.763779527559055,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC541",
@@ -4635,7 +4971,9 @@
           "weekAmount": 396000.0,
           "prevAmount": 470000.0,
           "qtyChangeRate": -14.285714285714285,
-          "amountChangeRate": -15.74468085106383
+          "amountChangeRate": -15.74468085106383,
+          "contributionRate": 2.078740157480315,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP525",
@@ -4645,7 +4983,9 @@
           "weekAmount": 516000.0,
           "prevAmount": 817000.0,
           "qtyChangeRate": -36.84210526315789,
-          "amountChangeRate": -36.84210526315789
+          "amountChangeRate": -36.84210526315789,
+          "contributionRate": 2.7086614173228347,
+          "storeCount": 1
         }
       ],
       "포시즌 아울렛 신사점": [
@@ -4657,7 +4997,9 @@
           "weekAmount": 78000.0,
           "prevAmount": 13000.0,
           "qtyChangeRate": 500.0,
-          "amountChangeRate": 500.0
+          "amountChangeRate": 500.0,
+          "contributionRate": 5.46984572230014,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01531",
@@ -4667,7 +5009,9 @@
           "weekAmount": 80000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 5.610098176718092,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01532",
@@ -4677,7 +5021,9 @@
           "weekAmount": 92000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 6.451612903225806,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01536",
@@ -4687,7 +5033,9 @@
           "weekAmount": 72000.0,
           "prevAmount": 72000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 5.049088359046284,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05541",
@@ -4697,7 +5045,9 @@
           "weekAmount": 104000.0,
           "prevAmount": 26000.0,
           "qtyChangeRate": 300.0,
-          "amountChangeRate": 300.0
+          "amountChangeRate": 300.0,
+          "contributionRate": 7.293127629733521,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD3L03505",
@@ -4707,7 +5057,9 @@
           "weekAmount": 122000.0,
           "prevAmount": 42000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 190.47619047619045
+          "amountChangeRate": 190.47619047619045,
+          "contributionRate": 8.55539971949509,
+          "storeCount": 1
         },
         {
           "styleCode": "SBD3U01007",
@@ -4717,7 +5069,9 @@
           "weekAmount": 38000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.664796633941094,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD1L01503",
@@ -4727,7 +5081,9 @@
           "weekAmount": 40000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.805049088359046,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD1L01510",
@@ -4737,7 +5093,9 @@
           "weekAmount": 34000.0,
           "prevAmount": 34000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 2.3842917251051894,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD1L01511",
@@ -4747,7 +5105,9 @@
           "weekAmount": 38000.0,
           "prevAmount": 38000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 2.664796633941094,
+          "storeCount": 1
         }
       ],
       "한남 플래그십": [
@@ -4759,7 +5119,9 @@
           "weekAmount": 840000.0,
           "prevAmount": 462000.0,
           "qtyChangeRate": 81.81818181818183,
-          "amountChangeRate": 81.81818181818183
+          "amountChangeRate": 81.81818181818183,
+          "contributionRate": 8.1799591002045,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4769,7 +5131,9 @@
           "weekAmount": 385000.0,
           "prevAmount": 330000.0,
           "qtyChangeRate": 22.22222222222222,
-          "amountChangeRate": 16.666666666666664
+          "amountChangeRate": 16.666666666666664,
+          "contributionRate": 3.7491479209270624,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP537",
@@ -4779,7 +5143,9 @@
           "weekAmount": 280000.0,
           "prevAmount": 116000.0,
           "qtyChangeRate": 150.0,
-          "amountChangeRate": 141.3793103448276
+          "amountChangeRate": 141.3793103448276,
+          "contributionRate": 2.7266530334014996,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS528",
@@ -4789,7 +5155,9 @@
           "weekAmount": 320000.0,
           "prevAmount": 128000.0,
           "qtyChangeRate": 150.0,
-          "amountChangeRate": 150.0
+          "amountChangeRate": 150.0,
+          "contributionRate": 3.1161748953159996,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4799,7 +5167,9 @@
           "weekAmount": 243000.0,
           "prevAmount": 351000.0,
           "qtyChangeRate": -30.76923076923077,
-          "amountChangeRate": -30.76923076923077
+          "amountChangeRate": -30.76923076923077,
+          "contributionRate": 2.366345311130587,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -4809,7 +5179,9 @@
           "weekAmount": 472000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 4.596357970591099,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH522",
@@ -4819,7 +5191,9 @@
           "weekAmount": 384000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.7394098743791995,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -4829,7 +5203,9 @@
           "weekAmount": 280000.0,
           "prevAmount": 245000.0,
           "qtyChangeRate": 14.285714285714285,
-          "amountChangeRate": 14.285714285714285
+          "amountChangeRate": 14.285714285714285,
+          "contributionRate": 2.7266530334014996,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -4839,7 +5215,9 @@
           "weekAmount": 304000.0,
           "prevAmount": 342000.0,
           "qtyChangeRate": -11.11111111111111,
-          "amountChangeRate": -11.11111111111111
+          "amountChangeRate": -11.11111111111111,
+          "contributionRate": 2.9603661505502,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LPT509",
@@ -4849,7 +5227,9 @@
           "weekAmount": 336000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 3.2719836400818,
+          "storeCount": 1
         }
       ],
       "현대백화점 신촌점": [
@@ -4861,7 +5241,9 @@
           "weekAmount": 1059000.0,
           "prevAmount": 280000.0,
           "qtyChangeRate": 312.5,
-          "amountChangeRate": 278.2142857142857
+          "amountChangeRate": 278.2142857142857,
+          "contributionRate": 10.448939319190922,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -4871,7 +5253,9 @@
           "weekAmount": 770000.0,
           "prevAmount": 345000.0,
           "qtyChangeRate": 144.44444444444443,
-          "amountChangeRate": 123.18840579710144
+          "amountChangeRate": 123.18840579710144,
+          "contributionRate": 7.597434632461766,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4881,7 +5265,9 @@
           "weekAmount": 570000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 260.0,
-          "amountChangeRate": 225.71428571428572
+          "amountChangeRate": 225.71428571428572,
+          "contributionRate": 5.624074987666503,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP537",
@@ -4891,7 +5277,9 @@
           "weekAmount": 364000.0,
           "prevAmount": 204000.0,
           "qtyChangeRate": 85.71428571428571,
-          "amountChangeRate": 78.43137254901961
+          "amountChangeRate": 78.43137254901961,
+          "contributionRate": 3.5915145535273805,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4901,7 +5289,9 @@
           "weekAmount": 351000.0,
           "prevAmount": 81000.0,
           "qtyChangeRate": 333.33333333333337,
-          "amountChangeRate": 333.33333333333337
+          "amountChangeRate": 333.33333333333337,
+          "contributionRate": 3.4632461766156886,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1UTS007",
@@ -4911,7 +5301,9 @@
           "weekAmount": 240000.0,
           "prevAmount": 30000.0,
           "qtyChangeRate": 700.0,
-          "amountChangeRate": 700.0
+          "amountChangeRate": 700.0,
+          "contributionRate": 2.3680315737543167,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -4921,7 +5313,9 @@
           "weekAmount": 336000.0,
           "prevAmount": 336000.0,
           "qtyChangeRate": 0.0,
-          "amountChangeRate": 0.0
+          "amountChangeRate": 0.0,
+          "contributionRate": 3.315244203256043,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04534",
@@ -4931,7 +5325,9 @@
           "weekAmount": 320000.0,
           "prevAmount": 200000.0,
           "qtyChangeRate": 60.0,
-          "amountChangeRate": 60.0
+          "amountChangeRate": 60.0,
+          "contributionRate": 3.1573754316724227,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -4941,7 +5337,9 @@
           "weekAmount": 266000.0,
           "prevAmount": 114000.0,
           "qtyChangeRate": 133.33333333333331,
-          "amountChangeRate": 133.33333333333331
+          "amountChangeRate": 133.33333333333331,
+          "contributionRate": 2.624568327577701,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LKC523",
@@ -4951,7 +5349,9 @@
           "weekAmount": 276000.0,
           "prevAmount": 92000.0,
           "qtyChangeRate": 200.0,
-          "amountChangeRate": 200.0
+          "amountChangeRate": 200.0,
+          "contributionRate": 2.723236309817464,
+          "storeCount": 1
         }
       ],
       "현대아울렛 남양주점": [
@@ -4963,7 +5363,9 @@
           "weekAmount": 880000.0,
           "prevAmount": 160000.0,
           "qtyChangeRate": 450.0,
-          "amountChangeRate": 450.0
+          "amountChangeRate": 450.0,
+          "contributionRate": 4.584288393415295,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -4973,7 +5375,9 @@
           "weekAmount": 540000.0,
           "prevAmount": 378000.0,
           "qtyChangeRate": 42.857142857142854,
-          "amountChangeRate": 42.857142857142854
+          "amountChangeRate": 42.857142857142854,
+          "contributionRate": 2.8130860595957494,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L03531",
@@ -4983,7 +5387,9 @@
           "weekAmount": 630000.0,
           "prevAmount": 882000.0,
           "qtyChangeRate": -28.57142857142857,
-          "amountChangeRate": -28.57142857142857
+          "amountChangeRate": -28.57142857142857,
+          "contributionRate": 3.2819337361950405,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -4993,7 +5399,9 @@
           "weekAmount": 525000.0,
           "prevAmount": 770000.0,
           "qtyChangeRate": -31.818181818181817,
-          "amountChangeRate": -31.818181818181817
+          "amountChangeRate": -31.818181818181817,
+          "contributionRate": 2.7349447801625337,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP537",
@@ -5003,7 +5411,9 @@
           "weekAmount": 364000.0,
           "prevAmount": 112000.0,
           "qtyChangeRate": 225.0,
-          "amountChangeRate": 225.0
+          "amountChangeRate": 225.0,
+          "contributionRate": 1.89622838091269,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS523",
@@ -5013,7 +5423,9 @@
           "weekAmount": 442000.0,
           "prevAmount": 204000.0,
           "qtyChangeRate": 116.66666666666667,
-          "amountChangeRate": 116.66666666666667
+          "amountChangeRate": 116.66666666666667,
+          "contributionRate": 2.3025630339654093,
+          "storeCount": 1
         },
         {
           "styleCode": "WBD2L43545",
@@ -5023,7 +5435,9 @@
           "weekAmount": 455000.0,
           "prevAmount": 665000.0,
           "qtyChangeRate": -31.57894736842105,
-          "amountChangeRate": -31.57894736842105
+          "amountChangeRate": -31.57894736842105,
+          "contributionRate": 2.3702854761408627,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05512",
@@ -5033,7 +5447,9 @@
           "weekAmount": 403000.0,
           "prevAmount": 248000.0,
           "qtyChangeRate": 62.5,
-          "amountChangeRate": 62.5
+          "amountChangeRate": 62.5,
+          "contributionRate": 2.09939570743905,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE3L01503",
@@ -5043,7 +5459,9 @@
           "weekAmount": 247000.0,
           "prevAmount": 114000.0,
           "qtyChangeRate": 116.66666666666667,
-          "amountChangeRate": 116.66666666666667
+          "amountChangeRate": 116.66666666666667,
+          "contributionRate": 1.286726401333611,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKC539",
@@ -5053,7 +5471,9 @@
           "weekAmount": 420000.0,
           "prevAmount": 325000.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 29.230769230769234
+          "amountChangeRate": 29.230769230769234,
+          "contributionRate": 2.187955824130027,
+          "storeCount": 1
         }
       ],
       "현대아울렛 송도점": [
@@ -5065,7 +5485,9 @@
           "weekAmount": 2352000.0,
           "prevAmount": 1785000.0,
           "qtyChangeRate": 31.818181818181817,
-          "amountChangeRate": 31.76470588235294
+          "amountChangeRate": 31.76470588235294,
+          "contributionRate": 7.995866082841524,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -5075,7 +5497,9 @@
           "weekAmount": 1668600.0,
           "prevAmount": 632000.0,
           "qtyChangeRate": 163.1578947368421,
-          "amountChangeRate": 164.01898734177217
+          "amountChangeRate": 164.01898734177217,
+          "contributionRate": 5.672577442954663,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH524",
@@ -5085,7 +5509,9 @@
           "weekAmount": 1341900.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 4.561927166906905,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L04540",
@@ -5095,7 +5521,9 @@
           "weekAmount": 953800.0,
           "prevAmount": 476900.0,
           "qtyChangeRate": 100.0,
-          "amountChangeRate": 100.0
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.242541271179526,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS522",
@@ -5105,7 +5533,9 @@
           "weekAmount": 563100.0,
           "prevAmount": 690200.0,
           "qtyChangeRate": -18.51851851851852,
-          "amountChangeRate": -18.41495218777166
+          "amountChangeRate": -18.41495218777166,
+          "contributionRate": 1.9143164078435637,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSH521",
@@ -5115,7 +5545,9 @@
           "weekAmount": 877800.0,
           "prevAmount": 789000.0,
           "qtyChangeRate": 16.666666666666664,
-          "amountChangeRate": 11.254752851711027
+          "amountChangeRate": 11.254752851711027,
+          "contributionRate": 2.984171448774783,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LKP531",
@@ -5125,7 +5557,9 @@
           "weekAmount": 1147800.0,
           "prevAmount": 849800.0,
           "qtyChangeRate": 33.33333333333333,
-          "amountChangeRate": 35.0670746057896
+          "amountChangeRate": 35.0670746057896,
+          "contributionRate": 3.902064238896897,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -5135,7 +5569,9 @@
           "weekAmount": 263900.0,
           "prevAmount": 93800.0,
           "qtyChangeRate": 185.71428571428572,
-          "amountChangeRate": 181.34328358208955
+          "amountChangeRate": 181.34328358208955,
+          "contributionRate": 0.8971552122712066,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS536",
@@ -5145,7 +5581,9 @@
           "weekAmount": 334400.0,
           "prevAmount": 124300.0,
           "qtyChangeRate": 166.66666666666669,
-          "amountChangeRate": 169.02654867256638
+          "amountChangeRate": 169.02654867256638,
+          "contributionRate": 1.1368272185808697,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LPT501",
@@ -5155,7 +5593,9 @@
           "weekAmount": 679400.0,
           "prevAmount": 47000.0,
           "qtyChangeRate": 1400.0,
-          "amountChangeRate": 1345.5319148936169
+          "amountChangeRate": 1345.5319148936169,
+          "contributionRate": 2.3096902281813483,
+          "storeCount": 1
         }
       ],
       "현대커넥트 청주점": [
@@ -5167,7 +5607,9 @@
           "weekAmount": 595000.0,
           "prevAmount": 525000.0,
           "qtyChangeRate": 13.333333333333334,
-          "amountChangeRate": 13.333333333333334
+          "amountChangeRate": 13.333333333333334,
+          "contributionRate": 2.885548011639185,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE3L01503",
@@ -5177,7 +5619,9 @@
           "weekAmount": 323000.0,
           "prevAmount": 342000.0,
           "qtyChangeRate": -5.555555555555555,
-          "amountChangeRate": -5.555555555555555
+          "amountChangeRate": -5.555555555555555,
+          "contributionRate": 1.5664403491755579,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS523",
@@ -5187,7 +5631,9 @@
           "weekAmount": 544000.0,
           "prevAmount": 340000.0,
           "qtyChangeRate": 60.0,
-          "amountChangeRate": 60.0
+          "amountChangeRate": 60.0,
+          "contributionRate": 2.638215324927255,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE1L12504",
@@ -5197,7 +5643,9 @@
           "weekAmount": 608000.0,
           "prevAmount": 380000.0,
           "qtyChangeRate": 60.0,
-          "amountChangeRate": 60.0
+          "amountChangeRate": 60.0,
+          "contributionRate": 2.9485935984481086,
+          "storeCount": 1
         },
         {
           "styleCode": "GF1LTS513",
@@ -5207,7 +5655,9 @@
           "weekAmount": 312000.0,
           "prevAmount": 240000.0,
           "qtyChangeRate": 30.0,
-          "amountChangeRate": 30.0
+          "amountChangeRate": 30.0,
+          "contributionRate": 1.513094083414161,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LTS531",
@@ -5217,7 +5667,9 @@
           "weekAmount": 520000.0,
           "prevAmount": 440000.0,
           "qtyChangeRate": 18.181818181818183,
-          "amountChangeRate": 18.181818181818183
+          "amountChangeRate": 18.181818181818183,
+          "contributionRate": 2.521823472356935,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L01517",
@@ -5227,7 +5679,9 @@
           "weekAmount": 182000.0,
           "prevAmount": 140000.0,
           "qtyChangeRate": 30.0,
-          "amountChangeRate": 30.0
+          "amountChangeRate": 30.0,
+          "contributionRate": 0.8826382153249274,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05513",
@@ -5237,7 +5691,9 @@
           "weekAmount": 455000.0,
           "prevAmount": 175000.0,
           "qtyChangeRate": 160.0,
-          "amountChangeRate": 160.0
+          "amountChangeRate": 160.0,
+          "contributionRate": 2.206595538312318,
+          "storeCount": 1
         },
         {
           "styleCode": "WBE2L05533",
@@ -5247,7 +5703,9 @@
           "weekAmount": 494000.0,
           "prevAmount": 418000.0,
           "qtyChangeRate": 18.181818181818183,
-          "amountChangeRate": 18.181818181818183
+          "amountChangeRate": 18.181818181818183,
+          "contributionRate": 2.3957322987390883,
+          "storeCount": 1
         },
         {
           "styleCode": "GF2LSK510",
@@ -5257,7 +5715,9 @@
           "weekAmount": 576000.0,
           "prevAmount": 0.0,
           "qtyChangeRate": 100,
-          "amountChangeRate": 100
+          "amountChangeRate": 100,
+          "contributionRate": 2.7934044616876816,
+          "storeCount": 1
         }
       ]
     },
@@ -5284,6 +5744,104 @@
       "현대아울렛 남양주점",
       "현대아울렛 송도점",
       "현대커넥트 청주점"
+    ],
+    "shopRecommendProducts": [
+      {
+        "styleCode": "WBE2L03531",
+        "productName": "링클 시어 셔츠",
+        "weekNet": 45.0,
+        "prevNet": 37.0,
+        "weekAmount": 1785574.0,
+        "prevAmount": 1470300.0,
+        "qtyChangeRate": 21.62162162162162,
+        "amountChangeRate": 21.44283479561994,
+        "contributionRate": 6.124511457112327,
+        "storeCount": 2
+      },
+      {
+        "styleCode": "WBD3L04503",
+        "productName": "GNRL 에센셜 가디건",
+        "weekNet": 37.0,
+        "prevNet": 32.0,
+        "weekAmount": 1281092.0,
+        "prevAmount": 1042791.0,
+        "qtyChangeRate": 15.625,
+        "amountChangeRate": 22.852230216793203,
+        "contributionRate": 4.394140277364558,
+        "storeCount": 8
+      },
+      {
+        "styleCode": "WBE2L05512",
+        "productName": "에어리 에센셜 하프 니트",
+        "weekNet": 30.0,
+        "prevNet": 28.0,
+        "weekAmount": 935445.0,
+        "prevAmount": 874076.0,
+        "qtyChangeRate": 7.142857142857142,
+        "amountChangeRate": 7.021014190985681,
+        "contributionRate": 3.2085724926541492,
+        "storeCount": 5
+      },
+      {
+        "styleCode": "GF1LTS511",
+        "productName": "데일리 숏슬리브 티셔츠",
+        "weekNet": 28.0,
+        "prevNet": 26.0,
+        "weekAmount": 679664.0,
+        "prevAmount": 654476.0,
+        "qtyChangeRate": 7.6923076923076925,
+        "amountChangeRate": 3.8485750432406993,
+        "contributionRate": 2.3312447173776008,
+        "storeCount": 6
+      },
+      {
+        "styleCode": "WBE2L05513",
+        "productName": "에어리 에센셜 카라 하프 니트",
+        "weekNet": 26.0,
+        "prevNet": 30.0,
+        "weekAmount": 881207.0,
+        "prevAmount": 975468.0,
+        "qtyChangeRate": -13.333333333333334,
+        "amountChangeRate": -9.663156556647682,
+        "contributionRate": 3.0225363763067685,
+        "storeCount": 4
+      },
+      {
+        "styleCode": "GF1LSH510",
+        "productName": "시어 볼륨 블루종 자켓",
+        "weekNet": 22.0,
+        "prevNet": 19.0,
+        "weekAmount": 1095422.0,
+        "prevAmount": 890666.0,
+        "qtyChangeRate": 15.789473684210526,
+        "amountChangeRate": 22.98908906368942,
+        "contributionRate": 3.7572929429824238,
+        "storeCount": 5
+      },
+      {
+        "styleCode": "WBE2L05533",
+        "productName": "NA 레이어드 에센셜 하프 풀오버",
+        "weekNet": 22.0,
+        "prevNet": 6.0,
+        "weekAmount": 814648.0,
+        "prevAmount": 213944.0,
+        "qtyChangeRate": 266.66666666666663,
+        "amountChangeRate": 280.7762779044984,
+        "contributionRate": 2.7942392807655367,
+        "storeCount": 6
+      },
+      {
+        "styleCode": "GF1LTS505",
+        "productName": "NB 에어리 라운드넥 핀턱 티셔츠",
+        "weekNet": 15.0,
+        "prevNet": 22.0,
+        "weekAmount": 414984.0,
+        "prevAmount": 605729.0,
+        "qtyChangeRate": -31.818181818181817,
+        "amountChangeRate": -31.49015483821973,
+        "contributionRate": 1.423393408796444,
+        "storeCount": 9
+      }
     ]
   },
   "monthly": {

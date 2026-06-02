@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "오프라인 매출 리뷰 대시보드(소재천) Mark2",
-  description: "Mark2 dashboard",
+  title: "오프라인 매출 리뷰 대시보드(소재천) Mark2.2",
+  description: "Mark2.2 dashboard",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,6 @@
 {
-  "name": "sales-review-dashboard-mark2",
-  "version": "0.2.0",
+  "name": "sales-review-dashboard-mark2-2",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,8 +11,7 @@
   "dependencies": {
     "next": "14.2.5",
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "xlsx": "^0.18.5"
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -1,3 +1,7 @@
+import data from "./mark-data.json";
+
+export const markData = data as any;
+
 export const SHOP_IN_SHOP_STORES = [
   "오프라인_롯데면세점",
   "오프라인_무신사(강남)",
@@ -9,11 +13,6 @@ export const SHOP_IN_SHOP_STORES = [
   "오프라인_무신사(홍대)",
   "오프라인_한컬렉션",
 ];
-
-export function toNumber(value: any) {
-  if (value === undefined || value === null) return 0;
-  return Number(String(value).replace(/,/g, "").replace(/%/g, "").replace(/[^\d.-]/g, "").trim()) || 0;
-}
 
 export function formatWon(value: number) {
   return `${Math.round(value || 0).toLocaleString("ko-KR")}원`;
@@ -29,166 +28,90 @@ export function safeRate(current: number, previous: number) {
   return ((current - previous) / previous) * 100;
 }
 
-export function findSheet(sheets: Record<string, any[][]>, names: string[]) {
-  const keys = Object.keys(sheets);
-  const key = keys.find((k) => names.some((n) => k.includes(n)));
-  return key ? sheets[key] : [];
-}
-
-export function findHeaderRow(matrix: any[][], keywords: string[]) {
-  return matrix.findIndex((row) => keywords.every((k) => row.map(String).some((v) => v.trim() === k || v.includes(k))));
-}
-
-export function rowToObjects(matrix: any[][], keywords: string[]) {
-  const headerIndex = findHeaderRow(matrix, keywords);
-  if (headerIndex < 0) return [];
-  const headers = matrix[headerIndex].map((h) => String(h).trim());
-  return matrix.slice(headerIndex + 1).map((row) => {
-    const obj: Record<string, any> = {};
-    headers.forEach((h, i) => {
-      if (!h) return;
-      obj[h] = row[i];
-    });
-    return obj;
-  });
-}
-
-function valueByCandidates(row: Record<string, any>, candidates: string[]) {
-  const keys = Object.keys(row);
-  for (const c of candidates) {
-    const exact = keys.find((k) => k === c);
-    if (exact) return row[exact];
-    const partial = keys.find((k) => k.includes(c));
-    if (partial) return row[partial];
-  }
-  return "";
-}
-
-export type StoreRow = {
-  storeName: string;
-  target: number;
-  currentSales: number;
-  achievementRate: number;
-  prevSales: number;
-  prevRate: number;
-  monthlyTarget: number;
-  monthlySales: number;
-  monthlyProgress: number;
-};
-
-export function parseLeaderBoard(sheets: Record<string, any[][]>): StoreRow[] {
-  const matrix = findSheet(sheets, ["리더회의판", "점포별", "점포"]);
-  const objects = rowToObjects(matrix, ["운영몰"]);
-  return objects
-    .map((row) => {
-      const storeName = String(valueByCandidates(row, ["운영몰", "매장", "점포", "채널명"])).trim();
-      return {
-        storeName,
-        target: toNumber(valueByCandidates(row, ["주간 목표", "금주목표", "목표"])),
-        currentSales: toNumber(valueByCandidates(row, ["주간 실적", "금주실적", "실적"])),
-        achievementRate: toNumber(valueByCandidates(row, ["달성률"])),
-        prevSales: toNumber(valueByCandidates(row, ["전주"])),
-        prevRate: toNumber(valueByCandidates(row, ["전주대비", "전주 대비"])),
-        monthlyTarget: toNumber(valueByCandidates(row, ["월 누적 목표", "월목표"])),
-        monthlySales: toNumber(valueByCandidates(row, ["월 누적 실적", "월실적", "누적 실적"])),
-        monthlyProgress: toNumber(valueByCandidates(row, ["진척률", "월 달성률"])),
-      };
-    })
-    .filter((r) => r.storeName && r.storeName !== "합계");
-}
-
-export function splitStores(rows: StoreRow[]) {
-  const shopInShop = rows.filter((r) => SHOP_IN_SHOP_STORES.includes(r.storeName));
-  const core = rows.filter((r) => !SHOP_IN_SHOP_STORES.includes(r.storeName));
-  return { core, shopInShop };
-}
-
-export function totals(rows: StoreRow[]) {
-  const weeklyTarget = rows.reduce((s, r) => s + r.target, 0);
-  const weeklySales = rows.reduce((s, r) => s + r.currentSales, 0);
-  const prevSales = rows.reduce((s, r) => s + r.prevSales, 0);
-  const monthlyTarget = rows.reduce((s, r) => s + r.monthlyTarget, 0);
-  const monthlySales = rows.reduce((s, r) => s + r.monthlySales, 0);
+export function splitStores(rows: any[]) {
   return {
-    weeklyTarget,
-    weeklySales,
-    prevSales,
-    weeklyRate: weeklyTarget ? (weeklySales / weeklyTarget) * 100 : 0,
-    weeklyChange: safeRate(weeklySales, prevSales),
-    monthlyTarget,
-    monthlySales,
-    monthlyRate: monthlyTarget ? (monthlySales / monthlyTarget) * 100 : 0,
+    core: rows.filter((r) => !SHOP_IN_SHOP_STORES.includes(r.storeName)),
+    shopInShop: rows.filter((r) => SHOP_IN_SHOP_STORES.includes(r.storeName)),
   };
 }
 
-export function attentionStores(rows: StoreRow[]) {
+export function mergeCurrentCompare(currentRows: any[], compareRows: any[]) {
+  const compareMap = new Map(compareRows.map((r) => [r.storeName, r]));
+  return currentRows.map((r) => {
+    const prev = compareMap.get(r.storeName) || {};
+    return {
+      ...r,
+      compareWeekSales: Number(prev.weekSales || 0),
+      compareDailySales: Number(prev.dailySales || 0),
+      compareMonthSales: Number(prev.monthSales || 0),
+      weekChangeRate: safeRate(Number(r.weekSales || 0), Number(prev.weekSales || 0)),
+      dailyChangeRate: safeRate(Number(r.dailySales || 0), Number(prev.dailySales || 0)),
+      monthChangeRate: safeRate(Number(r.monthSales || 0), Number(prev.monthSales || 0)),
+    };
+  });
+}
+
+export function totalsFromRows(rows: any[]) {
+  const weekSales = rows.reduce((s, r) => s + Number(r.weekSales || 0), 0);
+  const weekTarget = rows.reduce((s, r) => s + Number(r.weekTarget || 0), 0);
+  const compareWeekSales = rows.reduce((s, r) => s + Number(r.compareWeekSales || 0), 0);
+  const dailySales = rows.reduce((s, r) => s + Number(r.dailySales || 0), 0);
+  const dailyTarget = rows.reduce((s, r) => s + Number(r.dailyTarget || 0), 0);
+  const compareDailySales = rows.reduce((s, r) => s + Number(r.compareDailySales || 0), 0);
+  const monthSales = rows.reduce((s, r) => s + Number(r.monthSales || 0), 0);
+  const monthTarget = rows.reduce((s, r) => s + Number(r.monthTarget || 0), 0);
+  const compareMonthSales = rows.reduce((s, r) => s + Number(r.compareMonthSales || 0), 0);
+  return {
+    weekSales,
+    weekTarget,
+    weekRate: weekTarget ? (weekSales / weekTarget) * 100 : 0,
+    weekChange: safeRate(weekSales, compareWeekSales),
+    dailySales,
+    dailyTarget,
+    dailyRate: dailyTarget ? (dailySales / dailyTarget) * 100 : 0,
+    dailyChange: safeRate(dailySales, compareDailySales),
+    monthSales,
+    monthTarget,
+    monthRate: monthTarget ? (monthSales / monthTarget) * 100 : 0,
+    monthChange: safeRate(monthSales, compareMonthSales),
+  };
+}
+
+export function attentionStores(rows: any[]) {
   return [...rows]
     .map((r) => ({
       ...r,
-      changeRate: r.prevRate || safeRate(r.currentSales, r.prevSales),
-      riskScore: Math.max(0, 90 - (r.achievementRate || 0)) + Math.abs(r.prevRate || safeRate(r.currentSales, r.prevSales)),
+      riskScore: Math.max(0, 90 - Number(r.weekRate || 0)) + Math.abs(Number(r.weekChangeRate || 0)),
     }))
     .sort((a, b) => b.riskScore - a.riskScore)
     .slice(0, 8);
 }
 
-export function shopInShopSummary(rows: StoreRow[]) {
+export function salesRank(rows: any[], field = "weekSales") {
+  return [...rows].sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0)).slice(0, 10);
+}
+
+export function shopSummary(rows: any[]) {
   return [...rows]
     .map((r) => ({
       ...r,
-      changeRate: r.prevRate || safeRate(r.currentSales, r.prevSales),
       inventoryNote:
-        (r.achievementRate || 0) >= 90
+        Number(r.weekRate || 0) >= 90
           ? "재고 추가 투입 검토"
-          : (r.achievementRate || 0) < 60
+          : Number(r.weekRate || 0) < 60
             ? "재고 순환/상품 교체 검토"
             : "정상 운영",
     }))
-    .sort((a, b) => b.currentSales - a.currentSales);
+    .sort((a, b) => Number(b.weekSales || 0) - Number(a.weekSales || 0));
 }
 
-export function detectPeriodLabel(type: "daily" | "weekly" | "monthly") {
-  const now = new Date();
-  if (type === "daily") {
-    const today = new Date(now);
-    const compare = new Date(now);
-    compare.setDate(compare.getDate() - 7);
-    return `분석일 ${fmtDate(today)} / 비교일 ${fmtDate(compare)} (전주 동요일)`;
-  }
-  if (type === "weekly") {
-    const monday = getLastCompletedMonday(now);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const prevMonday = new Date(monday);
-    prevMonday.setDate(monday.getDate() - 7);
-    const prevSunday = new Date(sunday);
-    prevSunday.setDate(sunday.getDate() - 7);
-    return `분석기간 ${fmtDate(monday)} ~ ${fmtDate(sunday)} / 비교기간 ${fmtDate(prevMonday)} ~ ${fmtDate(prevSunday)}`;
-  }
-  const month = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastYear = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-  return `분석월 ${month} / 비교월 ${prev.getFullYear()}.${String(prev.getMonth() + 1).padStart(2, "0")} / 전년동월 ${lastYear.getFullYear()}.${String(lastYear.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function getLastCompletedMonday(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay() || 7;
-  d.setDate(d.getDate() - day - 6);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function fmtDate(date: Date) {
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
-}
-
-export function monthlyReview(rows: StoreRow[], shopRows: StoreRow[]) {
-  const t = totals(rows);
-  const shop = totals(shopRows);
+export function monthlyReview(coreRows: any[], shopRows: any[]) {
+  const t = totalsFromRows(coreRows);
+  const shop = totalsFromRows(shopRows);
+  const worst = attentionStores(coreRows)[0];
   return [
-    `월 누적 매출은 ${formatWon(t.monthlySales)}이며, 월 목표 대비 ${pct(t.monthlyRate)} 수준입니다.`,
-    `샵인샵/위탁채널 매출은 ${formatWon(shop.weeklySales)}로 별도 재고 순환 관점의 관리가 필요합니다.`,
-    `직영/백화점 채널은 달성률과 전주 대비 변동폭을 기준으로 관리 필요 매장을 우선 점검하는 것이 좋습니다.`,
+    `직영/백화점 월 누적 매출은 ${formatWon(t.monthSales)}이며, 월 목표 대비 ${pct(t.monthRate)} 수준입니다.`,
+    `위탁/샵인샵 주간 매출은 ${formatWon(shop.weekSales)}로, 매출보다 재고 순환과 상품 투입 여부 중심의 관리가 필요합니다.`,
+    worst ? `${worst.storeName}은 주간 달성률과 비교기간 대비 변동폭 기준으로 우선 점검이 필요한 매장입니다.` : "관리 필요 매장 데이터가 충분하지 않습니다.",
   ];
 }

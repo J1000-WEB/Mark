@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import NavTabs from "@/components/NavTabs";
-import UploadPanel, { WorkbookData } from "@/components/UploadPanel";
 import {
   attentionStores,
   detectPeriodLabel,
@@ -14,6 +14,13 @@ import {
   splitStores,
   totals,
 } from "@/lib/mark";
+
+type WorkbookData = {
+  fileName: string;
+  uploadedAt: string;
+  sheets: Record<string, any[][]>;
+  sheetNames: string[];
+};
 
 function Kpi({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (
@@ -49,8 +56,46 @@ function MiniBar({ label, value, max }: { label: string; value: number; max: num
   );
 }
 
+async function loadEmbeddedWorkbook(): Promise<WorkbookData> {
+  const res = await fetch("/mark-data.xlsx");
+  if (!res.ok) throw new Error("내장 엑셀 파일을 불러오지 못했습니다.");
+  const buffer = await res.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+
+  const sheets: Record<string, any[][]> = {};
+  workbook.SheetNames.forEach((name) => {
+    const ws = workbook.Sheets[name];
+    sheets[name] = XLSX.utils.sheet_to_json(ws, {
+      header: 1,
+      raw: false,
+      defval: "",
+    }) as any[][];
+  });
+
+  return {
+    fileName: "📊 매출 통합 대시보드 2026 (NEW).xlsx",
+    uploadedAt: "프로젝트 내장 데이터",
+    sheets,
+    sheetNames: workbook.SheetNames,
+  };
+}
+
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
   const [workbook, setWorkbook] = useState<WorkbookData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadEmbeddedWorkbook()
+      .then((data) => {
+        setWorkbook(data);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "데이터 로딩 중 오류가 발생했습니다.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const parsed = useMemo(() => {
     const rows = workbook ? parseLeaderBoard(workbook.sheets) : [];
@@ -86,23 +131,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           <NavTabs active={active} />
         </header>
 
-        <UploadPanel onLoad={setWorkbook} />
-
-        {workbook && (
-          <section className="rounded-3xl bg-white p-4 text-sm text-slate-600 shadow-sm">
-            <b className="text-slate-900">현재 데이터:</b> {workbook.fileName} · 업로드 {workbook.uploadedAt}
-            <div className="mt-1 text-xs text-slate-500">인식 시트: {workbook.sheetNames.join(", ")}</div>
-          </section>
-        )}
+        <section className="rounded-3xl bg-white p-4 text-sm text-slate-600 shadow-sm">
+          <b className="text-slate-900">현재 데이터:</b> {workbook?.fileName || "데이터 불러오는 중"} · {workbook?.uploadedAt || "-"}
+          {workbook && <div className="mt-1 text-xs text-slate-500">인식 시트: {workbook.sheetNames.join(", ")}</div>}
+        </section>
 
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
           {period}
         </section>
 
-        {!workbook && (
+        {loading && (
           <section className="rounded-3xl bg-white p-8 text-center shadow-sm">
-            <p className="text-xl font-black">엑셀 파일을 업로드하면 분석이 시작됩니다.</p>
-            <p className="mt-2 text-sm text-slate-500">파일은 브라우저에서만 읽고 서버에 저장하지 않습니다.</p>
+            <p className="text-xl font-black">내장 엑셀 데이터를 불러오는 중입니다.</p>
+          </section>
+        )}
+
+        {error && (
+          <section className="rounded-3xl bg-white p-8 text-center shadow-sm">
+            <p className="text-xl font-black text-red-600">데이터 로딩 오류</p>
+            <p className="mt-2 text-sm text-slate-500">{error}</p>
           </section>
         )}
 

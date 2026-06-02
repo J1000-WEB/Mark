@@ -1,6 +1,6 @@
 {
-  "name": "sales-review-dashboard-mark2-2",
-  "version": "0.2.2",
+  "name": "sales-review-dashboard-mark2-3-static",
+  "version": "0.2.3",
   "private": true,
   "scripts": {
     "dev": "next dev",

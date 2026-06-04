@@ -17,15 +17,15 @@
       },
       {
         "storeName": "롯데아울렛 서울역점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 6395600.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 6395600.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 6395600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "신사 플래그십",
@@ -41,15 +41,15 @@
       },
       {
         "storeName": "롯데백화점 광복점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 4388600.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 4388600.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 4388600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "신세계 센텀시티점",
@@ -89,15 +89,15 @@
       },
       {
         "storeName": "타임스퀘어 영등포점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 2182000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 2182000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 2182000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "현대커넥트 청주점",
@@ -329,15 +329,15 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 99000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 99000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 99000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(대구)",
@@ -353,99 +353,99 @@
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(은평)",
         "dayTarget": 175000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1820000.0,
-        "weekSales": 0,
-        "weekRate": 0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
         "monthTarget": 7000000.0,
-        "monthSales": 0,
-        "monthRate": 0
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ],
     "compare": [
@@ -787,15 +787,15 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 29000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 259000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 2346600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(은평)",
@@ -811,87 +811,87 @@
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 280000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ]
   },
@@ -1225,8 +1225,8 @@
       {
         "storeName": "오프라인_무신사(대구)",
         "dayTarget": 240000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1230000.0,
         "weekSales": 1213600.0,
         "weekRate": 98.7,
@@ -1236,21 +1236,21 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 94000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 259000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 2576600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(은평)",
         "dayTarget": 240000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1230000.0,
         "weekSales": 137000.0,
         "weekRate": 11.1,
@@ -1260,87 +1260,87 @@
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 280000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ],
     "compare": [
@@ -1599,8 +1599,8 @@
       {
         "storeName": "서울숲 플래그십",
         "dayTarget": 3400000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 17425000.0,
         "weekSales": 2632200.0,
         "weekRate": 15.1,
@@ -1682,21 +1682,21 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 159000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 652000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 1789600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(은평)",
         "dayTarget": 240000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1230000.0,
         "weekSales": 164000.0,
         "weekRate": 13.3,
@@ -1706,87 +1706,87 @@
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 159000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ],
     "companyTopProducts": [
@@ -1797,9 +1797,11 @@
         "weekAmount": 17806600.0,
         "prevNet": 370.0,
         "prevAmount": 12741300.0,
+        "storeStock": 3825.0,
         "qtyChangeRate": 44.054054054054056,
         "amountChangeRate": 39.75497005800036,
-        "contributionRate": 4.371809823105536
+        "contributionRate": 4.371809823105536,
+        "stockWeeks": 7.176360225140713
       },
       {
         "styleCode": "WBE2L05513",
@@ -1808,9 +1810,11 @@
         "weekAmount": 17329400.0,
         "prevNet": 398.0,
         "prevAmount": 12771500.0,
+        "storeStock": 2764.0,
         "qtyChangeRate": 32.663316582914575,
         "amountChangeRate": 35.68805543593157,
-        "contributionRate": 4.254649464160764
+        "contributionRate": 4.254649464160764,
+        "stockWeeks": 5.234848484848484
       },
       {
         "styleCode": "WBE2L03531",
@@ -1819,9 +1823,11 @@
         "weekAmount": 12645300.0,
         "prevNet": 335.0,
         "prevAmount": 13858400.0,
+        "storeStock": 1345.0,
         "qtyChangeRate": -8.358208955223882,
         "amountChangeRate": -8.753535761704093,
-        "contributionRate": 3.1046267539067776
+        "contributionRate": 3.1046267539067776,
+        "stockWeeks": 4.381107491856677
       },
       {
         "styleCode": "GF2LKC539",
@@ -1830,9 +1836,11 @@
         "weekAmount": 10207100.0,
         "prevNet": 275.0,
         "prevAmount": 9754500.0,
+        "storeStock": 2221.0,
         "qtyChangeRate": 7.2727272727272725,
         "amountChangeRate": 4.6399097852273306,
-        "contributionRate": 2.506009010446717
+        "contributionRate": 2.506009010446717,
+        "stockWeeks": 7.5288135593220336
       },
       {
         "styleCode": "WBD3L04501",
@@ -1841,9 +1849,11 @@
         "weekAmount": 9844600.0,
         "prevNet": 258.0,
         "prevAmount": 8806100.0,
+        "storeStock": 6181.0,
         "qtyChangeRate": 10.852713178294573,
         "amountChangeRate": 11.792961697005484,
-        "contributionRate": 2.4170093664452925
+        "contributionRate": 2.4170093664452925,
+        "stockWeeks": 21.611888111888113
       },
       {
         "styleCode": "GF2LSH521",
@@ -1852,9 +1862,11 @@
         "weekAmount": 9708600.0,
         "prevNet": 172.0,
         "prevAmount": 7720900.0,
+        "storeStock": 968.0,
         "qtyChangeRate": 29.651162790697676,
         "amountChangeRate": 25.74440803533267,
-        "contributionRate": 2.3836191551785517
+        "contributionRate": 2.3836191551785517,
+        "stockWeeks": 4.3408071748878925
       },
       {
         "styleCode": "GF2LKP531",
@@ -1863,9 +1875,11 @@
         "weekAmount": 8304900.0,
         "prevNet": 110.0,
         "prevAmount": 6366500.0,
+        "storeStock": 265.0,
         "qtyChangeRate": 30.0,
         "amountChangeRate": 30.44687033691981,
-        "contributionRate": 2.0389879819791066
+        "contributionRate": 2.0389879819791066,
+        "stockWeeks": 1.8531468531468531
       },
       {
         "styleCode": "WBE2L04540",
@@ -1874,9 +1888,11 @@
         "weekAmount": 8008500.0,
         "prevNet": 227.0,
         "prevAmount": 8456900.0,
+        "storeStock": 904.0,
         "qtyChangeRate": -5.286343612334802,
         "amountChangeRate": -5.302179285553808,
-        "contributionRate": 1.9662169627183559
+        "contributionRate": 1.9662169627183559,
+        "stockWeeks": 4.2046511627906975
       },
       {
         "styleCode": "WBD3L04503",
@@ -1885,9 +1901,11 @@
         "weekAmount": 7499600.0,
         "prevNet": 253.0,
         "prevAmount": 8609300.0,
+        "storeStock": 6705.0,
         "qtyChangeRate": -13.83399209486166,
         "amountChangeRate": -12.889549673028005,
-        "contributionRate": 1.8412737383533224
+        "contributionRate": 1.8412737383533224,
+        "stockWeeks": 30.756880733944953
       },
       {
         "styleCode": "WBE2L04534",
@@ -1896,9 +1914,11 @@
         "weekAmount": 7458000.0,
         "prevNet": 195.0,
         "prevAmount": 7642000.0,
+        "storeStock": 2203.0,
         "qtyChangeRate": -3.076923076923077,
         "amountChangeRate": -2.4077466631771784,
-        "contributionRate": 1.8310602619658487
+        "contributionRate": 1.8310602619658487,
+        "stockWeeks": 11.656084656084657
       }
     ],
     "storeTopProducts": {
@@ -1910,9 +1930,11 @@
           "weekAmount": 2752000.0,
           "prevNet": 18.0,
           "prevAmount": 630000.0,
+          "storeStock": 316.0,
           "qtyChangeRate": 377.77777777777777,
           "amountChangeRate": 336.8253968253968,
-          "contributionRate": 11.516089885759719
+          "contributionRate": 11.516089885759719,
+          "stockWeeks": 3.6744186046511627
         },
         {
           "styleCode": "WBE2L05513",
@@ -1921,9 +1943,11 @@
           "weekAmount": 1934000.0,
           "prevNet": 20.0,
           "prevAmount": 700000.0,
+          "storeStock": 160.0,
           "qtyChangeRate": 210.0,
           "amountChangeRate": 176.28571428571428,
-          "contributionRate": 8.09306607523957
+          "contributionRate": 8.09306607523957,
+          "stockWeeks": 2.5806451612903225
         },
         {
           "styleCode": "GF2LKP525",
@@ -1932,9 +1956,11 @@
           "weekAmount": 1032000.0,
           "prevNet": 5.0,
           "prevAmount": 215000.0,
+          "storeStock": 120.0,
           "qtyChangeRate": 380.0,
           "amountChangeRate": 380.0,
-          "contributionRate": 4.318533707159895
+          "contributionRate": 4.318533707159895,
+          "stockWeeks": 5.0
         },
         {
           "styleCode": "WBE2L05533",
@@ -1943,9 +1969,11 @@
           "weekAmount": 874000.0,
           "prevNet": 5.0,
           "prevAmount": 190000.0,
+          "storeStock": 210.0,
           "qtyChangeRate": 360.0,
           "amountChangeRate": 360.0,
-          "contributionRate": 3.6573628488931664
+          "contributionRate": 3.6573628488931664,
+          "stockWeeks": 9.130434782608695
         },
         {
           "styleCode": "WBE2L04534",
@@ -1954,9 +1982,11 @@
           "weekAmount": 800000.0,
           "prevNet": 11.0,
           "prevAmount": 440000.0,
+          "storeStock": 93.0,
           "qtyChangeRate": 81.81818181818183,
           "amountChangeRate": 81.81818181818183,
-          "contributionRate": 3.3477005481859647
+          "contributionRate": 3.3477005481859647,
+          "stockWeeks": 4.65
         },
         {
           "styleCode": "WBE2L05512",
@@ -1965,9 +1995,11 @@
           "weekAmount": 713000.0,
           "prevNet": 8.0,
           "prevAmount": 248000.0,
+          "storeStock": 55.0,
           "qtyChangeRate": 187.5,
           "amountChangeRate": 187.5,
-          "contributionRate": 2.9836381135707413
+          "contributionRate": 2.9836381135707413,
+          "stockWeeks": 2.391304347826087
         },
         {
           "styleCode": "GF2LKC539",
@@ -1976,9 +2008,11 @@
           "weekAmount": 665000.0,
           "prevNet": 11.0,
           "prevAmount": 385000.0,
+          "storeStock": 66.0,
           "qtyChangeRate": 72.72727272727273,
           "amountChangeRate": 72.72727272727273,
-          "contributionRate": 2.782776080679583
+          "contributionRate": 2.782776080679583,
+          "stockWeeks": 3.473684210526316
         },
         {
           "styleCode": "GF2LTS522",
@@ -1987,9 +2021,11 @@
           "weekAmount": 648000.0,
           "prevNet": 9.0,
           "prevAmount": 243000.0,
+          "storeStock": 304.0,
           "qtyChangeRate": 166.66666666666669,
           "amountChangeRate": 166.66666666666669,
-          "contributionRate": 2.7116374440306314
+          "contributionRate": 2.7116374440306314,
+          "stockWeeks": 12.666666666666666
         },
         {
           "styleCode": "WBE2L03531",
@@ -1998,9 +2034,11 @@
           "weekAmount": 627000.0,
           "prevNet": 12.0,
           "prevAmount": 504000.0,
+          "storeStock": 27.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 24.404761904761905,
-          "contributionRate": 2.62376030464075
+          "contributionRate": 2.62376030464075,
+          "stockWeeks": 1.6875
         },
         {
           "styleCode": "WBD3L04503",
@@ -2009,9 +2047,11 @@
           "weekAmount": 595000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 458.0,
           "qtyChangeRate": 240.0,
           "amountChangeRate": 240.0,
-          "contributionRate": 2.489852282713311
+          "contributionRate": 2.489852282713311,
+          "stockWeeks": 26.941176470588236
         }
       ],
       "롯데백화점 광복점": [
@@ -2022,9 +2062,11 @@
           "weekAmount": 1411200.0,
           "prevNet": 61.0,
           "prevAmount": 2471700.0,
+          "storeStock": 187.0,
           "qtyChangeRate": -42.62295081967213,
           "amountChangeRate": -42.905692438402724,
-          "contributionRate": 4.425114531822757
+          "contributionRate": 4.425114531822757,
+          "stockWeeks": 5.3428571428571425
         },
         {
           "styleCode": "GF2LSK510",
@@ -2033,9 +2075,11 @@
           "weekAmount": 1113600.0,
           "prevNet": 28.0,
           "prevAmount": 1279200.0,
+          "storeStock": 86.0,
           "qtyChangeRate": -14.285714285714285,
           "amountChangeRate": -12.94559099437148,
-          "contributionRate": 3.4919271135472094
+          "contributionRate": 3.4919271135472094,
+          "stockWeeks": 3.5833333333333335
         },
         {
           "styleCode": "WBE2L05513",
@@ -2044,9 +2088,11 @@
           "weekAmount": 1103000.0,
           "prevNet": 101.0,
           "prevAmount": 2601600.0,
+          "storeStock": 265.0,
           "qtyChangeRate": -67.32673267326733,
           "amountChangeRate": -57.60301353013531,
-          "contributionRate": 3.458688583191965
+          "contributionRate": 3.458688583191965,
+          "stockWeeks": 8.030303030303031
         },
         {
           "styleCode": "GF1LTS505",
@@ -2055,9 +2101,11 @@
           "weekAmount": 1094100.0,
           "prevNet": 57.0,
           "prevAmount": 1456300.0,
+          "storeStock": 454.0,
           "qtyChangeRate": -24.561403508771928,
           "amountChangeRate": -24.871249055826407,
-          "contributionRate": 3.4307807605352028
+          "contributionRate": 3.4307807605352028,
+          "stockWeeks": 10.55813953488372
         },
         {
           "styleCode": "WBE2L05533",
@@ -2066,9 +2114,11 @@
           "weekAmount": 950000.0,
           "prevNet": 25.0,
           "prevAmount": 893000.0,
+          "storeStock": 392.0,
           "qtyChangeRate": 4.0,
           "amountChangeRate": 6.382978723404255,
-          "contributionRate": 2.9789248903285284
+          "contributionRate": 2.9789248903285284,
+          "stockWeeks": 15.076923076923077
         },
         {
           "styleCode": "GF2LKC539",
@@ -2077,9 +2127,11 @@
           "weekAmount": 928200.0,
           "prevNet": 34.0,
           "prevAmount": 1145800.0,
+          "storeStock": 346.0,
           "qtyChangeRate": -17.647058823529413,
           "amountChangeRate": -18.991097922848667,
-          "contributionRate": 2.910566403371516
+          "contributionRate": 2.910566403371516,
+          "stockWeeks": 12.357142857142858
         },
         {
           "styleCode": "GF2LKP525",
@@ -2088,9 +2140,11 @@
           "weekAmount": 903400.0,
           "prevNet": 18.0,
           "prevAmount": 740000.0,
+          "storeStock": 83.0,
           "qtyChangeRate": 22.22222222222222,
           "amountChangeRate": 22.08108108108108,
-          "contributionRate": 2.832800785181887
+          "contributionRate": 2.832800785181887,
+          "stockWeeks": 3.772727272727273
         },
         {
           "styleCode": "WBE2L04540",
@@ -2099,9 +2153,11 @@
           "weekAmount": 868300.0,
           "prevNet": 38.0,
           "prevAmount": 1366100.0,
+          "storeStock": 94.0,
           "qtyChangeRate": -36.84210526315789,
           "amountChangeRate": -36.43949930458971,
-          "contributionRate": 2.722737349760275
+          "contributionRate": 2.722737349760275,
+          "stockWeeks": 3.9166666666666665
         },
         {
           "styleCode": "GF2LTS523",
@@ -2110,9 +2166,11 @@
           "weekAmount": 802400.0,
           "prevNet": 32.0,
           "prevAmount": 1033600.0,
+          "storeStock": 54.0,
           "qtyChangeRate": -21.875,
           "amountChangeRate": -22.36842105263158,
-          "contributionRate": 2.5160940336838014
+          "contributionRate": 2.5160940336838014,
+          "stockWeeks": 2.16
         },
         {
           "styleCode": "GF1LPT501",
@@ -2121,9 +2179,11 @@
           "weekAmount": 674700.0,
           "prevNet": 7.0,
           "prevAmount": 392500.0,
+          "storeStock": 72.0,
           "qtyChangeRate": 114.28571428571428,
           "amountChangeRate": 71.89808917197452,
-          "contributionRate": 2.11566381421543
+          "contributionRate": 2.11566381421543,
+          "stockWeeks": 4.8
         }
       ],
       "롯데백화점 평촌점": [
@@ -2134,9 +2194,11 @@
           "weekAmount": 544000.0,
           "prevNet": 12.0,
           "prevAmount": 408000.0,
+          "storeStock": 41.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 33.33333333333333,
-          "contributionRate": 6.568461724221203
+          "contributionRate": 6.568461724221203,
+          "stockWeeks": 2.5625
         },
         {
           "styleCode": "WBE1L12504",
@@ -2145,9 +2207,11 @@
           "weekAmount": 532000.0,
           "prevNet": 1.0,
           "prevAmount": 38000.0,
+          "storeStock": 44.0,
           "qtyChangeRate": 1300.0,
           "amountChangeRate": 1300.0,
-          "contributionRate": 6.423569186186912
+          "contributionRate": 6.423569186186912,
+          "stockWeeks": 3.142857142857143
         },
         {
           "styleCode": "GF2LKC539",
@@ -2156,9 +2220,11 @@
           "weekAmount": 490000.0,
           "prevNet": 11.0,
           "prevAmount": 400000.0,
+          "storeStock": 66.0,
           "qtyChangeRate": 27.27272727272727,
           "amountChangeRate": 22.5,
-          "contributionRate": 5.916445303066892
+          "contributionRate": 5.916445303066892,
+          "stockWeeks": 4.714285714285714
         },
         {
           "styleCode": "GF2LTS531",
@@ -2167,9 +2233,11 @@
           "weekAmount": 360000.0,
           "prevNet": 4.0,
           "prevAmount": 160000.0,
+          "storeStock": 8.0,
           "qtyChangeRate": 125.0,
           "amountChangeRate": 125.0,
-          "contributionRate": 4.346776141028736
+          "contributionRate": 4.346776141028736,
+          "stockWeeks": 0.8888888888888888
         },
         {
           "styleCode": "WBE2L05513",
@@ -2178,9 +2246,11 @@
           "weekAmount": 315000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 49.0,
           "qtyChangeRate": 80.0,
           "amountChangeRate": 80.0,
-          "contributionRate": 3.8034291234001447
+          "contributionRate": 3.8034291234001447,
+          "stockWeeks": 5.444444444444445
         },
         {
           "styleCode": "WBE2L03531",
@@ -2189,9 +2259,11 @@
           "weekAmount": 294000.0,
           "prevNet": 4.0,
           "prevAmount": 168000.0,
+          "storeStock": 24.0,
           "qtyChangeRate": 75.0,
           "amountChangeRate": 75.0,
-          "contributionRate": 3.549867181840135
+          "contributionRate": 3.549867181840135,
+          "stockWeeks": 3.4285714285714284
         },
         {
           "styleCode": "WBE2L04540",
@@ -2200,20 +2272,24 @@
           "weekAmount": 266000.0,
           "prevNet": 9.0,
           "prevAmount": 342000.0,
+          "storeStock": 35.0,
           "qtyChangeRate": -22.22222222222222,
           "amountChangeRate": -22.22222222222222,
-          "contributionRate": 3.211784593093456
+          "contributionRate": 3.211784593093456,
+          "stockWeeks": 5.0
         },
         {
           "styleCode": "GF2LTS528",
           "productName": "스냅 헨리넥 티셔츠",
           "weekNet": 7.0,
           "weekAmount": 224000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 2.7046607099734365
+          "storeStock": 20.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 2.7046607099734365,
+          "stockWeeks": 2.857142857142857
         },
         {
           "styleCode": "GF2LSH521",
@@ -2222,9 +2298,11 @@
           "weekAmount": 220000.0,
           "prevNet": 6.0,
           "prevAmount": 274000.0,
+          "storeStock": 21.0,
           "qtyChangeRate": -16.666666666666664,
           "amountChangeRate": -19.708029197080293,
-          "contributionRate": 2.6563631972953394
+          "contributionRate": 2.6563631972953394,
+          "stockWeeks": 4.2
         },
         {
           "styleCode": "GF2LKP530",
@@ -2233,9 +2311,11 @@
           "weekAmount": 216000.0,
           "prevNet": 2.0,
           "prevAmount": 108000.0,
+          "storeStock": 24.0,
           "qtyChangeRate": 100.0,
           "amountChangeRate": 100.0,
-          "contributionRate": 2.6080656846172423
+          "contributionRate": 2.6080656846172423,
+          "stockWeeks": 6.0
         }
       ],
       "롯데아울렛 김해점": [
@@ -2246,9 +2326,11 @@
           "weekAmount": 3756000.0,
           "prevNet": 19.0,
           "prevAmount": 665000.0,
+          "storeStock": 425.0,
           "qtyChangeRate": 515.7894736842105,
           "amountChangeRate": 464.812030075188,
-          "contributionRate": 9.743948945443224
+          "contributionRate": 9.743948945443224,
+          "stockWeeks": 3.6324786324786325
         },
         {
           "styleCode": "WBE2L05513",
@@ -2257,9 +2339,11 @@
           "weekAmount": 2550000.0,
           "prevNet": 11.0,
           "prevAmount": 385000.0,
+          "storeStock": 124.0,
           "qtyChangeRate": 645.4545454545454,
           "amountChangeRate": 562.3376623376623,
-          "contributionRate": 6.615300801618804
+          "contributionRate": 6.615300801618804,
+          "stockWeeks": 1.5121951219512195
         },
         {
           "styleCode": "WBD3L04501",
@@ -2268,20 +2352,24 @@
           "weekAmount": 2450000.0,
           "prevNet": 11.0,
           "prevAmount": 385000.0,
+          "storeStock": 550.0,
           "qtyChangeRate": 536.3636363636364,
           "amountChangeRate": 536.3636363636364,
-          "contributionRate": 6.355877240771007
+          "contributionRate": 6.355877240771007,
+          "stockWeeks": 7.857142857142857
         },
         {
           "styleCode": "WBE3L01508",
           "productName": "로즈버리 빈티지 루즈핏 티셔츠",
           "weekNet": 64.0,
           "weekAmount": 1344000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.4866526577943806
+          "storeStock": -33.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.4866526577943806,
+          "stockWeeks": -0.515625
         },
         {
           "styleCode": "WBD3L04503",
@@ -2290,9 +2378,11 @@
           "weekAmount": 1260000.0,
           "prevNet": 7.0,
           "prevAmount": 245000.0,
+          "storeStock": 474.0,
           "qtyChangeRate": 414.28571428571433,
           "amountChangeRate": 414.28571428571433,
-          "contributionRate": 3.2687368666822323
+          "contributionRate": 3.2687368666822323,
+          "stockWeeks": 13.166666666666666
         },
         {
           "styleCode": "WBE1L12504",
@@ -2301,9 +2391,11 @@
           "weekAmount": 1140000.0,
           "prevNet": 5.0,
           "prevAmount": 190000.0,
+          "storeStock": 90.0,
           "qtyChangeRate": 500.0,
           "amountChangeRate": 500.0,
-          "contributionRate": 2.957428593664877
+          "contributionRate": 2.957428593664877,
+          "stockWeeks": 3.0
         },
         {
           "styleCode": "WBE2L04540",
@@ -2312,9 +2404,11 @@
           "weekAmount": 950000.0,
           "prevNet": 14.0,
           "prevAmount": 532000.0,
+          "storeStock": 125.0,
           "qtyChangeRate": 78.57142857142857,
           "amountChangeRate": 78.57142857142857,
-          "contributionRate": 2.464523828054064
+          "contributionRate": 2.464523828054064,
+          "stockWeeks": 5.0
         },
         {
           "styleCode": "GF2LKC539",
@@ -2323,9 +2417,11 @@
           "weekAmount": 945000.0,
           "prevNet": 23.0,
           "prevAmount": 810000.0,
+          "storeStock": 100.0,
           "qtyChangeRate": 17.391304347826086,
           "amountChangeRate": 16.666666666666664,
-          "contributionRate": 2.4515526500116738
+          "contributionRate": 2.4515526500116738,
+          "stockWeeks": 3.7037037037037037
         },
         {
           "styleCode": "GF2LBL516",
@@ -2334,20 +2430,24 @@
           "weekAmount": 912000.0,
           "prevNet": 14.0,
           "prevAmount": 672000.0,
+          "storeStock": 21.0,
           "qtyChangeRate": 35.714285714285715,
           "amountChangeRate": 35.714285714285715,
-          "contributionRate": 2.365942874931901
+          "contributionRate": 2.365942874931901,
+          "stockWeeks": 1.105263157894737
         },
         {
           "styleCode": "WBE2L05543",
           "productName": "스트라이프 크루넥 하프 니트",
           "weekNet": 42.0,
           "weekAmount": 882000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 2.2881158066775624
+          "storeStock": 9.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 2.2881158066775624,
+          "stockWeeks": 0.21428571428571427
         }
       ],
       "롯데아울렛 서울역점": [
@@ -2358,9 +2458,11 @@
           "weekAmount": 1144000.0,
           "prevNet": 14.0,
           "prevAmount": 616000.0,
+          "storeStock": 77.0,
           "qtyChangeRate": 85.71428571428571,
           "amountChangeRate": 85.71428571428571,
-          "contributionRate": 4.9008268003255795
+          "contributionRate": 4.9008268003255795,
+          "stockWeeks": 2.9615384615384617
         },
         {
           "styleCode": "WBE2L03531",
@@ -2369,9 +2471,11 @@
           "weekAmount": 1050000.0,
           "prevNet": 19.0,
           "prevAmount": 809000.0,
+          "storeStock": 18.0,
           "qtyChangeRate": 31.57894736842105,
           "amountChangeRate": 29.78986402966625,
-          "contributionRate": 4.498136486312814
+          "contributionRate": 4.498136486312814,
+          "stockWeeks": 0.72
         },
         {
           "styleCode": "WBD2L43545",
@@ -2380,9 +2484,11 @@
           "weekAmount": 980000.0,
           "prevNet": 26.0,
           "prevAmount": 910000.0,
+          "storeStock": 346.0,
           "qtyChangeRate": 7.6923076923076925,
           "amountChangeRate": 7.6923076923076925,
-          "contributionRate": 4.1982607205586255
+          "contributionRate": 4.1982607205586255,
+          "stockWeeks": 12.357142857142858
         },
         {
           "styleCode": "WBE2L05513",
@@ -2391,9 +2497,11 @@
           "weekAmount": 875000.0,
           "prevNet": 33.0,
           "prevAmount": 1173000.0,
+          "storeStock": 347.0,
           "qtyChangeRate": -24.242424242424242,
           "amountChangeRate": -25.404944586530263,
-          "contributionRate": 3.7484470719273446
+          "contributionRate": 3.7484470719273446,
+          "stockWeeks": 13.88
         },
         {
           "styleCode": "GF2LKP525",
@@ -2402,9 +2510,11 @@
           "weekAmount": 860000.0,
           "prevNet": 15.0,
           "prevAmount": 655000.0,
+          "storeStock": 48.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 31.297709923664126,
-          "contributionRate": 3.684187979265733
+          "contributionRate": 3.684187979265733,
+          "stockWeeks": 2.4
         },
         {
           "styleCode": "WBD3L04503",
@@ -2413,9 +2523,11 @@
           "weekAmount": 805000.0,
           "prevNet": 16.0,
           "prevAmount": 578000.0,
+          "storeStock": 300.0,
           "qtyChangeRate": 43.75,
           "amountChangeRate": 39.273356401384085,
-          "contributionRate": 3.4485713061731564
+          "contributionRate": 3.4485713061731564,
+          "stockWeeks": 13.043478260869565
         },
         {
           "styleCode": "WBE2L04534",
@@ -2424,9 +2536,11 @@
           "weekAmount": 640000.0,
           "prevNet": 8.0,
           "prevAmount": 330000.0,
+          "storeStock": 186.0,
           "qtyChangeRate": 100.0,
           "amountChangeRate": 93.93939393939394,
-          "contributionRate": 2.741721286895429
+          "contributionRate": 2.741721286895429,
+          "stockWeeks": 11.625
         },
         {
           "styleCode": "GF2LTS522",
@@ -2435,9 +2549,11 @@
           "weekAmount": 567000.0,
           "prevNet": 39.0,
           "prevAmount": 1077000.0,
+          "storeStock": 95.0,
           "qtyChangeRate": -46.15384615384615,
           "amountChangeRate": -47.353760445682454,
-          "contributionRate": 2.4289937026089192
+          "contributionRate": 2.4289937026089192,
+          "stockWeeks": 4.523809523809524
         },
         {
           "styleCode": "GF2LKC539",
@@ -2446,9 +2562,11 @@
           "weekAmount": 560000.0,
           "prevNet": 12.0,
           "prevAmount": 425000.0,
+          "storeStock": 231.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 31.76470588235294,
-          "contributionRate": 2.3990061260335005
+          "contributionRate": 2.3990061260335005,
+          "stockWeeks": 14.4375
         },
         {
           "styleCode": "GF2LTS532",
@@ -2457,9 +2575,11 @@
           "weekAmount": 520000.0,
           "prevNet": 17.0,
           "prevAmount": 680000.0,
+          "storeStock": 1.0,
           "qtyChangeRate": -23.52941176470588,
           "amountChangeRate": -23.52941176470588,
-          "contributionRate": 2.2276485456025363
+          "contributionRate": 2.2276485456025363,
+          "stockWeeks": 0.07692307692307693
         }
       ],
       "서울숲 플래그십": [
@@ -2468,22 +2588,26 @@
           "productName": "볼륨 슬리브 미니 원피스",
           "weekNet": 5.0,
           "weekAmount": 321600.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 6.588543800704745
+          "storeStock": 24.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 6.588543800704745,
+          "stockWeeks": 4.8
         },
         {
           "styleCode": "GF2LBL516",
           "productName": "캡 슬리브 하트넥 셔링 블라우스",
           "weekNet": 7.0,
           "weekAmount": 316800.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 6.49020732606736
+          "storeStock": 15.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 6.49020732606736,
+          "stockWeeks": 2.142857142857143
         },
         {
           "styleCode": "GF2LKP531",
@@ -2492,53 +2616,63 @@
           "weekAmount": 224300.0,
           "prevNet": 3.0,
           "prevAmount": 171100.0,
+          "storeStock": 21.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 31.09292811221508,
-          "contributionRate": 4.5951815127427675
+          "contributionRate": 4.5951815127427675,
+          "stockWeeks": 5.25
         },
         {
           "styleCode": "GF2LSK510",
           "productName": "체크 시어 롱 스커트",
           "weekNet": 5.0,
           "weekAmount": 220800.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 4.523477833319676
+          "storeStock": 79.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 4.523477833319676,
+          "stockWeeks": 15.8
         },
         {
           "styleCode": "GF2LSK517",
           "productName": "도트 시어 미디 스커트",
           "weekNet": 5.0,
           "weekAmount": 190000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.8924854543964598
+          "storeStock": 16.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.8924854543964598,
+          "stockWeeks": 3.2
         },
         {
           "styleCode": "WBD3L04501",
           "productName": "에센셜 크루넥 가디건",
           "weekNet": 6.0,
           "weekAmount": 189000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.8719986888470044
+          "storeStock": 305.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.8719986888470044,
+          "stockWeeks": 50.833333333333336
         },
         {
           "styleCode": "GF2LSH521",
           "productName": "레이스 라운드 카라 블라우스",
           "weekNet": 4.0,
           "weekAmount": 169400.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.4704580840776855
+          "storeStock": 34.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.4704580840776855,
+          "stockWeeks": 8.5
         },
         {
           "styleCode": "WBD2L43545",
@@ -2547,9 +2681,11 @@
           "weekAmount": 164600.0,
           "prevNet": 4.0,
           "prevAmount": 129500.0,
+          "storeStock": 69.0,
           "qtyChangeRate": 25.0,
           "amountChangeRate": 27.104247104247104,
-          "contributionRate": 3.3721216094403017
+          "contributionRate": 3.3721216094403017,
+          "stockWeeks": 13.8
         },
         {
           "styleCode": "WBD3L04503",
@@ -2558,9 +2694,11 @@
           "weekAmount": 162800.0,
           "prevNet": 1.0,
           "prevAmount": 35000.0,
+          "storeStock": 312.0,
           "qtyChangeRate": 400.0,
           "amountChangeRate": 365.1428571428571,
-          "contributionRate": 3.3352454314512823
+          "contributionRate": 3.3352454314512823,
+          "stockWeeks": 62.4
         },
         {
           "styleCode": "GF1LKP511",
@@ -2569,9 +2707,11 @@
           "weekAmount": 154100.0,
           "prevNet": 6.0,
           "prevAmount": 218500.0,
+          "storeStock": 1.0,
           "qtyChangeRate": -33.33333333333333,
           "amountChangeRate": -29.47368421052631,
-          "contributionRate": 3.1570105711710235
+          "contributionRate": 3.1570105711710235,
+          "stockWeeks": 0.25
         }
       ],
       "성수 플래그십": [
@@ -2582,9 +2722,11 @@
           "weekAmount": 2032500.0,
           "prevNet": 22.0,
           "prevAmount": 731700.0,
+          "storeStock": 151.0,
           "qtyChangeRate": 177.27272727272728,
           "amountChangeRate": 177.77777777777777,
-          "contributionRate": 3.68028507949959
+          "contributionRate": 3.68028507949959,
+          "stockWeeks": 2.4754098360655736
         },
         {
           "styleCode": "WBD3L04501",
@@ -2593,9 +2735,11 @@
           "weekAmount": 1887100.0,
           "prevNet": 112.0,
           "prevAmount": 3767700.0,
+          "storeStock": 574.0,
           "qtyChangeRate": -49.107142857142854,
           "amountChangeRate": -49.91374047827587,
-          "contributionRate": 3.417006629039939
+          "contributionRate": 3.417006629039939,
+          "stockWeeks": 10.070175438596491
         },
         {
           "styleCode": "WBD2L43545",
@@ -2604,9 +2748,11 @@
           "weekAmount": 1675500.0,
           "prevNet": 40.0,
           "prevAmount": 1330500.0,
+          "storeStock": 209.0,
           "qtyChangeRate": 25.0,
           "amountChangeRate": 25.93010146561443,
-          "contributionRate": 3.033858622731396
+          "contributionRate": 3.033858622731396,
+          "stockWeeks": 4.18
         },
         {
           "styleCode": "GF2LKP531",
@@ -2615,9 +2761,11 @@
           "weekAmount": 1407400.0,
           "prevNet": 12.0,
           "prevAmount": 669700.0,
+          "storeStock": 2.0,
           "qtyChangeRate": 108.33333333333333,
           "amountChangeRate": 110.15380020904884,
-          "contributionRate": 2.5484050287270468
+          "contributionRate": 2.5484050287270468,
+          "stockWeeks": 0.08
         },
         {
           "styleCode": "GF1LTS505",
@@ -2626,9 +2774,11 @@
           "weekAmount": 1178000.0,
           "prevNet": 35.0,
           "prevAmount": 897000.0,
+          "storeStock": 145.0,
           "qtyChangeRate": 31.428571428571427,
           "amountChangeRate": 31.32664437012263,
-          "contributionRate": 2.1330262354984093
+          "contributionRate": 2.1330262354984093,
+          "stockWeeks": 3.152173913043478
         },
         {
           "styleCode": "GF1UJK009",
@@ -2637,9 +2787,11 @@
           "weekAmount": 988800.0,
           "prevNet": 15.0,
           "prevAmount": 905600.0,
+          "storeStock": 6.0,
           "qtyChangeRate": 6.666666666666667,
           "amountChangeRate": 9.187279151943462,
-          "contributionRate": 1.7904383205949295
+          "contributionRate": 1.7904383205949295,
+          "stockWeeks": 0.375
         },
         {
           "styleCode": "WBE2L04540",
@@ -2648,9 +2800,11 @@
           "weekAmount": 965200.0,
           "prevNet": 21.0,
           "prevAmount": 754300.0,
+          "storeStock": 36.0,
           "qtyChangeRate": 28.57142857142857,
           "amountChangeRate": 27.95969773299748,
-          "contributionRate": 1.7477053671503096
+          "contributionRate": 1.7477053671503096,
+          "stockWeeks": 1.3333333333333333
         },
         {
           "styleCode": "WBD3L04503",
@@ -2659,9 +2813,11 @@
           "weekAmount": 931500.0,
           "prevNet": 80.0,
           "prevAmount": 2652500.0,
+          "storeStock": 666.0,
           "qtyChangeRate": -65.0,
           "amountChangeRate": -64.88218661639962,
-          "contributionRate": 1.6866841582060852
+          "contributionRate": 1.6866841582060852,
+          "stockWeeks": 23.785714285714285
         },
         {
           "styleCode": "GF2LBL516",
@@ -2670,9 +2826,11 @@
           "weekAmount": 921600.0,
           "prevNet": 7.0,
           "prevAmount": 321600.0,
+          "storeStock": 13.0,
           "qtyChangeRate": 185.71428571428572,
           "amountChangeRate": 186.56716417910448,
-          "contributionRate": 1.6687580463797405
+          "contributionRate": 1.6687580463797405,
+          "stockWeeks": 0.65
         },
         {
           "styleCode": "WBD3L04505",
@@ -2681,9 +2839,11 @@
           "weekAmount": 896400.0,
           "prevNet": 31.0,
           "prevAmount": 1032800.0,
+          "storeStock": 65.0,
           "qtyChangeRate": -12.903225806451612,
           "amountChangeRate": -13.206816421378775,
-          "contributionRate": 1.6231279435490444
+          "contributionRate": 1.6231279435490444,
+          "stockWeeks": 2.4074074074074074
         }
       ],
       "스타필드 고양점": [
@@ -2694,9 +2854,11 @@
           "weekAmount": 840000.0,
           "prevNet": 33.0,
           "prevAmount": 1155000.0,
+          "storeStock": 92.0,
           "qtyChangeRate": -27.27272727272727,
           "amountChangeRate": -27.27272727272727,
-          "contributionRate": 8.232065856526852
+          "contributionRate": 8.232065856526852,
+          "stockWeeks": 3.8333333333333335
         },
         {
           "styleCode": "GF2LSH521",
@@ -2705,9 +2867,11 @@
           "weekAmount": 440000.0,
           "prevNet": 4.0,
           "prevAmount": 176000.0,
+          "storeStock": 34.0,
           "qtyChangeRate": 150.0,
           "amountChangeRate": 150.0,
-          "contributionRate": 4.31203449627597
+          "contributionRate": 4.31203449627597,
+          "stockWeeks": 3.4
         },
         {
           "styleCode": "GF2LKC541",
@@ -2716,9 +2880,11 @@
           "weekAmount": 429000.0,
           "prevNet": 9.0,
           "prevAmount": 313000.0,
+          "storeStock": 42.0,
           "qtyChangeRate": 44.44444444444444,
           "amountChangeRate": 37.06070287539936,
-          "contributionRate": 4.2042336338690705
+          "contributionRate": 4.2042336338690705,
+          "stockWeeks": 3.230769230769231
         },
         {
           "styleCode": "GF2LTS522",
@@ -2727,9 +2893,11 @@
           "weekAmount": 378000.0,
           "prevNet": 6.0,
           "prevAmount": 162000.0,
+          "storeStock": 41.0,
           "qtyChangeRate": 133.33333333333331,
           "amountChangeRate": 133.33333333333331,
-          "contributionRate": 3.7044296354370836
+          "contributionRate": 3.7044296354370836,
+          "stockWeeks": 2.9285714285714284
         },
         {
           "styleCode": "GF2LKP531",
@@ -2738,9 +2906,11 @@
           "weekAmount": 354000.0,
           "prevNet": 4.0,
           "prevAmount": 236000.0,
+          "storeStock": 14.0,
           "qtyChangeRate": 50.0,
           "amountChangeRate": 50.0,
-          "contributionRate": 3.469227753822031
+          "contributionRate": 3.469227753822031,
+          "stockWeeks": 2.3333333333333335
         },
         {
           "styleCode": "GF2LKP530",
@@ -2749,9 +2919,11 @@
           "weekAmount": 324000.0,
           "prevNet": 5.0,
           "prevAmount": 270000.0,
+          "storeStock": 25.0,
           "qtyChangeRate": 20.0,
           "amountChangeRate": 20.0,
-          "contributionRate": 3.1752254018032144
+          "contributionRate": 3.1752254018032144,
+          "stockWeeks": 4.166666666666667
         },
         {
           "styleCode": "GF1LSH511",
@@ -2760,20 +2932,24 @@
           "weekAmount": 300000.0,
           "prevNet": 1.0,
           "prevAmount": 50000.0,
+          "storeStock": 2.0,
           "qtyChangeRate": 500.0,
           "amountChangeRate": 500.0,
-          "contributionRate": 2.9400235201881615
+          "contributionRate": 2.9400235201881615,
+          "stockWeeks": 0.3333333333333333
         },
         {
           "styleCode": "GF2LSK510",
           "productName": "체크 시어 롱 스커트",
           "weekNet": 6.0,
           "weekAmount": 288000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 2.822422579380635
+          "storeStock": 27.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 2.822422579380635,
+          "stockWeeks": 4.5
         },
         {
           "styleCode": "WBE2L04540",
@@ -2782,9 +2958,11 @@
           "weekAmount": 266000.0,
           "prevNet": 9.0,
           "prevAmount": 342000.0,
+          "storeStock": 23.0,
           "qtyChangeRate": -22.22222222222222,
           "amountChangeRate": -22.22222222222222,
-          "contributionRate": 2.6068208545668363
+          "contributionRate": 2.6068208545668363,
+          "stockWeeks": 3.2857142857142856
         },
         {
           "styleCode": "WBE2L03531",
@@ -2793,9 +2971,11 @@
           "weekAmount": 210000.0,
           "prevNet": 9.0,
           "prevAmount": 378000.0,
+          "storeStock": 54.0,
           "qtyChangeRate": -44.44444444444444,
           "amountChangeRate": -44.44444444444444,
-          "contributionRate": 2.058016464131713
+          "contributionRate": 2.058016464131713,
+          "stockWeeks": 10.8
         }
       ],
       "스타필드 빌리지 운정점": [
@@ -2806,9 +2986,11 @@
           "weekAmount": 295000.0,
           "prevNet": 1.0,
           "prevAmount": 59000.0,
+          "storeStock": 8.0,
           "qtyChangeRate": 400.0,
           "amountChangeRate": 400.0,
-          "contributionRate": 4.10977988297576
+          "contributionRate": 4.10977988297576,
+          "stockWeeks": 1.6
         },
         {
           "styleCode": "WBE2L03531",
@@ -2817,9 +2999,11 @@
           "weekAmount": 294000.0,
           "prevNet": 7.0,
           "prevAmount": 294000.0,
+          "storeStock": 46.0,
           "qtyChangeRate": 0.0,
           "amountChangeRate": 0.0,
-          "contributionRate": 4.095848425745333
+          "contributionRate": 4.095848425745333,
+          "stockWeeks": 6.571428571428571
         },
         {
           "styleCode": "GF2LKC539",
@@ -2828,9 +3012,11 @@
           "weekAmount": 280000.0,
           "prevNet": 4.0,
           "prevAmount": 145000.0,
+          "storeStock": 69.0,
           "qtyChangeRate": 100.0,
           "amountChangeRate": 93.10344827586206,
-          "contributionRate": 3.9008080245193653
+          "contributionRate": 3.9008080245193653,
+          "stockWeeks": 8.625
         },
         {
           "styleCode": "GF2LTS522",
@@ -2839,9 +3025,11 @@
           "weekAmount": 243000.0,
           "prevNet": 1.0,
           "prevAmount": 27000.0,
+          "storeStock": 42.0,
           "qtyChangeRate": 800.0,
           "amountChangeRate": 800.0,
-          "contributionRate": 3.3853441069935917
+          "contributionRate": 3.3853441069935917,
+          "stockWeeks": 4.666666666666667
         },
         {
           "styleCode": "GF2LTS523",
@@ -2850,9 +3038,11 @@
           "weekAmount": 238000.0,
           "prevNet": 4.0,
           "prevAmount": 136000.0,
+          "storeStock": 9.0,
           "qtyChangeRate": 75.0,
           "amountChangeRate": 75.0,
-          "contributionRate": 3.3156868208414596
+          "contributionRate": 3.3156868208414596,
+          "stockWeeks": 1.2857142857142858
         },
         {
           "styleCode": "WBE2L05513",
@@ -2861,9 +3051,11 @@
           "weekAmount": 217000.0,
           "prevNet": 9.0,
           "prevAmount": 283000.0,
+          "storeStock": 196.0,
           "qtyChangeRate": -22.22222222222222,
           "amountChangeRate": -23.32155477031802,
-          "contributionRate": 3.0231262190025077
+          "contributionRate": 3.0231262190025077,
+          "stockWeeks": 28.0
         },
         {
           "styleCode": "GF1LTS513",
@@ -2872,9 +3064,11 @@
           "weekAmount": 216000.0,
           "prevNet": 3.0,
           "prevAmount": 72000.0,
+          "storeStock": 77.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 200.0,
-          "contributionRate": 3.0091947617720813
+          "contributionRate": 3.0091947617720813,
+          "stockWeeks": 8.555555555555555
         },
         {
           "styleCode": "GF2LTS532",
@@ -2883,9 +3077,11 @@
           "weekAmount": 200000.0,
           "prevNet": 7.0,
           "prevAmount": 280000.0,
+          "storeStock": 5.0,
           "qtyChangeRate": -28.57142857142857,
           "amountChangeRate": -28.57142857142857,
-          "contributionRate": 2.7862914460852606
+          "contributionRate": 2.7862914460852606,
+          "stockWeeks": 1.0
         },
         {
           "styleCode": "WBE2L05533",
@@ -2894,9 +3090,11 @@
           "weekAmount": 190000.0,
           "prevNet": 9.0,
           "prevAmount": 342000.0,
+          "storeStock": 189.0,
           "qtyChangeRate": -44.44444444444444,
           "amountChangeRate": -44.44444444444444,
-          "contributionRate": 2.6469768737809973
+          "contributionRate": 2.6469768737809973,
+          "stockWeeks": 37.8
         },
         {
           "styleCode": "GF1LTS511",
@@ -2905,9 +3103,11 @@
           "weekAmount": 168000.0,
           "prevNet": 3.0,
           "prevAmount": 72000.0,
+          "storeStock": 89.0,
           "qtyChangeRate": 133.33333333333331,
           "amountChangeRate": 133.33333333333331,
-          "contributionRate": 2.340484814711619
+          "contributionRate": 2.340484814711619,
+          "stockWeeks": 12.714285714285714
         }
       ],
       "신사 플래그십": [
@@ -2918,20 +3118,24 @@
           "weekAmount": 549500.0,
           "prevNet": 21.0,
           "prevAmount": 684600.0,
+          "storeStock": 291.0,
           "qtyChangeRate": -19.047619047619047,
           "amountChangeRate": -19.734151329243353,
-          "contributionRate": 2.1903600242354666
+          "contributionRate": 2.1903600242354666,
+          "stockWeeks": 17.11764705882353
         },
         {
           "styleCode": "GF2LSH524",
           "productName": "링클 시어 백슬릿 셔츠",
           "weekNet": 9.0,
           "weekAmount": 467100.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 1.8619056730125323
+          "storeStock": 15.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 1.8619056730125323,
+          "stockWeeks": 1.6666666666666667
         },
         {
           "styleCode": "GF1LTS505",
@@ -2940,9 +3144,11 @@
           "weekAmount": 452500.0,
           "prevNet": 21.0,
           "prevAmount": 523800.0,
+          "storeStock": 174.0,
           "qtyChangeRate": -14.285714285714285,
           "amountChangeRate": -13.612065673921345,
-          "contributionRate": 1.8037086641793425
+          "contributionRate": 1.8037086641793425,
+          "stockWeeks": 9.666666666666666
         },
         {
           "styleCode": "WBE2L03531",
@@ -2951,9 +3157,11 @@
           "weekAmount": 434700.0,
           "prevNet": 12.0,
           "prevAmount": 476700.0,
+          "storeStock": 67.0,
           "qtyChangeRate": -8.333333333333332,
           "amountChangeRate": -8.81057268722467,
-          "contributionRate": 1.7327561465607961
+          "contributionRate": 1.7327561465607961,
+          "stockWeeks": 6.090909090909091
         },
         {
           "styleCode": "GF2LBL516",
@@ -2962,20 +3170,24 @@
           "weekAmount": 420000.0,
           "prevNet": 5.0,
           "prevAmount": 225600.0,
+          "storeStock": 26.0,
           "qtyChangeRate": 80.0,
           "amountChangeRate": 86.17021276595744,
-          "contributionRate": 1.6741605280780638
+          "contributionRate": 1.6741605280780638,
+          "stockWeeks": 2.888888888888889
         },
         {
           "styleCode": "GF2LSH522",
           "productName": "레이스 케미솔 탑",
           "weekNet": 9.0,
           "weekAmount": 400800.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 1.5976274753659239
+          "storeStock": 27.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 1.5976274753659239,
+          "stockWeeks": 3.0
         },
         {
           "styleCode": "GF2LSK517",
@@ -2984,9 +3196,11 @@
           "weekAmount": 348000.0,
           "prevNet": 7.0,
           "prevAmount": 266000.0,
+          "storeStock": 10.0,
           "qtyChangeRate": 28.57142857142857,
           "amountChangeRate": 30.82706766917293,
-          "contributionRate": 1.3871615804075386
+          "contributionRate": 1.3871615804075386,
+          "stockWeeks": 1.1111111111111112
         },
         {
           "styleCode": "GF2LTS527",
@@ -2995,9 +3209,11 @@
           "weekAmount": 346000.0,
           "prevNet": 3.0,
           "prevAmount": 112000.0,
+          "storeStock": 38.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 208.92857142857144,
-          "contributionRate": 1.3791893874166905
+          "contributionRate": 1.3791893874166905,
+          "stockWeeks": 4.222222222222222
         },
         {
           "styleCode": "GF2LTS532",
@@ -3006,9 +3222,11 @@
           "weekAmount": 336000.0,
           "prevNet": 12.0,
           "prevAmount": 458000.0,
+          "storeStock": 17.0,
           "qtyChangeRate": -25.0,
           "amountChangeRate": -26.637554585152838,
-          "contributionRate": 1.339328422462451
+          "contributionRate": 1.339328422462451,
+          "stockWeeks": 1.8888888888888888
         },
         {
           "styleCode": "GF2LTS522",
@@ -3017,9 +3235,11 @@
           "weekAmount": 322800.0,
           "prevNet": 9.0,
           "prevAmount": 228200.0,
+          "storeStock": 73.0,
           "qtyChangeRate": 44.44444444444444,
           "amountChangeRate": 41.45486415425066,
-          "contributionRate": 1.2867119487228547
+          "contributionRate": 1.2867119487228547,
+          "stockWeeks": 5.615384615384615
         }
       ],
       "신세계 광주점": [
@@ -3030,9 +3250,11 @@
           "weekAmount": 378000.0,
           "prevNet": 9.0,
           "prevAmount": 378000.0,
+          "storeStock": 56.0,
           "qtyChangeRate": 0.0,
           "amountChangeRate": 0.0,
-          "contributionRate": 8.262295081967213
+          "contributionRate": 8.262295081967213,
+          "stockWeeks": 6.222222222222222
         },
         {
           "styleCode": "GF2LSH521",
@@ -3041,9 +3263,11 @@
           "weekAmount": 308000.0,
           "prevNet": 6.0,
           "prevAmount": 274000.0,
+          "storeStock": 30.0,
           "qtyChangeRate": 16.666666666666664,
           "amountChangeRate": 12.408759124087592,
-          "contributionRate": 6.732240437158469
+          "contributionRate": 6.732240437158469,
+          "stockWeeks": 4.285714285714286
         },
         {
           "styleCode": "WBD2L43545",
@@ -3052,9 +3276,11 @@
           "weekAmount": 210000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 362.0,
           "qtyChangeRate": 20.0,
           "amountChangeRate": 20.0,
-          "contributionRate": 4.590163934426229
+          "contributionRate": 4.590163934426229,
+          "stockWeeks": 60.333333333333336
         },
         {
           "styleCode": "GF2LSK511",
@@ -3063,20 +3289,24 @@
           "weekAmount": 192000.0,
           "prevNet": 1.0,
           "prevAmount": 64000.0,
+          "storeStock": 20.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 200.0,
-          "contributionRate": 4.19672131147541
+          "contributionRate": 4.19672131147541,
+          "stockWeeks": 6.666666666666667
         },
         {
           "styleCode": "GF2LOP505",
           "productName": "레이스 슬리브리스 롱 원피스",
           "weekNet": 2.0,
           "weekAmount": 190000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 4.1530054644808745
+          "storeStock": 14.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 4.1530054644808745,
+          "stockWeeks": 7.0
         },
         {
           "styleCode": "GF2LKC539",
@@ -3085,9 +3315,11 @@
           "weekAmount": 175000.0,
           "prevNet": 8.0,
           "prevAmount": 290000.0,
+          "storeStock": 102.0,
           "qtyChangeRate": -37.5,
           "amountChangeRate": -39.6551724137931,
-          "contributionRate": 3.825136612021858
+          "contributionRate": 3.825136612021858,
+          "stockWeeks": 20.4
         },
         {
           "styleCode": "GF2LTS532",
@@ -3096,9 +3328,11 @@
           "weekAmount": 160000.0,
           "prevNet": 1.0,
           "prevAmount": 40000.0,
+          "storeStock": 22.0,
           "qtyChangeRate": 300.0,
           "amountChangeRate": 300.0,
-          "contributionRate": 3.4972677595628414
+          "contributionRate": 3.4972677595628414,
+          "stockWeeks": 5.5
         },
         {
           "styleCode": "GF2LTS522",
@@ -3107,9 +3341,11 @@
           "weekAmount": 135000.0,
           "prevNet": 2.0,
           "prevAmount": 54000.0,
+          "storeStock": 40.0,
           "qtyChangeRate": 150.0,
           "amountChangeRate": 150.0,
-          "contributionRate": 2.9508196721311477
+          "contributionRate": 2.9508196721311477,
+          "stockWeeks": 8.0
         },
         {
           "styleCode": "GF2LKP531",
@@ -3118,9 +3354,11 @@
           "weekAmount": 118000.0,
           "prevNet": 4.0,
           "prevAmount": 236000.0,
+          "storeStock": 10.0,
           "qtyChangeRate": -50.0,
           "amountChangeRate": -50.0,
-          "contributionRate": 2.579234972677596
+          "contributionRate": 2.579234972677596,
+          "stockWeeks": 5.0
         },
         {
           "styleCode": "GF2LPT510",
@@ -3129,9 +3367,11 @@
           "weekAmount": 102000.0,
           "prevNet": 2.0,
           "prevAmount": 102000.0,
+          "storeStock": 30.0,
           "qtyChangeRate": 0.0,
           "amountChangeRate": 0.0,
-          "contributionRate": 2.2295081967213117
+          "contributionRate": 2.2295081967213117,
+          "stockWeeks": 15.0
         }
       ],
       "신세계 대전점": [
@@ -3142,9 +3382,11 @@
           "weekAmount": 672000.0,
           "prevNet": 28.0,
           "prevAmount": 1176000.0,
+          "storeStock": 23.0,
           "qtyChangeRate": -42.857142857142854,
           "amountChangeRate": -42.857142857142854,
-          "contributionRate": 8.77742946708464
+          "contributionRate": 8.77742946708464,
+          "stockWeeks": 1.4375
         },
         {
           "styleCode": "GF2LTS523",
@@ -3153,9 +3395,11 @@
           "weekAmount": 442000.0,
           "prevNet": 8.0,
           "prevAmount": 272000.0,
+          "storeStock": 35.0,
           "qtyChangeRate": 62.5,
           "amountChangeRate": 62.5,
-          "contributionRate": 5.77324973876698
+          "contributionRate": 5.77324973876698,
+          "stockWeeks": 2.6923076923076925
         },
         {
           "styleCode": "GF2LSH521",
@@ -3164,9 +3408,11 @@
           "weekAmount": 440000.0,
           "prevNet": 6.0,
           "prevAmount": 264000.0,
+          "storeStock": 36.0,
           "qtyChangeRate": 66.66666666666666,
           "amountChangeRate": 66.66666666666666,
-          "contributionRate": 5.747126436781609
+          "contributionRate": 5.747126436781609,
+          "stockWeeks": 3.6
         },
         {
           "styleCode": "GF2LKP526",
@@ -3175,9 +3421,11 @@
           "weekAmount": 250000.0,
           "prevNet": 4.0,
           "prevAmount": 200000.0,
+          "storeStock": 14.0,
           "qtyChangeRate": 25.0,
           "amountChangeRate": 25.0,
-          "contributionRate": 3.265412748171369
+          "contributionRate": 3.265412748171369,
+          "stockWeeks": 2.8
         },
         {
           "styleCode": "GF2LSK514",
@@ -3186,9 +3434,11 @@
           "weekAmount": 240000.0,
           "prevNet": 3.0,
           "prevAmount": 144000.0,
+          "storeStock": 5.0,
           "qtyChangeRate": 66.66666666666666,
           "amountChangeRate": 66.66666666666666,
-          "contributionRate": 3.1347962382445136
+          "contributionRate": 3.1347962382445136,
+          "stockWeeks": 1.0
         },
         {
           "styleCode": "WBE2L05533",
@@ -3197,9 +3447,11 @@
           "weekAmount": 228000.0,
           "prevNet": 18.0,
           "prevAmount": 684000.0,
+          "storeStock": 55.0,
           "qtyChangeRate": -66.66666666666666,
           "amountChangeRate": -66.66666666666666,
-          "contributionRate": 2.978056426332288
+          "contributionRate": 2.978056426332288,
+          "stockWeeks": 9.166666666666666
         },
         {
           "styleCode": "GF2LTS528",
@@ -3208,9 +3460,11 @@
           "weekAmount": 224000.0,
           "prevNet": 3.0,
           "prevAmount": 96000.0,
+          "storeStock": 29.0,
           "qtyChangeRate": 133.33333333333331,
           "amountChangeRate": 133.33333333333331,
-          "contributionRate": 2.9258098223615465
+          "contributionRate": 2.9258098223615465,
+          "stockWeeks": 4.142857142857143
         },
         {
           "styleCode": "WBD2L43545",
@@ -3219,9 +3473,11 @@
           "weekAmount": 210000.0,
           "prevNet": 8.0,
           "prevAmount": 280000.0,
+          "storeStock": 87.0,
           "qtyChangeRate": -25.0,
           "amountChangeRate": -25.0,
-          "contributionRate": 2.74294670846395
+          "contributionRate": 2.74294670846395,
+          "stockWeeks": 14.5
         },
         {
           "styleCode": "WBE2L05513",
@@ -3230,9 +3486,11 @@
           "weekAmount": 210000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 59.0,
           "qtyChangeRate": 20.0,
           "amountChangeRate": 20.0,
-          "contributionRate": 2.74294670846395
+          "contributionRate": 2.74294670846395,
+          "stockWeeks": 9.833333333333334
         },
         {
           "styleCode": "WBE2L04540",
@@ -3241,9 +3499,11 @@
           "weekAmount": 190000.0,
           "prevNet": 2.0,
           "prevAmount": 76000.0,
+          "storeStock": 27.0,
           "qtyChangeRate": 150.0,
           "amountChangeRate": 150.0,
-          "contributionRate": 2.4817136886102404
+          "contributionRate": 2.4817136886102404,
+          "stockWeeks": 5.4
         }
       ],
       "신세계 센텀시티점": [
@@ -3254,9 +3514,11 @@
           "weekAmount": 2380000.0,
           "prevNet": 21.0,
           "prevAmount": 735000.0,
+          "storeStock": 234.0,
           "qtyChangeRate": 223.80952380952382,
           "amountChangeRate": 223.80952380952382,
-          "contributionRate": 9.312881515104085
+          "contributionRate": 9.312881515104085,
+          "stockWeeks": 3.4411764705882355
         },
         {
           "styleCode": "WBE2L05513",
@@ -3265,9 +3527,11 @@
           "weekAmount": 1963000.0,
           "prevNet": 21.0,
           "prevAmount": 735000.0,
+          "storeStock": 82.0,
           "qtyChangeRate": 190.47619047619045,
           "amountChangeRate": 167.07482993197277,
-          "contributionRate": 7.681170762247613
+          "contributionRate": 7.681170762247613,
+          "stockWeeks": 1.3442622950819672
         },
         {
           "styleCode": "WBD3L04503",
@@ -3276,9 +3540,11 @@
           "weekAmount": 1540000.0,
           "prevNet": 31.0,
           "prevAmount": 1085000.0,
+          "storeStock": 242.0,
           "qtyChangeRate": 41.935483870967744,
           "amountChangeRate": 41.935483870967744,
-          "contributionRate": 6.025982156832055
+          "contributionRate": 6.025982156832055,
+          "stockWeeks": 5.5
         },
         {
           "styleCode": "WBE2L04534",
@@ -3287,9 +3553,11 @@
           "weekAmount": 1080000.0,
           "prevNet": 10.0,
           "prevAmount": 400000.0,
+          "storeStock": 149.0,
           "qtyChangeRate": 170.0,
           "amountChangeRate": 170.0,
-          "contributionRate": 4.226013460635468
+          "contributionRate": 4.226013460635468,
+          "stockWeeks": 5.518518518518518
         },
         {
           "styleCode": "WBD2L43545",
@@ -3298,9 +3566,11 @@
           "weekAmount": 1016000.0,
           "prevNet": 16.0,
           "prevAmount": 560000.0,
+          "storeStock": 107.0,
           "qtyChangeRate": 81.25,
           "amountChangeRate": 81.42857142857143,
-          "contributionRate": 3.9755830333385505
+          "contributionRate": 3.9755830333385505,
+          "stockWeeks": 3.689655172413793
         },
         {
           "styleCode": "WBE3L11508",
@@ -3309,9 +3579,11 @@
           "weekAmount": 828000.0,
           "prevNet": 7.0,
           "prevAmount": 322000.0,
+          "storeStock": 39.0,
           "qtyChangeRate": 157.14285714285714,
           "amountChangeRate": 157.14285714285714,
-          "contributionRate": 3.239943653153858
+          "contributionRate": 3.239943653153858,
+          "stockWeeks": 2.1666666666666665
         },
         {
           "styleCode": "GF2LKC539",
@@ -3320,9 +3592,11 @@
           "weekAmount": 770000.0,
           "prevNet": 15.0,
           "prevAmount": 545000.0,
+          "storeStock": 54.0,
           "qtyChangeRate": 46.666666666666664,
           "amountChangeRate": 41.284403669724774,
-          "contributionRate": 3.0129910784160274
+          "contributionRate": 3.0129910784160274,
+          "stockWeeks": 2.4545454545454546
         },
         {
           "styleCode": "GF1LTS505",
@@ -3331,9 +3605,11 @@
           "weekAmount": 729000.0,
           "prevNet": 31.0,
           "prevAmount": 837000.0,
+          "storeStock": 118.0,
           "qtyChangeRate": -12.903225806451612,
           "amountChangeRate": -12.903225806451612,
-          "contributionRate": 2.8525590859289403
+          "contributionRate": 2.8525590859289403,
+          "stockWeeks": 4.37037037037037
         },
         {
           "styleCode": "GF2LBL516",
@@ -3342,20 +3618,24 @@
           "weekAmount": 720000.0,
           "prevNet": 8.0,
           "prevAmount": 384000.0,
+          "storeStock": 17.0,
           "qtyChangeRate": 87.5,
           "amountChangeRate": 87.5,
-          "contributionRate": 2.8173423070903114
+          "contributionRate": 2.8173423070903114,
+          "stockWeeks": 1.1333333333333333
         },
         {
           "styleCode": "GF2LSH524",
           "productName": "링클 시어 백슬릿 셔츠",
           "weekNet": 13.0,
           "weekAmount": 702000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 2.7469087494130537
+          "storeStock": 8.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 2.7469087494130537,
+          "stockWeeks": 0.6153846153846154
         }
       ],
       "신세계 의정부점": [
@@ -3366,9 +3646,11 @@
           "weekAmount": 875000.0,
           "prevNet": 23.0,
           "prevAmount": 805000.0,
+          "storeStock": 72.0,
           "qtyChangeRate": 8.695652173913043,
           "amountChangeRate": 8.695652173913043,
-          "contributionRate": 9.429895462873155
+          "contributionRate": 9.429895462873155,
+          "stockWeeks": 2.88
         },
         {
           "styleCode": "GF2LKC539",
@@ -3377,9 +3659,11 @@
           "weekAmount": 560000.0,
           "prevNet": 15.0,
           "prevAmount": 545000.0,
+          "storeStock": 58.0,
           "qtyChangeRate": 6.666666666666667,
           "amountChangeRate": 2.7522935779816518,
-          "contributionRate": 6.035133096238819
+          "contributionRate": 6.035133096238819,
+          "stockWeeks": 3.625
         },
         {
           "styleCode": "WBD2L43545",
@@ -3388,9 +3672,11 @@
           "weekAmount": 525000.0,
           "prevNet": 26.0,
           "prevAmount": 910000.0,
+          "storeStock": 117.0,
           "qtyChangeRate": -42.30769230769231,
           "amountChangeRate": -42.30769230769231,
-          "contributionRate": 5.657937277723893
+          "contributionRate": 5.657937277723893,
+          "stockWeeks": 7.8
         },
         {
           "styleCode": "GF2LKP544",
@@ -3399,20 +3685,24 @@
           "weekAmount": 450000.0,
           "prevNet": 3.0,
           "prevAmount": 150000.0,
+          "storeStock": 31.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 200.0,
-          "contributionRate": 4.849660523763336
+          "contributionRate": 4.849660523763336,
+          "stockWeeks": 3.4444444444444446
         },
         {
           "styleCode": "GF2LSH522",
           "productName": "레이스 케미솔 탑",
           "weekNet": 7.0,
           "weekAmount": 336000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.6210798577432914
+          "storeStock": 3.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.6210798577432914,
+          "stockWeeks": 0.42857142857142855
         },
         {
           "styleCode": "GF2LKP525",
@@ -3421,9 +3711,11 @@
           "weekAmount": 301000.0,
           "prevNet": 6.0,
           "prevAmount": 258000.0,
+          "storeStock": 64.0,
           "qtyChangeRate": 16.666666666666664,
           "amountChangeRate": 16.666666666666664,
-          "contributionRate": 3.2438840392283654
+          "contributionRate": 3.2438840392283654,
+          "stockWeeks": 9.142857142857142
         },
         {
           "styleCode": "WBE2L04534",
@@ -3432,9 +3724,11 @@
           "weekAmount": 280000.0,
           "prevNet": 5.0,
           "prevAmount": 200000.0,
+          "storeStock": 64.0,
           "qtyChangeRate": 40.0,
           "amountChangeRate": 40.0,
-          "contributionRate": 3.0175665481194094
+          "contributionRate": 3.0175665481194094,
+          "stockWeeks": 9.142857142857142
         },
         {
           "styleCode": "GF2LKC541",
@@ -3443,9 +3737,11 @@
           "weekAmount": 264000.0,
           "prevNet": 5.0,
           "prevAmount": 165000.0,
+          "storeStock": 125.0,
           "qtyChangeRate": 60.0,
           "amountChangeRate": 60.0,
-          "contributionRate": 2.8451341739411573
+          "contributionRate": 2.8451341739411573,
+          "stockWeeks": 15.625
         },
         {
           "styleCode": "WBE2L03531",
@@ -3454,9 +3750,11 @@
           "weekAmount": 252000.0,
           "prevNet": 13.0,
           "prevAmount": 546000.0,
+          "storeStock": 83.0,
           "qtyChangeRate": -53.84615384615385,
           "amountChangeRate": -53.84615384615385,
-          "contributionRate": 2.7158098933074686
+          "contributionRate": 2.7158098933074686,
+          "stockWeeks": 13.833333333333334
         },
         {
           "styleCode": "WBE2L05512",
@@ -3465,9 +3763,11 @@
           "weekAmount": 248000.0,
           "prevNet": 5.0,
           "prevAmount": 155000.0,
+          "storeStock": 97.0,
           "qtyChangeRate": 60.0,
           "amountChangeRate": 60.0,
-          "contributionRate": 2.6727017997629057
+          "contributionRate": 2.6727017997629057,
+          "stockWeeks": 12.125
         }
       ],
       "아이파크몰 용산점": [
@@ -3478,9 +3778,11 @@
           "weekAmount": 1190000.0,
           "prevNet": 39.0,
           "prevAmount": 1365000.0,
+          "storeStock": 266.0,
           "qtyChangeRate": -12.82051282051282,
           "amountChangeRate": -12.82051282051282,
-          "contributionRate": 5.511555740817934
+          "contributionRate": 5.511555740817934,
+          "stockWeeks": 7.823529411764706
         },
         {
           "styleCode": "WBE2L03531",
@@ -3489,9 +3791,11 @@
           "weekAmount": 1176000.0,
           "prevNet": 23.0,
           "prevAmount": 966000.0,
+          "storeStock": 86.0,
           "qtyChangeRate": 21.73913043478261,
           "amountChangeRate": 21.73913043478261,
-          "contributionRate": 5.446713908573017
+          "contributionRate": 5.446713908573017,
+          "stockWeeks": 3.0714285714285716
         },
         {
           "styleCode": "WBE2L04540",
@@ -3500,9 +3804,11 @@
           "weekAmount": 1102000.0,
           "prevNet": 27.0,
           "prevAmount": 1026000.0,
+          "storeStock": 85.0,
           "qtyChangeRate": 7.4074074074074066,
           "amountChangeRate": 7.4074074074074066,
-          "contributionRate": 5.10397850956417
+          "contributionRate": 5.10397850956417,
+          "stockWeeks": 2.9310344827586206
         },
         {
           "styleCode": "WBE2L05533",
@@ -3511,9 +3817,11 @@
           "weekAmount": 798000.0,
           "prevNet": 25.0,
           "prevAmount": 950000.0,
+          "storeStock": 181.0,
           "qtyChangeRate": -16.0,
           "amountChangeRate": -16.0,
-          "contributionRate": 3.695984437960261
+          "contributionRate": 3.695984437960261,
+          "stockWeeks": 8.619047619047619
         },
         {
           "styleCode": "WBE2L05513",
@@ -3522,9 +3830,11 @@
           "weekAmount": 764000.0,
           "prevNet": 35.0,
           "prevAmount": 1105000.0,
+          "storeStock": 159.0,
           "qtyChangeRate": -31.428571428571427,
           "amountChangeRate": -30.85972850678733,
-          "contributionRate": 3.5385114167940346
+          "contributionRate": 3.5385114167940346,
+          "stockWeeks": 6.625
         },
         {
           "styleCode": "GF2LSH521",
@@ -3533,9 +3843,11 @@
           "weekAmount": 704000.0,
           "prevNet": 7.0,
           "prevAmount": 308000.0,
+          "storeStock": 82.0,
           "qtyChangeRate": 128.57142857142858,
           "amountChangeRate": 128.57142857142858,
-          "contributionRate": 3.260617850030105
+          "contributionRate": 3.260617850030105,
+          "stockWeeks": 5.125
         },
         {
           "styleCode": "WBD2L43545",
@@ -3544,9 +3856,11 @@
           "weekAmount": 665000.0,
           "prevNet": 12.0,
           "prevAmount": 420000.0,
+          "storeStock": 110.0,
           "qtyChangeRate": 58.333333333333336,
           "amountChangeRate": 58.333333333333336,
-          "contributionRate": 3.079987031633551
+          "contributionRate": 3.079987031633551,
+          "stockWeeks": 5.7894736842105265
         },
         {
           "styleCode": "WBD3L04503",
@@ -3555,9 +3869,11 @@
           "weekAmount": 665000.0,
           "prevNet": 39.0,
           "prevAmount": 1365000.0,
+          "storeStock": 242.0,
           "qtyChangeRate": -51.28205128205128,
           "amountChangeRate": -51.28205128205128,
-          "contributionRate": 3.079987031633551
+          "contributionRate": 3.079987031633551,
+          "stockWeeks": 12.736842105263158
         },
         {
           "styleCode": "WBE2L04534",
@@ -3566,9 +3882,11 @@
           "weekAmount": 600000.0,
           "prevNet": 25.0,
           "prevAmount": 1000000.0,
+          "storeStock": 161.0,
           "qtyChangeRate": -40.0,
           "amountChangeRate": -40.0,
-          "contributionRate": 2.7789356676392942
+          "contributionRate": 2.7789356676392942,
+          "stockWeeks": 10.733333333333333
         },
         {
           "styleCode": "GF2LKC539",
@@ -3577,9 +3895,11 @@
           "weekAmount": 420000.0,
           "prevNet": 11.0,
           "prevAmount": 400000.0,
+          "storeStock": 88.0,
           "qtyChangeRate": 9.090909090909092,
           "amountChangeRate": 5.0,
-          "contributionRate": 1.945254967347506
+          "contributionRate": 1.945254967347506,
+          "stockWeeks": 7.333333333333333
         }
       ],
       "타임스퀘어 영등포점": [
@@ -3590,9 +3910,11 @@
           "weekAmount": 1534000.0,
           "prevNet": 14.0,
           "prevAmount": 826000.0,
+          "storeStock": 18.0,
           "qtyChangeRate": 85.71428571428571,
           "amountChangeRate": 85.71428571428571,
-          "contributionRate": 8.05249343832021
+          "contributionRate": 8.05249343832021,
+          "stockWeeks": 0.6923076923076923
         },
         {
           "styleCode": "WBD2L43545",
@@ -3601,9 +3923,11 @@
           "weekAmount": 980000.0,
           "prevNet": 30.0,
           "prevAmount": 1050000.0,
+          "storeStock": 105.0,
           "qtyChangeRate": -6.666666666666667,
           "amountChangeRate": -6.666666666666667,
-          "contributionRate": 5.1443569553805775
+          "contributionRate": 5.1443569553805775,
+          "stockWeeks": 3.75
         },
         {
           "styleCode": "GF2LSH521",
@@ -3612,9 +3936,11 @@
           "weekAmount": 968000.0,
           "prevNet": 18.0,
           "prevAmount": 832000.0,
+          "storeStock": 68.0,
           "qtyChangeRate": 22.22222222222222,
           "amountChangeRate": 16.346153846153847,
-          "contributionRate": 5.081364829396326
+          "contributionRate": 5.081364829396326,
+          "stockWeeks": 3.090909090909091
         },
         {
           "styleCode": "GF2LKC539",
@@ -3623,9 +3949,11 @@
           "weekAmount": 910000.0,
           "prevNet": 33.0,
           "prevAmount": 1195000.0,
+          "storeStock": 108.0,
           "qtyChangeRate": -21.21212121212121,
           "amountChangeRate": -23.84937238493724,
-          "contributionRate": 4.776902887139108
+          "contributionRate": 4.776902887139108,
+          "stockWeeks": 4.153846153846154
         },
         {
           "styleCode": "GF2LBL516",
@@ -3634,20 +3962,24 @@
           "weekAmount": 720000.0,
           "prevNet": 4.0,
           "prevAmount": 192000.0,
+          "storeStock": 8.0,
           "qtyChangeRate": 275.0,
           "amountChangeRate": 275.0,
-          "contributionRate": 3.779527559055118
+          "contributionRate": 3.779527559055118,
+          "stockWeeks": 0.5333333333333333
         },
         {
           "styleCode": "GF2LSK510",
           "productName": "체크 시어 롱 스커트",
           "weekNet": 12.0,
           "weekAmount": 576000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.0236220472440944
+          "storeStock": 41.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.0236220472440944,
+          "stockWeeks": 3.4166666666666665
         },
         {
           "styleCode": "GF2LTS522",
@@ -3656,9 +3988,11 @@
           "weekAmount": 567000.0,
           "prevNet": 26.0,
           "prevAmount": 702000.0,
+          "storeStock": 51.0,
           "qtyChangeRate": -19.230769230769234,
           "amountChangeRate": -19.230769230769234,
-          "contributionRate": 2.9763779527559056
+          "contributionRate": 2.9763779527559056,
+          "stockWeeks": 2.4285714285714284
         },
         {
           "styleCode": "WBE2L05513",
@@ -3667,9 +4001,11 @@
           "weekAmount": 560000.0,
           "prevNet": 28.0,
           "prevAmount": 988000.0,
+          "storeStock": 73.0,
           "qtyChangeRate": -42.857142857142854,
           "amountChangeRate": -43.31983805668016,
-          "contributionRate": 2.9396325459317585
+          "contributionRate": 2.9396325459317585,
+          "stockWeeks": 4.5625
         },
         {
           "styleCode": "GF2LKP525",
@@ -3678,9 +4014,11 @@
           "weekAmount": 516000.0,
           "prevNet": 19.0,
           "prevAmount": 817000.0,
+          "storeStock": 77.0,
           "qtyChangeRate": -36.84210526315789,
           "amountChangeRate": -36.84210526315789,
-          "contributionRate": 2.7086614173228347
+          "contributionRate": 2.7086614173228347,
+          "stockWeeks": 6.416666666666667
         },
         {
           "styleCode": "GF2LKP530",
@@ -3689,9 +4027,11 @@
           "weekAmount": 432000.0,
           "prevNet": 12.0,
           "prevAmount": 648000.0,
+          "storeStock": 12.0,
           "qtyChangeRate": -33.33333333333333,
           "amountChangeRate": -33.33333333333333,
-          "contributionRate": 2.267716535433071
+          "contributionRate": 2.267716535433071,
+          "stockWeeks": 1.5
         }
       ],
       "포시즌 아울렛 신사점": [
@@ -3700,11 +4040,13 @@
           "productName": "뉴클래식 울 블렌드 롱 코트",
           "weekNet": 1.0,
           "weekAmount": 142000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 9.957924263674615
+          "storeStock": 6.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 9.957924263674615,
+          "stockWeeks": 6.0
         },
         {
           "styleCode": "WBD3L03505",
@@ -3713,9 +4055,11 @@
           "weekAmount": 122000.0,
           "prevNet": 1.0,
           "prevAmount": 42000.0,
+          "storeStock": 34.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 190.47619047619045,
-          "contributionRate": 8.55539971949509
+          "contributionRate": 8.55539971949509,
+          "stockWeeks": 11.333333333333334
         },
         {
           "styleCode": "WBE2L05541",
@@ -3724,31 +4068,37 @@
           "weekAmount": 104000.0,
           "prevNet": 1.0,
           "prevAmount": 26000.0,
+          "storeStock": 30.0,
           "qtyChangeRate": 300.0,
           "amountChangeRate": 300.0,
-          "contributionRate": 7.293127629733521
+          "contributionRate": 7.293127629733521,
+          "stockWeeks": 7.5
         },
         {
           "styleCode": "WBE2L01532",
           "productName": "아세테이트 브이넥 셔링 반팔티",
           "weekNet": 4.0,
           "weekAmount": 92000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 6.451612903225806
+          "storeStock": 16.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 6.451612903225806,
+          "stockWeeks": 4.0
         },
         {
           "styleCode": "WBE2L01531",
           "productName": "NA 아세테이트 크루넥 셔링 반팔티",
           "weekNet": 4.0,
           "weekAmount": 80000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 5.610098176718092
+          "storeStock": 26.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 5.610098176718092,
+          "stockWeeks": 6.5
         },
         {
           "styleCode": "SBE2U01007",
@@ -3757,9 +4107,11 @@
           "weekAmount": 78000.0,
           "prevNet": 1.0,
           "prevAmount": 13000.0,
+          "storeStock": 17.0,
           "qtyChangeRate": 500.0,
           "amountChangeRate": 500.0,
-          "contributionRate": 5.46984572230014
+          "contributionRate": 5.46984572230014,
+          "stockWeeks": 2.8333333333333335
         },
         {
           "styleCode": "WBE2L01536",
@@ -3768,9 +4120,11 @@
           "weekAmount": 72000.0,
           "prevNet": 4.0,
           "prevAmount": 72000.0,
+          "storeStock": 15.0,
           "qtyChangeRate": 0.0,
           "amountChangeRate": 0.0,
-          "contributionRate": 5.049088359046284
+          "contributionRate": 5.049088359046284,
+          "stockWeeks": 3.75
         },
         {
           "styleCode": "WBD2L04527",
@@ -3779,31 +4133,37 @@
           "weekAmount": 62000.0,
           "prevNet": 1.0,
           "prevAmount": 29000.0,
+          "storeStock": 13.0,
           "qtyChangeRate": 100.0,
           "amountChangeRate": 113.79310344827587,
-          "contributionRate": 4.3478260869565215
+          "contributionRate": 4.3478260869565215,
+          "stockWeeks": 6.5
         },
         {
           "styleCode": "WBD3L13502",
           "productName": "뉴클래식 플리츠 롱스커트",
           "weekNet": 1.0,
           "weekAmount": 59000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 4.137447405329593
+          "storeStock": 13.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 4.137447405329593,
+          "stockWeeks": 13.0
         },
         {
           "styleCode": "WBE2L04547",
           "productName": "텐셀 이지 하프 가디건",
           "weekNet": 2.0,
           "weekAmount": 50000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.506311360448808
+          "storeStock": 11.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.506311360448808,
+          "stockWeeks": 5.5
         }
       ],
       "한남 플래그십": [
@@ -3814,20 +4174,24 @@
           "weekAmount": 840000.0,
           "prevNet": 11.0,
           "prevAmount": 462000.0,
+          "storeStock": 38.0,
           "qtyChangeRate": 81.81818181818183,
           "amountChangeRate": 81.81818181818183,
-          "contributionRate": 8.1799591002045
+          "contributionRate": 8.1799591002045,
+          "stockWeeks": 1.9
         },
         {
           "styleCode": "GF2LKP531",
           "productName": "셔츠 카라 피케 하프 니트",
           "weekNet": 8.0,
           "weekAmount": 472000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 4.596357970591099
+          "storeStock": 8.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 4.596357970591099,
+          "stockWeeks": 1.0
         },
         {
           "styleCode": "GF2LKC539",
@@ -3836,20 +4200,24 @@
           "weekAmount": 385000.0,
           "prevNet": 9.0,
           "prevAmount": 330000.0,
+          "storeStock": 69.0,
           "qtyChangeRate": 22.22222222222222,
           "amountChangeRate": 16.666666666666664,
-          "contributionRate": 3.7491479209270624
+          "contributionRate": 3.7491479209270624,
+          "stockWeeks": 6.2727272727272725
         },
         {
           "styleCode": "GF2LSH522",
           "productName": "레이스 케미솔 탑",
           "weekNet": 8.0,
           "weekAmount": 384000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.7394098743791995
+          "storeStock": 1.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.7394098743791995,
+          "stockWeeks": 0.125
         },
         {
           "styleCode": "GF2LOP512",
@@ -3858,31 +4226,37 @@
           "weekAmount": 342000.0,
           "prevNet": 4.0,
           "prevAmount": 242000.0,
+          "storeStock": 32.0,
           "qtyChangeRate": 50.0,
           "amountChangeRate": 41.32231404958678,
-          "contributionRate": 3.3304119193689745
+          "contributionRate": 3.3304119193689745,
+          "stockWeeks": 5.333333333333333
         },
         {
           "styleCode": "GF1LPT509",
           "productName": "워싱 커브드 데님 팬츠",
           "weekNet": 7.0,
           "weekAmount": 336000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.2719836400818
+          "storeStock": 22.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.2719836400818,
+          "stockWeeks": 3.142857142857143
         },
         {
           "styleCode": "GF2LKP530",
           "productName": "스트라이프 루즈 카라 하프 니트",
           "weekNet": 6.0,
           "weekAmount": 324000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 3.1551270815074495
+          "storeStock": 23.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 3.1551270815074495,
+          "stockWeeks": 3.8333333333333335
         },
         {
           "styleCode": "GF2LTS528",
@@ -3891,9 +4265,11 @@
           "weekAmount": 320000.0,
           "prevNet": 4.0,
           "prevAmount": 128000.0,
+          "storeStock": 16.0,
           "qtyChangeRate": 150.0,
           "amountChangeRate": 150.0,
-          "contributionRate": 3.1161748953159996
+          "contributionRate": 3.1161748953159996,
+          "stockWeeks": 1.6
         },
         {
           "styleCode": "WBE2L04540",
@@ -3902,9 +4278,11 @@
           "weekAmount": 304000.0,
           "prevNet": 9.0,
           "prevAmount": 342000.0,
+          "storeStock": 28.0,
           "qtyChangeRate": -11.11111111111111,
           "amountChangeRate": -11.11111111111111,
-          "contributionRate": 2.9603661505502
+          "contributionRate": 2.9603661505502,
+          "stockWeeks": 3.5
         },
         {
           "styleCode": "GF2LKP537",
@@ -3913,9 +4291,11 @@
           "weekAmount": 280000.0,
           "prevNet": 4.0,
           "prevAmount": 116000.0,
+          "storeStock": 23.0,
           "qtyChangeRate": 150.0,
           "amountChangeRate": 141.3793103448276,
-          "contributionRate": 2.7266530334014996
+          "contributionRate": 2.7266530334014996,
+          "stockWeeks": 2.3
         }
       ],
       "현대백화점 신촌점": [
@@ -3926,9 +4306,11 @@
           "weekAmount": 1059000.0,
           "prevNet": 8.0,
           "prevAmount": 280000.0,
+          "storeStock": 299.0,
           "qtyChangeRate": 312.5,
           "amountChangeRate": 278.2142857142857,
-          "contributionRate": 10.448939319190922
+          "contributionRate": 10.448939319190922,
+          "stockWeeks": 9.06060606060606
         },
         {
           "styleCode": "GF2LKC539",
@@ -3937,9 +4319,11 @@
           "weekAmount": 770000.0,
           "prevNet": 9.0,
           "prevAmount": 345000.0,
+          "storeStock": 238.0,
           "qtyChangeRate": 144.44444444444443,
           "amountChangeRate": 123.18840579710144,
-          "contributionRate": 7.597434632461766
+          "contributionRate": 7.597434632461766,
+          "stockWeeks": 10.818181818181818
         },
         {
           "styleCode": "WBE2L05513",
@@ -3948,9 +4332,11 @@
           "weekAmount": 570000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 205.0,
           "qtyChangeRate": 260.0,
           "amountChangeRate": 225.71428571428572,
-          "contributionRate": 5.624074987666503
+          "contributionRate": 5.624074987666503,
+          "stockWeeks": 11.38888888888889
         },
         {
           "styleCode": "GF2LKP537",
@@ -3959,9 +4345,11 @@
           "weekAmount": 364000.0,
           "prevNet": 7.0,
           "prevAmount": 204000.0,
+          "storeStock": 177.0,
           "qtyChangeRate": 85.71428571428571,
           "amountChangeRate": 78.43137254901961,
-          "contributionRate": 3.5915145535273805
+          "contributionRate": 3.5915145535273805,
+          "stockWeeks": 13.615384615384615
         },
         {
           "styleCode": "GF2LTS522",
@@ -3970,9 +4358,11 @@
           "weekAmount": 351000.0,
           "prevNet": 3.0,
           "prevAmount": 81000.0,
+          "storeStock": 139.0,
           "qtyChangeRate": 333.33333333333337,
           "amountChangeRate": 333.33333333333337,
-          "contributionRate": 3.4632461766156886
+          "contributionRate": 3.4632461766156886,
+          "stockWeeks": 10.692307692307692
         },
         {
           "styleCode": "WBE2L03531",
@@ -3981,9 +4371,11 @@
           "weekAmount": 336000.0,
           "prevNet": 8.0,
           "prevAmount": 336000.0,
+          "storeStock": 34.0,
           "qtyChangeRate": 0.0,
           "amountChangeRate": 0.0,
-          "contributionRate": 3.315244203256043
+          "contributionRate": 3.315244203256043,
+          "stockWeeks": 4.25
         },
         {
           "styleCode": "WBE2L04534",
@@ -3992,9 +4384,11 @@
           "weekAmount": 320000.0,
           "prevNet": 5.0,
           "prevAmount": 200000.0,
+          "storeStock": 154.0,
           "qtyChangeRate": 60.0,
           "amountChangeRate": 60.0,
-          "contributionRate": 3.1573754316724227
+          "contributionRate": 3.1573754316724227,
+          "stockWeeks": 19.25
         },
         {
           "styleCode": "GF1LKC523",
@@ -4003,9 +4397,11 @@
           "weekAmount": 276000.0,
           "prevNet": 2.0,
           "prevAmount": 92000.0,
+          "storeStock": 26.0,
           "qtyChangeRate": 200.0,
           "amountChangeRate": 200.0,
-          "contributionRate": 2.723236309817464
+          "contributionRate": 2.723236309817464,
+          "stockWeeks": 4.333333333333333
         },
         {
           "styleCode": "WBE2L05533",
@@ -4014,9 +4410,11 @@
           "weekAmount": 266000.0,
           "prevNet": 3.0,
           "prevAmount": 114000.0,
+          "storeStock": 230.0,
           "qtyChangeRate": 133.33333333333331,
           "amountChangeRate": 133.33333333333331,
-          "contributionRate": 2.624568327577701
+          "contributionRate": 2.624568327577701,
+          "stockWeeks": 32.857142857142854
         },
         {
           "styleCode": "GF1UTS007",
@@ -4025,9 +4423,11 @@
           "weekAmount": 240000.0,
           "prevNet": 1.0,
           "prevAmount": 30000.0,
+          "storeStock": 17.0,
           "qtyChangeRate": 700.0,
           "amountChangeRate": 700.0,
-          "contributionRate": 2.3680315737543167
+          "contributionRate": 2.3680315737543167,
+          "stockWeeks": 2.125
         }
       ],
       "현대아울렛 남양주점": [
@@ -4038,9 +4438,11 @@
           "weekAmount": 880000.0,
           "prevNet": 4.0,
           "prevAmount": 160000.0,
+          "storeStock": 100.0,
           "qtyChangeRate": 450.0,
           "amountChangeRate": 450.0,
-          "contributionRate": 4.584288393415295
+          "contributionRate": 4.584288393415295,
+          "stockWeeks": 4.545454545454546
         },
         {
           "styleCode": "WBE2L03531",
@@ -4049,9 +4451,11 @@
           "weekAmount": 630000.0,
           "prevNet": 21.0,
           "prevAmount": 882000.0,
+          "storeStock": 191.0,
           "qtyChangeRate": -28.57142857142857,
           "amountChangeRate": -28.57142857142857,
-          "contributionRate": 3.2819337361950405
+          "contributionRate": 3.2819337361950405,
+          "stockWeeks": 12.733333333333333
         },
         {
           "styleCode": "GF2LTS522",
@@ -4060,9 +4464,11 @@
           "weekAmount": 540000.0,
           "prevNet": 14.0,
           "prevAmount": 378000.0,
+          "storeStock": 137.0,
           "qtyChangeRate": 42.857142857142854,
           "amountChangeRate": 42.857142857142854,
-          "contributionRate": 2.8130860595957494
+          "contributionRate": 2.8130860595957494,
+          "stockWeeks": 6.85
         },
         {
           "styleCode": "GF2LBL516",
@@ -4071,9 +4477,11 @@
           "weekAmount": 528000.0,
           "prevNet": 3.0,
           "prevAmount": 144000.0,
+          "storeStock": 28.0,
           "qtyChangeRate": 266.66666666666663,
           "amountChangeRate": 266.66666666666663,
-          "contributionRate": 2.7505730360491767
+          "contributionRate": 2.7505730360491767,
+          "stockWeeks": 2.5454545454545454
         },
         {
           "styleCode": "GF2LSH521",
@@ -4082,9 +4490,11 @@
           "weekAmount": 528000.0,
           "prevNet": 7.0,
           "prevAmount": 328000.0,
+          "storeStock": 77.0,
           "qtyChangeRate": 71.42857142857143,
           "amountChangeRate": 60.97560975609756,
-          "contributionRate": 2.7505730360491767
+          "contributionRate": 2.7505730360491767,
+          "stockWeeks": 6.416666666666667
         },
         {
           "styleCode": "WBE2L05513",
@@ -4093,9 +4503,11 @@
           "weekAmount": 525000.0,
           "prevNet": 22.0,
           "prevAmount": 770000.0,
+          "storeStock": 109.0,
           "qtyChangeRate": -31.818181818181817,
           "amountChangeRate": -31.818181818181817,
-          "contributionRate": 2.7349447801625337
+          "contributionRate": 2.7349447801625337,
+          "stockWeeks": 7.266666666666667
         },
         {
           "styleCode": "GF2LKP531",
@@ -4104,9 +4516,11 @@
           "weekAmount": 472000.0,
           "prevNet": 11.0,
           "prevAmount": 649000.0,
+          "storeStock": 32.0,
           "qtyChangeRate": -27.27272727272727,
           "amountChangeRate": -27.27272727272727,
-          "contributionRate": 2.45884559283184
+          "contributionRate": 2.45884559283184,
+          "stockWeeks": 4.0
         },
         {
           "styleCode": "WBE1L12504",
@@ -4115,9 +4529,11 @@
           "weekAmount": 456000.0,
           "prevNet": 5.0,
           "prevAmount": 190000.0,
+          "storeStock": 100.0,
           "qtyChangeRate": 140.0,
           "amountChangeRate": 140.0,
-          "contributionRate": 2.3754948947697434
+          "contributionRate": 2.3754948947697434,
+          "stockWeeks": 8.333333333333334
         },
         {
           "styleCode": "WBD2L43545",
@@ -4126,9 +4542,11 @@
           "weekAmount": 455000.0,
           "prevNet": 19.0,
           "prevAmount": 665000.0,
+          "storeStock": 134.0,
           "qtyChangeRate": -31.57894736842105,
           "amountChangeRate": -31.57894736842105,
-          "contributionRate": 2.3702854761408627
+          "contributionRate": 2.3702854761408627,
+          "stockWeeks": 10.307692307692308
         },
         {
           "styleCode": "GF2LTS523",
@@ -4137,9 +4555,11 @@
           "weekAmount": 442000.0,
           "prevNet": 6.0,
           "prevAmount": 204000.0,
+          "storeStock": 11.0,
           "qtyChangeRate": 116.66666666666667,
           "amountChangeRate": 116.66666666666667,
-          "contributionRate": 2.3025630339654093
+          "contributionRate": 2.3025630339654093,
+          "stockWeeks": 0.8461538461538461
         }
       ],
       "현대아울렛 송도점": [
@@ -4150,9 +4570,11 @@
           "weekAmount": 2352000.0,
           "prevNet": 44.0,
           "prevAmount": 1785000.0,
+          "storeStock": 131.0,
           "qtyChangeRate": 31.818181818181817,
           "amountChangeRate": 31.76470588235294,
-          "contributionRate": 7.995866082841524
+          "contributionRate": 7.995866082841524,
+          "stockWeeks": 2.2586206896551726
         },
         {
           "styleCode": "WBE2L05513",
@@ -4161,20 +4583,24 @@
           "weekAmount": 1668600.0,
           "prevNet": 19.0,
           "prevAmount": 632000.0,
+          "storeStock": 117.0,
           "qtyChangeRate": 163.1578947368421,
           "amountChangeRate": 164.01898734177217,
-          "contributionRate": 5.672577442954663
+          "contributionRate": 5.672577442954663,
+          "stockWeeks": 2.34
         },
         {
           "styleCode": "GF2LSH524",
           "productName": "링클 시어 백슬릿 셔츠",
           "weekNet": 26.0,
           "weekAmount": 1341900.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 4.561927166906905
+          "storeStock": 1.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 4.561927166906905,
+          "stockWeeks": 0.038461538461538464
         },
         {
           "styleCode": "GF2LKP531",
@@ -4183,9 +4609,11 @@
           "weekAmount": 1147800.0,
           "prevNet": 15.0,
           "prevAmount": 849800.0,
+          "storeStock": 19.0,
           "qtyChangeRate": 33.33333333333333,
           "amountChangeRate": 35.0670746057896,
-          "contributionRate": 3.902064238896897
+          "contributionRate": 3.902064238896897,
+          "stockWeeks": 0.95
         },
         {
           "styleCode": "WBE2L04540",
@@ -4194,9 +4622,11 @@
           "weekAmount": 953800.0,
           "prevNet": 13.0,
           "prevAmount": 476900.0,
+          "storeStock": 51.0,
           "qtyChangeRate": 100.0,
           "amountChangeRate": 100.0,
-          "contributionRate": 3.242541271179526
+          "contributionRate": 3.242541271179526,
+          "stockWeeks": 1.9615384615384615
         },
         {
           "styleCode": "GF2LSH521",
@@ -4205,9 +4635,11 @@
           "weekAmount": 877800.0,
           "prevNet": 18.0,
           "prevAmount": 789000.0,
+          "storeStock": 80.0,
           "qtyChangeRate": 16.666666666666664,
           "amountChangeRate": 11.254752851711027,
-          "contributionRate": 2.984171448774783
+          "contributionRate": 2.984171448774783,
+          "stockWeeks": 3.8095238095238093
         },
         {
           "styleCode": "GF2LBL516",
@@ -4216,9 +4648,11 @@
           "weekAmount": 691200.0,
           "prevNet": 26.0,
           "prevAmount": 1187700.0,
+          "storeStock": 47.0,
           "qtyChangeRate": -42.30769230769231,
           "amountChangeRate": -41.80348572871937,
-          "contributionRate": 2.349805542712611
+          "contributionRate": 2.349805542712611,
+          "stockWeeks": 3.1333333333333333
         },
         {
           "styleCode": "GF1LPT501",
@@ -4227,9 +4661,11 @@
           "weekAmount": 679400.0,
           "prevNet": 1.0,
           "prevAmount": 47000.0,
+          "storeStock": 102.0,
           "qtyChangeRate": 1400.0,
           "amountChangeRate": 1345.5319148936169,
-          "contributionRate": 2.3096902281813483
+          "contributionRate": 2.3096902281813483,
+          "stockWeeks": 6.8
         },
         {
           "styleCode": "WBE3L15507",
@@ -4238,9 +4674,11 @@
           "weekAmount": 627000.0,
           "prevNet": 1.0,
           "prevAmount": 68400.0,
+          "storeStock": 34.0,
           "qtyChangeRate": 800.0,
           "amountChangeRate": 816.6666666666666,
-          "contributionRate": 2.1315510348391307
+          "contributionRate": 2.1315510348391307,
+          "stockWeeks": 3.7777777777777777
         },
         {
           "styleCode": "WBE2L04534",
@@ -4249,9 +4687,11 @@
           "weekAmount": 568000.0,
           "prevNet": 8.0,
           "prevAmount": 304000.0,
+          "storeStock": 82.0,
           "qtyChangeRate": 87.5,
           "amountChangeRate": 86.8421052631579,
-          "contributionRate": 1.9309744621828169
+          "contributionRate": 1.9309744621828169,
+          "stockWeeks": 5.466666666666667
         }
       ],
       "현대커넥트 청주점": [
@@ -4262,9 +4702,11 @@
           "weekAmount": 608000.0,
           "prevNet": 10.0,
           "prevAmount": 380000.0,
+          "storeStock": 64.0,
           "qtyChangeRate": 60.0,
           "amountChangeRate": 60.0,
-          "contributionRate": 2.9485935984481086
+          "contributionRate": 2.9485935984481086,
+          "stockWeeks": 4.0
         },
         {
           "styleCode": "WBD2L43545",
@@ -4273,20 +4715,24 @@
           "weekAmount": 595000.0,
           "prevNet": 15.0,
           "prevAmount": 525000.0,
+          "storeStock": 137.0,
           "qtyChangeRate": 13.333333333333334,
           "amountChangeRate": 13.333333333333334,
-          "contributionRate": 2.885548011639185
+          "contributionRate": 2.885548011639185,
+          "stockWeeks": 8.058823529411764
         },
         {
           "styleCode": "GF2LSK510",
           "productName": "체크 시어 롱 스커트",
           "weekNet": 12.0,
           "weekAmount": 576000.0,
-          "prevNet": 0,
+          "prevNet": 0.0,
           "prevAmount": 0.0,
-          "qtyChangeRate": 100,
-          "amountChangeRate": 100,
-          "contributionRate": 2.7934044616876816
+          "storeStock": 42.0,
+          "qtyChangeRate": 100.0,
+          "amountChangeRate": 100.0,
+          "contributionRate": 2.7934044616876816,
+          "stockWeeks": 3.5
         },
         {
           "styleCode": "GF2LTS523",
@@ -4295,9 +4741,11 @@
           "weekAmount": 544000.0,
           "prevNet": 10.0,
           "prevAmount": 340000.0,
+          "storeStock": 9.0,
           "qtyChangeRate": 60.0,
           "amountChangeRate": 60.0,
-          "contributionRate": 2.638215324927255
+          "contributionRate": 2.638215324927255,
+          "stockWeeks": 0.5625
         },
         {
           "styleCode": "GF2LTS531",
@@ -4306,9 +4754,11 @@
           "weekAmount": 520000.0,
           "prevNet": 11.0,
           "prevAmount": 440000.0,
+          "storeStock": 19.0,
           "qtyChangeRate": 18.181818181818183,
           "amountChangeRate": 18.181818181818183,
-          "contributionRate": 2.521823472356935
+          "contributionRate": 2.521823472356935,
+          "stockWeeks": 1.4615384615384615
         },
         {
           "styleCode": "WBE2L05533",
@@ -4317,9 +4767,11 @@
           "weekAmount": 494000.0,
           "prevNet": 11.0,
           "prevAmount": 418000.0,
+          "storeStock": 92.0,
           "qtyChangeRate": 18.181818181818183,
           "amountChangeRate": 18.181818181818183,
-          "contributionRate": 2.3957322987390883
+          "contributionRate": 2.3957322987390883,
+          "stockWeeks": 7.076923076923077
         },
         {
           "styleCode": "GF2LSH521",
@@ -4328,9 +4780,11 @@
           "weekAmount": 484000.0,
           "prevNet": 1.0,
           "prevAmount": 44000.0,
+          "storeStock": 52.0,
           "qtyChangeRate": 1000.0,
           "amountChangeRate": 1000.0,
-          "contributionRate": 2.347235693501455
+          "contributionRate": 2.347235693501455,
+          "stockWeeks": 4.7272727272727275
         },
         {
           "styleCode": "GF2LOP512",
@@ -4339,9 +4793,11 @@
           "weekAmount": 456000.0,
           "prevNet": 3.0,
           "prevAmount": 171000.0,
+          "storeStock": 34.0,
           "qtyChangeRate": 166.66666666666669,
           "amountChangeRate": 166.66666666666669,
-          "contributionRate": 2.2114451988360813
+          "contributionRate": 2.2114451988360813,
+          "stockWeeks": 4.25
         },
         {
           "styleCode": "WBE2L05513",
@@ -4350,9 +4806,11 @@
           "weekAmount": 455000.0,
           "prevNet": 5.0,
           "prevAmount": 175000.0,
+          "storeStock": 169.0,
           "qtyChangeRate": 160.0,
           "amountChangeRate": 160.0,
-          "contributionRate": 2.206595538312318
+          "contributionRate": 2.206595538312318,
+          "stockWeeks": 13.0
         },
         {
           "styleCode": "GF2LBL516",
@@ -4361,9 +4819,11 @@
           "weekAmount": 432000.0,
           "prevNet": 4.0,
           "prevAmount": 192000.0,
+          "storeStock": 23.0,
           "qtyChangeRate": 125.0,
           "amountChangeRate": 125.0,
-          "contributionRate": 2.0950533462657615
+          "contributionRate": 2.0950533462657615,
+          "stockWeeks": 2.5555555555555554
         }
       ]
     },
@@ -4722,8 +5182,8 @@
       {
         "storeName": "오프라인_무신사(대구)",
         "dayTarget": 240000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1230000.0,
         "weekSales": 1213600.0,
         "weekRate": 98.7,
@@ -4733,21 +5193,21 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 94000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 259000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 2576600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(은평)",
         "dayTarget": 240000.0,
-        "daySales": 0,
-        "dayRate": 0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 1230000.0,
         "weekSales": 137000.0,
         "weekRate": 11.1,
@@ -4757,87 +5217,87 @@
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 280000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ],
     "compare": [
@@ -5143,15 +5603,15 @@
       },
       {
         "storeName": "오프라인_무신사(수원)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 205000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 798600.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 2535000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(대구)",
@@ -5179,477 +5639,946 @@
       },
       {
         "storeName": "오프라인_무신사(백&캡클럽 서울숲)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 159000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 103000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "무신사",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "롯데아울렛 서울역점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
         "weekTarget": 40000000.0,
         "weekSales": 15861300.0,
         "weekRate": 39.7,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ],
     "year": [
       {
         "storeName": "신사 플래그십",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 14734300.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 77456300.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 283159100.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "현대아울렛 송도점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 6861000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 30175000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 205970100.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "아이파크몰 용산점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 5704000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 24243000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 133872500.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "현대백화점 신촌점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 2535000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 12496000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 94415600.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "한남 플래그십",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 5256000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 19890000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 83082000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "포시즌 아울렛 신사점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 343000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 3062000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 46590200.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "신세계 광주점",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 2836000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 9522000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 42296000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(성수)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 842000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 5852000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 18681970.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(홍대)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 825000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 4615000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 15370970.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_매장주문",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 1254000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 13588076.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(대구)",
-        "dayTarget": 0,
+        "dayTarget": 0.0,
         "daySales": 328000.0,
-        "dayRate": 0,
-        "weekTarget": 0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
         "weekSales": 1240000.0,
-        "weekRate": 0,
-        "monthTarget": 0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
         "monthSales": 5420000.0,
-        "monthRate": 0
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "직영매장",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_롯데 면세점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "성수 플래그십",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_29갤러리",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_현대신촌(교원)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "신세계 의정부점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "롯데백화점 평촌점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "신세계 대전점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "현대아울렛 남양주점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "롯데아울렛 김해점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "스타필드 고양점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "스타필드 빌리지 운정점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "현대커넥트 청주점",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_한컬랙션 발주",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       },
       {
         "storeName": "오프라인_무신사(강남)",
-        "dayTarget": 0,
-        "daySales": 0,
-        "dayRate": 0,
-        "weekTarget": 0,
-        "weekSales": 0,
-        "weekRate": 0,
-        "monthTarget": 0,
-        "monthSales": 0,
-        "monthRate": 0
+        "dayTarget": 0.0,
+        "daySales": 0.0,
+        "dayRate": 0.0,
+        "weekTarget": 0.0,
+        "weekSales": 0.0,
+        "weekRate": 0.0,
+        "monthTarget": 0.0,
+        "monthSales": 0.0,
+        "monthRate": 0.0
       }
     ]
   },
   "inventory": {
-    "stockoutRisk": [],
-    "overstockRisk": [],
-    "allocationSuggestions": [],
-    "rtSuggestions": [
+    "periodLabel": "재고CTRL 기준: 금주전주 판매/점포재고 + 온오프재고현황 Q/R/S",
+    "stockoutRisk": [
       {
-        "styleCode": "WBD2L43545",
-        "productName": "브이넥 케이블 하프 가디건",
-        "fromStore": "스타필드 빌리지 운정점",
-        "toStore": "롯데아울렛 김해점",
-        "suggestQty": 5,
-        "reason": "롯데아울렛 김해점 117개 판매 / 스타필드 빌리지 운정점 4개 판매",
-        "weekAmount": 3756000.0
+        "styleCode": "SBE3U01001",
+        "productName": "스트라이프 롱슬리브 티셔츠",
+        "weekNet": 1.0,
+        "weekAmount": 37800.0,
+        "prevNet": 2.0,
+        "prevAmount": 79800.0,
+        "storeStock": -16.0,
+        "qtyChangeRate": -50.0,
+        "amountChangeRate": -52.63157894736842,
+        "contributionRate": 0.009280514602079524,
+        "stockWeeks": -16.0,
+        "onlineStock": 82.0,
+        "offlineStock": 103.0,
+        "totalStock": 185.0,
+        "offlineWeeks": -16.0
       },
+      {
+        "styleCode": "WBD4L13514",
+        "productName": "모던 레이어드 롱스커트",
+        "weekNet": 1.0,
+        "weekAmount": 41000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": -1.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.010066166631885197,
+        "stockWeeks": -1.0,
+        "onlineStock": 74.0,
+        "offlineStock": 31.0,
+        "totalStock": 105.0,
+        "offlineWeeks": -1.0
+      },
+      {
+        "styleCode": "WBD4L91526",
+        "productName": "뉴스보이 캡",
+        "weekNet": 1.0,
+        "weekAmount": 21000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": -1.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.0051558414455997355,
+        "stockWeeks": -1.0,
+        "onlineStock": 33.0,
+        "offlineStock": 29.0,
+        "totalStock": 62.0,
+        "offlineWeeks": -1.0
+      },
+      {
+        "styleCode": "SBE3M03007",
+        "productName": "포켓 워시드 데님 셔츠",
+        "weekNet": 2.0,
+        "weekAmount": 90000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 1.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.022096463338284578,
+        "stockWeeks": 0.5,
+        "onlineStock": 140.0,
+        "offlineStock": 128.0,
+        "totalStock": 268.0,
+        "offlineWeeks": 0.5
+      },
+      {
+        "styleCode": "GF2LSH524",
+        "productName": "링클 시어 백슬릿 셔츠",
+        "weekNet": 89.0,
+        "weekAmount": 4665600.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 58.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 1.1454806594566724,
+        "stockWeeks": 0.651685393258427,
+        "onlineStock": 2166.0,
+        "offlineStock": 11.0,
+        "totalStock": 2177.0,
+        "offlineWeeks": 0.651685393258427
+      },
+      {
+        "styleCode": "WBD1L01510",
+        "productName": "GNRL 스퀘어 배색 반팔티",
+        "weekNet": 8.0,
+        "weekAmount": 165100.0,
+        "prevNet": 2.0,
+        "prevAmount": 34000.0,
+        "storeStock": 6.0,
+        "qtyChangeRate": 300.0,
+        "amountChangeRate": 385.5882352941177,
+        "contributionRate": 0.04053473441278648,
+        "stockWeeks": 0.75,
+        "onlineStock": 35.0,
+        "offlineStock": 13.0,
+        "totalStock": 48.0,
+        "offlineWeeks": 0.75
+      },
+      {
+        "styleCode": "WBE2L05536",
+        "productName": "스트라이프 레이어드 풀오버",
+        "weekNet": 25.0,
+        "weekAmount": 750000.0,
+        "prevNet": 13.0,
+        "prevAmount": 390000.0,
+        "storeStock": 24.0,
+        "qtyChangeRate": 92.3076923076923,
+        "amountChangeRate": 92.3076923076923,
+        "contributionRate": 0.1841371944857048,
+        "stockWeeks": 0.96,
+        "onlineStock": 168.0,
+        "offlineStock": 8.0,
+        "totalStock": 176.0,
+        "offlineWeeks": 0.96
+      },
+      {
+        "styleCode": "WBE2L04532",
+        "productName": "코튼 케이블 하프 가디건",
+        "weekNet": 1.0,
+        "weekAmount": 30000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 1.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.007365487779428193,
+        "stockWeeks": 1.0,
+        "onlineStock": 6.0,
+        "offlineStock": 5.0,
+        "totalStock": 11.0,
+        "offlineWeeks": 1.0
+      },
+      {
+        "styleCode": "WBE3L01508",
+        "productName": "로즈버리 빈티지 루즈핏 티셔츠",
+        "weekNet": 76.0,
+        "weekAmount": 1666000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 129.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.40903008801757895,
+        "stockWeeks": 1.6973684210526316,
+        "onlineStock": 90.0,
+        "offlineStock": 9.0,
+        "totalStock": 99.0,
+        "offlineWeeks": 1.6973684210526316
+      },
+      {
+        "styleCode": "WBE2L01524",
+        "productName": "레이스 리브드 브이넥 티셔츠",
+        "weekNet": 10.0,
+        "weekAmount": 180000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 17.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.044192926676569155,
+        "stockWeeks": 1.7,
+        "onlineStock": 46.0,
+        "offlineStock": 0.0,
+        "totalStock": 46.0,
+        "offlineWeeks": 1.7
+      }
+    ],
+    "overstockRisk": [
+      {
+        "styleCode": "GF1LJK503",
+        "productName": "클래식 테일러드 자켓",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 192.0,
+        "qtyChangeRate": 0.0,
+        "amountChangeRate": 0.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 209.0,
+        "offlineStock": 213.0,
+        "totalStock": 422.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LJK507",
+        "productName": "프린지 트리밍 트위드 자켓",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 1.0,
+        "prevAmount": 105000.0,
+        "storeStock": 178.0,
+        "qtyChangeRate": -100.0,
+        "amountChangeRate": -100.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 109.0,
+        "offlineStock": 459.0,
+        "totalStock": 568.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LJK512",
+        "productName": "더블 포켓 데님 워크 자켓",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 92.0,
+        "qtyChangeRate": 0.0,
+        "amountChangeRate": 0.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 83.0,
+        "offlineStock": 115.0,
+        "totalStock": 198.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LJP509",
+        "productName": "빅포켓 세미 크롭 자켓",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 86.0,
+        "qtyChangeRate": 0.0,
+        "amountChangeRate": 0.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 68.0,
+        "offlineStock": 66.0,
+        "totalStock": 134.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LKC508",
+        "productName": "코튼 블렌드 레글런 니트 집업",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 165.0,
+        "qtyChangeRate": 0.0,
+        "amountChangeRate": 0.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 379.0,
+        "offlineStock": 327.0,
+        "totalStock": 706.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LKC515",
+        "productName": "코튼 루즈핏 포켓 가디건",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 2.0,
+        "prevAmount": 108000.0,
+        "storeStock": 259.0,
+        "qtyChangeRate": -100.0,
+        "amountChangeRate": -100.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 349.0,
+        "offlineStock": 814.0,
+        "totalStock": 1163.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LKC518",
+        "productName": "코튼 블렌드 새들 숄더 가디건",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 363.0,
+        "qtyChangeRate": 0.0,
+        "amountChangeRate": 0.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 889.0,
+        "offlineStock": 289.0,
+        "totalStock": 1178.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1LKP506",
+        "productName": "코튼 레이어드 브이넥 니트 풀오버",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 2.0,
+        "prevAmount": 90000.0,
+        "storeStock": 623.0,
+        "qtyChangeRate": -100.0,
+        "amountChangeRate": -100.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 1332.0,
+        "offlineStock": 1358.0,
+        "totalStock": 2690.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1MKP004",
+        "productName": "스트라이프 코튼 크루넥 니트",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 1.0,
+        "prevAmount": 47500.0,
+        "storeStock": 118.0,
+        "qtyChangeRate": -100.0,
+        "amountChangeRate": -100.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 182.0,
+        "offlineStock": 141.0,
+        "totalStock": 323.0,
+        "offlineWeeks": 999
+      },
+      {
+        "styleCode": "GF1MSS004",
+        "productName": "포켓 하프 집업 맨투맨",
+        "weekNet": 0.0,
+        "weekAmount": 0.0,
+        "prevNet": 4.0,
+        "prevAmount": 210000.0,
+        "storeStock": 246.0,
+        "qtyChangeRate": -100.0,
+        "amountChangeRate": -100.0,
+        "contributionRate": 0.0,
+        "stockWeeks": 999,
+        "onlineStock": 261.0,
+        "offlineStock": 190.0,
+        "totalStock": 451.0,
+        "offlineWeeks": 999
+      }
+    ],
+    "allocationSuggestions": [
+      {
+        "styleCode": "GF2LKP531",
+        "productName": "셔츠 카라 피케 하프 니트",
+        "weekNet": 143.0,
+        "weekAmount": 8304900.0,
+        "prevNet": 110.0,
+        "prevAmount": 6366500.0,
+        "storeStock": 265.0,
+        "qtyChangeRate": 30.0,
+        "amountChangeRate": 30.44687033691981,
+        "contributionRate": 2.0389879819791066,
+        "stockWeeks": 1.8531468531468531,
+        "onlineStock": 955.0,
+        "offlineStock": 559.0,
+        "totalStock": 1514.0,
+        "offlineWeeks": 1.8531468531468531,
+        "suggestQty": 164,
+        "reason": "점포 재고주수 1.9주 / 온라인 가용 955개"
+      },
+      {
+        "styleCode": "GF2LTS523",
+        "productName": "숄더 패디드 트위스트 티셔츠",
+        "weekNet": 176.0,
+        "weekAmount": 5868400.0,
+        "prevNet": 227.0,
+        "prevAmount": 7563300.0,
+        "storeStock": 343.0,
+        "qtyChangeRate": -22.46696035242291,
+        "amountChangeRate": -22.4095302315127,
+        "contributionRate": 1.4407876161598803,
+        "stockWeeks": 1.9488636363636365,
+        "onlineStock": 579.0,
+        "offlineStock": 10.0,
+        "totalStock": 589.0,
+        "offlineWeeks": 1.9488636363636365,
+        "suggestQty": 185,
+        "reason": "점포 재고주수 1.9주 / 온라인 가용 579개"
+      },
+      {
+        "styleCode": "GF2LSH524",
+        "productName": "링클 시어 백슬릿 셔츠",
+        "weekNet": 89.0,
+        "weekAmount": 4665600.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 58.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 1.1454806594566724,
+        "stockWeeks": 0.651685393258427,
+        "onlineStock": 2166.0,
+        "offlineStock": 11.0,
+        "totalStock": 2177.0,
+        "offlineWeeks": 0.651685393258427,
+        "suggestQty": 209,
+        "reason": "점포 재고주수 0.7주 / 온라인 가용 2,166개"
+      },
+      {
+        "styleCode": "GF2LPT519",
+        "productName": "세미 와이드 논페이드 데님 팬츠",
+        "weekNet": 58.0,
+        "weekAmount": 2932800.0,
+        "prevNet": 91.0,
+        "prevAmount": 4641000.0,
+        "storeStock": 99.0,
+        "qtyChangeRate": -36.26373626373626,
+        "amountChangeRate": -36.806722689075634,
+        "contributionRate": 0.7200500853169001,
+        "stockWeeks": 1.706896551724138,
+        "onlineStock": 342.0,
+        "offlineStock": 1.0,
+        "totalStock": 343.0,
+        "offlineWeeks": 1.706896551724138,
+        "suggestQty": 75,
+        "reason": "점포 재고주수 1.7주 / 온라인 가용 342개"
+      },
+      {
+        "styleCode": "WBE3L01508",
+        "productName": "로즈버리 빈티지 루즈핏 티셔츠",
+        "weekNet": 76.0,
+        "weekAmount": 1666000.0,
+        "prevNet": 0.0,
+        "prevAmount": 0.0,
+        "storeStock": 129.0,
+        "qtyChangeRate": 100.0,
+        "amountChangeRate": 100.0,
+        "contributionRate": 0.40903008801757895,
+        "stockWeeks": 1.6973684210526316,
+        "onlineStock": 90.0,
+        "offlineStock": 9.0,
+        "totalStock": 99.0,
+        "offlineWeeks": 1.6973684210526316,
+        "suggestQty": 90,
+        "reason": "점포 재고주수 1.7주 / 온라인 가용 90개"
+      }
+    ],
+    "rtSuggestions": [
       {
         "styleCode": "WBE2L05513",
         "productName": "에어리 에센셜 카라 하프 니트",
+        "fromStore": "서울숲 플래그십",
+        "toStore": "신세계 센텀시티점",
+        "suggestQty": 5,
+        "fromStock": 61.0,
+        "fromWeekSales": 0.0,
+        "fromStockWeeks": 999,
+        "toStock": 82.0,
+        "toWeekSales": 61.0,
+        "toStockWeeks": 1.3442622950819672,
+        "reason": "신세계 센텀시티점 재고주수 1.3주 / 서울숲 플래그십 재고주수 999.0주",
+        "weekAmount": 1963000.0
+      },
+      {
+        "styleCode": "GF2LKP531",
+        "productName": "셔츠 카라 피케 하프 니트",
+        "fromStore": "신세계 센텀시티점",
+        "toStore": "성수 플래그십",
+        "suggestQty": 5,
+        "fromStock": 18.0,
+        "fromWeekSales": 0.0,
+        "fromStockWeeks": 999,
+        "toStock": 2.0,
+        "toWeekSales": 25.0,
+        "toStockWeeks": 0.08,
+        "reason": "성수 플래그십 재고주수 0.1주 / 신세계 센텀시티점 재고주수 999.0주",
+        "weekAmount": 1407400.0
+      },
+      {
+        "styleCode": "WBE3L01508",
+        "productName": "로즈버리 빈티지 루즈핏 티셔츠",
         "fromStore": "신세계 광주점",
         "toStore": "롯데아울렛 김해점",
         "suggestQty": 5,
-        "reason": "롯데아울렛 김해점 82개 판매 / 신세계 광주점 2개 판매",
-        "weekAmount": 2550000.0
-      },
-      {
-        "styleCode": "WBD3L04501",
-        "productName": "에센셜 크루넥 가디건",
-        "fromStore": "신세계 의정부점",
-        "toStore": "롯데아울렛 김해점",
-        "suggestQty": 5,
-        "reason": "롯데아울렛 김해점 70개 판매 / 신세계 의정부점 1개 판매",
-        "weekAmount": 2450000.0
+        "fromStock": 44.0,
+        "fromWeekSales": 0.0,
+        "fromStockWeeks": 999,
+        "toStock": -33.0,
+        "toWeekSales": 64.0,
+        "toStockWeeks": -0.515625,
+        "reason": "롯데아울렛 김해점 재고주수 -0.5주 / 신세계 광주점 재고주수 999.0주",
+        "weekAmount": 1344000.0
       },
       {
         "styleCode": "WBE2L03531",
         "productName": "링클 시어 셔츠",
-        "fromStore": "스타필드 고양점",
-        "toStore": "현대아울렛 송도점",
+        "fromStore": "신세계 센텀시티점",
+        "toStore": "롯데아울렛 서울역점",
         "suggestQty": 5,
-        "reason": "현대아울렛 송도점 58개 판매 / 스타필드 고양점 5개 판매",
-        "weekAmount": 2352000.0
+        "fromStock": 40.0,
+        "fromWeekSales": 0.0,
+        "fromStockWeeks": 999,
+        "toStock": 18.0,
+        "toWeekSales": 25.0,
+        "toStockWeeks": 0.72,
+        "reason": "롯데아울렛 서울역점 재고주수 0.7주 / 신세계 센텀시티점 재고주수 999.0주",
+        "weekAmount": 1050000.0
       },
       {
-        "styleCode": "WBD3L04503",
-        "productName": "GNRL 에센셜 가디건",
-        "fromStore": "현대커넥트 청주점",
-        "toStore": "신세계 센텀시티점",
+        "styleCode": "GF1UJK009",
+        "productName": "시어서커 체크 후드 아노락",
+        "fromStore": "스타필드 고양점",
+        "toStore": "성수 플래그십",
         "suggestQty": 5,
-        "reason": "신세계 센텀시티점 44개 판매 / 현대커넥트 청주점 1개 판매",
-        "weekAmount": 1540000.0
+        "fromStock": 16.0,
+        "fromWeekSales": 0.0,
+        "fromStockWeeks": 999,
+        "toStock": 6.0,
+        "toWeekSales": 16.0,
+        "toStockWeeks": 0.375,
+        "reason": "성수 플래그십 재고주수 0.4주 / 스타필드 고양점 재고주수 999.0주",
+        "weekAmount": 988800.0
       }
     ],
     "consignmentRecommendations": [
@@ -5660,10 +6589,15 @@
         "weekAmount": 17806600.0,
         "prevNet": 370.0,
         "prevAmount": 12741300.0,
+        "storeStock": 3825.0,
         "qtyChangeRate": 44.054054054054056,
         "amountChangeRate": 39.75497005800036,
         "contributionRate": 4.371809823105536,
-        "reason": "전사 매출 상위 상품 기준 위탁 채널 투입 후보"
+        "stockWeeks": 7.176360225140713,
+        "onlineStock": 21369.0,
+        "offlineStock": 10200.0,
+        "totalStock": 31569.0,
+        "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       },
       {
         "styleCode": "WBE2L05513",
@@ -5672,10 +6606,15 @@
         "weekAmount": 17329400.0,
         "prevNet": 398.0,
         "prevAmount": 12771500.0,
+        "storeStock": 2764.0,
         "qtyChangeRate": 32.663316582914575,
         "amountChangeRate": 35.68805543593157,
         "contributionRate": 4.254649464160764,
-        "reason": "전사 매출 상위 상품 기준 위탁 채널 투입 후보"
+        "stockWeeks": 5.234848484848484,
+        "onlineStock": 3861.0,
+        "offlineStock": 209.0,
+        "totalStock": 4070.0,
+        "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       },
       {
         "styleCode": "WBE2L03531",
@@ -5684,10 +6623,15 @@
         "weekAmount": 12645300.0,
         "prevNet": 335.0,
         "prevAmount": 13858400.0,
+        "storeStock": 1345.0,
         "qtyChangeRate": -8.358208955223882,
         "amountChangeRate": -8.753535761704093,
         "contributionRate": 3.1046267539067776,
-        "reason": "전사 매출 상위 상품 기준 위탁 채널 투입 후보"
+        "stockWeeks": 4.381107491856677,
+        "onlineStock": 2217.0,
+        "offlineStock": 379.0,
+        "totalStock": 2596.0,
+        "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       },
       {
         "styleCode": "GF2LKC539",
@@ -5696,10 +6640,15 @@
         "weekAmount": 10207100.0,
         "prevNet": 275.0,
         "prevAmount": 9754500.0,
+        "storeStock": 2221.0,
         "qtyChangeRate": 7.2727272727272725,
         "amountChangeRate": 4.6399097852273306,
         "contributionRate": 2.506009010446717,
-        "reason": "전사 매출 상위 상품 기준 위탁 채널 투입 후보"
+        "stockWeeks": 7.5288135593220336,
+        "onlineStock": 3890.0,
+        "offlineStock": 388.0,
+        "totalStock": 4278.0,
+        "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       },
       {
         "styleCode": "WBD3L04501",
@@ -5708,10 +6657,15 @@
         "weekAmount": 9844600.0,
         "prevNet": 258.0,
         "prevAmount": 8806100.0,
+        "storeStock": 6181.0,
         "qtyChangeRate": 10.852713178294573,
         "amountChangeRate": 11.792961697005484,
         "contributionRate": 2.4170093664452925,
-        "reason": "전사 매출 상위 상품 기준 위탁 채널 투입 후보"
+        "stockWeeks": 21.611888111888113,
+        "onlineStock": 8823.0,
+        "offlineStock": 3516.0,
+        "totalStock": 12339.0,
+        "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       }
     ]
   }

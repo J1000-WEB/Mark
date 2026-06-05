@@ -4850,6 +4850,15 @@
       "현대아울렛 남양주점",
       "현대아울렛 송도점",
       "현대커넥트 청주점"
+    ],
+    "top10Concentration": 19.62601971789781,
+    "newTop10Entrants": [],
+    "aiBriefing": [
+      "핵심 매장 기준 주간 매출은 전주 대비 +42.6% 흐름입니다.",
+      "호조 매장은 서울숲 플래그십, 현대아울렛 남양주점, 롯데아울렛 서울역점 중심으로 확인됩니다.",
+      "부진 매장은 아이파크몰 용산점, 현대백화점 신촌점, 롯데백화점 광복점이며 상품 구성과 재고 보강 점검이 필요합니다.",
+      "전사 TOP 상품은 브이넥 케이블 하프 가디건이며 TOP10 상품 매출 비중은 19.6%입니다.",
+      "위탁 채널은 재고 효율과 가용재고를 함께 보며 투입 후보를 관리하는 것이 좋습니다."
     ]
   },
   "monthly": {
@@ -6510,7 +6519,7 @@
         "productName": "에어리 에센셜 카라 하프 니트",
         "fromStore": "서울숲 플래그십",
         "toStore": "신세계 센텀시티점",
-        "suggestQty": 5,
+        "suggestQty": 61,
         "fromStock": 61.0,
         "fromWeekSales": 0.0,
         "fromStockWeeks": 999,
@@ -6518,14 +6527,19 @@
         "toWeekSales": 61.0,
         "toStockWeeks": 1.3442622950819672,
         "reason": "신세계 센텀시티점 재고주수 1.3주 / 서울숲 플래그십 재고주수 999.0주",
-        "weekAmount": 1963000.0
+        "weekAmount": 1963000.0,
+        "oldSuggestQty": 5,
+        "toAfterWeeks": 2.3442622950819674,
+        "fromAfterWeeks": 999,
+        "priority": "B",
+        "stockoutDays": 9.40983606557377
       },
       {
         "styleCode": "GF2LKP531",
         "productName": "셔츠 카라 피케 하프 니트",
         "fromStore": "신세계 센텀시티점",
         "toStore": "성수 플래그십",
-        "suggestQty": 5,
+        "suggestQty": 18,
         "fromStock": 18.0,
         "fromWeekSales": 0.0,
         "fromStockWeeks": 999,
@@ -6533,14 +6547,19 @@
         "toWeekSales": 25.0,
         "toStockWeeks": 0.08,
         "reason": "성수 플래그십 재고주수 0.1주 / 신세계 센텀시티점 재고주수 999.0주",
-        "weekAmount": 1407400.0
+        "weekAmount": 1407400.0,
+        "oldSuggestQty": 5,
+        "toAfterWeeks": 0.8,
+        "fromAfterWeeks": 999,
+        "priority": "A",
+        "stockoutDays": 0.56
       },
       {
         "styleCode": "WBE3L01508",
         "productName": "로즈버리 빈티지 루즈핏 티셔츠",
         "fromStore": "신세계 광주점",
         "toStore": "롯데아울렛 김해점",
-        "suggestQty": 5,
+        "suggestQty": 44,
         "fromStock": 44.0,
         "fromWeekSales": 0.0,
         "fromStockWeeks": 999,
@@ -6548,14 +6567,19 @@
         "toWeekSales": 64.0,
         "toStockWeeks": -0.515625,
         "reason": "롯데아울렛 김해점 재고주수 -0.5주 / 신세계 광주점 재고주수 999.0주",
-        "weekAmount": 1344000.0
+        "weekAmount": 1344000.0,
+        "oldSuggestQty": 5,
+        "toAfterWeeks": 0.171875,
+        "fromAfterWeeks": 999,
+        "priority": "A",
+        "stockoutDays": -3.609375
       },
       {
         "styleCode": "WBE2L03531",
         "productName": "링클 시어 셔츠",
         "fromStore": "신세계 센텀시티점",
         "toStore": "롯데아울렛 서울역점",
-        "suggestQty": 5,
+        "suggestQty": 40,
         "fromStock": 40.0,
         "fromWeekSales": 0.0,
         "fromStockWeeks": 999,
@@ -6563,14 +6587,19 @@
         "toWeekSales": 25.0,
         "toStockWeeks": 0.72,
         "reason": "롯데아울렛 서울역점 재고주수 0.7주 / 신세계 센텀시티점 재고주수 999.0주",
-        "weekAmount": 1050000.0
+        "weekAmount": 1050000.0,
+        "oldSuggestQty": 5,
+        "toAfterWeeks": 2.32,
+        "fromAfterWeeks": 999,
+        "priority": "A",
+        "stockoutDays": 5.04
       },
       {
         "styleCode": "GF1UJK009",
         "productName": "시어서커 체크 후드 아노락",
         "fromStore": "스타필드 고양점",
         "toStore": "성수 플래그십",
-        "suggestQty": 5,
+        "suggestQty": 16,
         "fromStock": 16.0,
         "fromWeekSales": 0.0,
         "fromStockWeeks": 999,
@@ -6578,7 +6607,12 @@
         "toWeekSales": 16.0,
         "toStockWeeks": 0.375,
         "reason": "성수 플래그십 재고주수 0.4주 / 스타필드 고양점 재고주수 999.0주",
-        "weekAmount": 988800.0
+        "weekAmount": 988800.0,
+        "oldSuggestQty": 5,
+        "toAfterWeeks": 1.375,
+        "fromAfterWeeks": 999,
+        "priority": "A",
+        "stockoutDays": 2.625
       }
     ],
     "consignmentRecommendations": [
@@ -6667,6 +6701,82 @@
         "totalStock": 12339.0,
         "reason": "전사 매출 상위 + 가용재고 확인 후 위탁 투입 후보"
       }
+    ],
+    "stockoutStoreTop5": [
+      {
+        "storeName": "성수 플래그십",
+        "count": 2,
+        "avgWeeks": 0.2275,
+        "weeks": [
+          0.08,
+          0.375
+        ]
+      },
+      {
+        "storeName": "롯데아울렛 김해점",
+        "count": 1,
+        "avgWeeks": -0.515625,
+        "weeks": [
+          -0.515625
+        ]
+      },
+      {
+        "storeName": "롯데아울렛 서울역점",
+        "count": 1,
+        "avgWeeks": 0.72,
+        "weeks": [
+          0.72
+        ]
+      },
+      {
+        "storeName": "신세계 센텀시티점",
+        "count": 1,
+        "avgWeeks": 1.3442622950819672,
+        "weeks": [
+          1.3442622950819672
+        ]
+      }
+    ],
+    "overstockStoreTop5": [
+      {
+        "storeName": "신세계 센텀시티점",
+        "count": 2,
+        "avgWeeks": 999.0,
+        "weeks": [
+          999,
+          999
+        ]
+      },
+      {
+        "storeName": "서울숲 플래그십",
+        "count": 1,
+        "avgWeeks": 999.0,
+        "weeks": [
+          999
+        ]
+      },
+      {
+        "storeName": "신세계 광주점",
+        "count": 1,
+        "avgWeeks": 999.0,
+        "weeks": [
+          999
+        ]
+      },
+      {
+        "storeName": "스타필드 고양점",
+        "count": 1,
+        "avgWeeks": 999.0,
+        "weeks": [
+          999
+        ]
+      }
+    ],
+    "aiBriefing": [
+      "RT 이동 우선 검토 대상은 5건입니다.",
+      "물류 추가 할당 후보는 5건, 품절 위험 상품은 10개입니다.",
+      "과재고 위험 상품은 10개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.",
+      "RT는 목표 재고주수 4주를 기준으로 이동수량을 재계산했습니다."
     ]
   }
 }

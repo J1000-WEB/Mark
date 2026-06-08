@@ -23,22 +23,23 @@ function BarList({ rows, field }: { rows: any[]; field: string }) {
   if (!rows.length) return <Empty />;
 
   return (
-    <div className="space-y-4 pr-2">
+    <div className="max-h-[690px] space-y-4 overflow-y-auto pr-3">
       {rows.map((r) => {
         const value = Number(r[field] || 0);
         const prev = field === "daySales" ? r.compareDaySales : r.compareWeekSales;
         const change = field === "daySales" ? r.dayChangeRate : r.weekChangeRate;
+        const changeColor = change >= 0 ? "text-blue-600" : "text-red-600";
         return (
           <div key={r.storeName}>
             <div className="mb-1 flex justify-between gap-3 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">{r.storeName}</span>
-              <span>{won(value)}</span>
+              <span className="font-bold text-slate-800">{r.storeName}</span>
+              <span className="font-black text-slate-900">{won(value)}</span>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(4, (value / max) * 100)}%` }} />
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              전주 {won(prev)} · 전주비 {change >= 0 ? "+" : ""}{pct(change)}
+              전주 {won(prev)} · <span className={`font-black ${changeColor}`}>전주비 {change >= 0 ? "+" : ""}{pct(change)}</span>
             </p>
           </div>
         );
@@ -357,7 +358,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0.2</h1>
+            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0.3</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
@@ -400,7 +401,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active === "weekly" && <Briefing lines={dashboardData.weekly?.aiBriefing || []} />}
 
         {active !== "monthly" && (
-          <section className="grid gap-6 lg:grid-cols-2">
+          <section className="grid items-start gap-6 lg:grid-cols-2">
             <Card title="매출관리 필요매장">
               {active === "weekly" ? (
                 <>

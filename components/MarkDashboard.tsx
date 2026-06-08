@@ -23,7 +23,7 @@ function BarList({ rows, field }: { rows: any[]; field: string }) {
   if (!rows.length) return <Empty />;
 
   return (
-    <div className="max-h-[520px] space-y-4 overflow-y-auto pr-2">
+    <div className="space-y-4 pr-2">
       {rows.map((r) => {
         const value = Number(r[field] || 0);
         const prev = field === "daySales" ? r.compareDaySales : r.compareWeekSales;
@@ -181,6 +181,7 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
   const [savedMemo, setSavedMemo] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
   const [status, setStatus] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
 
   const products = data.weekly?.storeTopProducts?.[storeName] || [];
   const goodProducts = [...products].sort((a, b) => Number(b.amountChangeRate || 0) - Number(a.amountChangeRate || 0)).slice(0, 2);
@@ -189,6 +190,7 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
   useEffect(() => {
     if (!storeName) return;
     setStatus("메모 불러오는 중...");
+    setIsEditing(false);
     fetch(`/api/memos?store=${encodeURIComponent(storeName)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -212,7 +214,9 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
     const d = await res.json();
     if (d.ok) {
       setSavedMemo(d.memo || "");
+      setMemo(d.memo || "");
       setUpdatedAt(d.updatedAt || "");
+      setIsEditing(false);
       setStatus("저장되었습니다.");
     } else {
       setStatus(d.error || "저장 실패");
@@ -227,10 +231,23 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
       setMemo("");
       setSavedMemo("");
       setUpdatedAt(d.updatedAt || "");
+      setIsEditing(false);
       setStatus("삭제되었습니다.");
     } else {
       setStatus(d.error || "삭제 실패");
     }
+  }
+
+  function startEdit() {
+    setMemo(savedMemo || "");
+    setIsEditing(true);
+    setStatus("");
+  }
+
+  function cancelEdit() {
+    setMemo(savedMemo || "");
+    setIsEditing(false);
+    setStatus("");
   }
 
   const change = Number(storeRow?.weekChangeRate || 0);
@@ -253,23 +270,39 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
         <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{aiReview}</p>
       </div>
 
-      <div className="mt-4 rounded-2xl bg-white p-4">
-        <div className="flex items-center justify-between">
-          <p className="font-black">담당자 메모</p>
+      <div className="mt-4 rounded-2xl bg-sky-50 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-black text-slate-900">담당자 메모</p>
           {status && <p className="text-xs font-semibold text-slate-500">{status}</p>}
         </div>
-        <textarea
-          className="mt-3 h-20 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-900"
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          placeholder="점포별 특이사항, 액션 아이템을 두 줄 정도로 적어주세요."
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={saveMemo} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">저장</button>
-          <button type="button" onClick={saveMemo} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">수정</button>
-          <button type="button" onClick={deleteMemo} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">지우기</button>
-          {savedMemo && <span className="self-center text-xs text-slate-500">구글시트 소장군에 저장됨</span>}
-        </div>
+
+        {!isEditing && savedMemo ? (
+          <>
+            <div className="mt-3 rounded-2xl border border-sky-100 bg-white/80 p-4">
+              <p className="whitespace-pre-wrap text-sm font-black leading-7 text-slate-800">{savedMemo}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={startEdit} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">수정</button>
+              <button type="button" onClick={deleteMemo} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">지우기</button>
+              <span className="self-center text-xs text-slate-500">구글시트 소장군에 저장됨</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <textarea
+              className="mt-3 h-20 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-slate-900"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="점포별 특이사항, 액션 아이템을 두 줄 정도로 적어주세요."
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={saveMemo} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">저장</button>
+              {savedMemo && <button type="button" onClick={cancelEdit} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">취소</button>}
+              {savedMemo && <button type="button" onClick={deleteMemo} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">지우기</button>}
+              {!savedMemo && <span className="self-center text-xs text-slate-500">저장하면 구글시트 소장군에 기록됩니다.</span>}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -279,6 +312,7 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
     </div>
   );
 }
+
 
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
   const [dashboardData, setDashboardData] = useState<any>(markData);
@@ -323,7 +357,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0</h1>
+            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0.2</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}

@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
@@ -192,14 +195,27 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
 }
 
 export default function InventoryDashboard() {
-  const data = markData?.inventory || {};
+  const [dashboardData, setDashboardData] = useState<any>(markData);
+  const [dataStatus, setDataStatus] = useState("내장 데이터");
+
+  useEffect(() => {
+    fetch("/api/data", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setDashboardData(d);
+        setDataStatus(d.source === "google-sheet" ? "구글시트 실시간 데이터" : "내장 데이터");
+      })
+      .catch(() => setDataStatus("내장 데이터"));
+  }, []);
+
+  const data = dashboardData?.inventory || {};
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark2.9.1</h1>
-            <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p>
+            <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
         </header>

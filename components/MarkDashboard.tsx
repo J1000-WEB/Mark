@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi, ProductList, StoreMiniList } from "@/components/Shared";
 import {
@@ -68,10 +68,10 @@ function Briefing({ lines }: { lines: string[] }) {
   );
 }
 
-function WeeklyInsightCards() {
-  const concentration = markData.weekly?.top10Concentration || 0;
-  const entrants = markData.weekly?.newTop10Entrants || [];
-  const inv = markData.inventory || {};
+function WeeklyInsightCards({ data }: { data: any }) {
+  const concentration = data.weekly?.top10Concentration || 0;
+  const entrants = data.weekly?.newTop10Entrants || [];
+  const inv = data.inventory || {};
   const shopEff = inv.consignmentRecommendations || [];
 
   return (
@@ -112,9 +112,193 @@ function WeeklyInsightCards() {
   );
 }
 
+function ClickableStoreList({
+  title,
+  rows,
+  mode,
+  selected,
+  onSelect,
+}: {
+  title: string;
+  rows: any[];
+  mode: "good" | "bad";
+  selected: string;
+  onSelect: (store: string) => void;
+}) {
+  const wrap = mode === "good" ? "bg-emerald-50 border border-emerald-100" : "bg-rose-50 border border-rose-100";
+  return (
+    <div className={`rounded-2xl p-4 ${wrap}`}>
+      <h3 className="mb-3 font-black">{title}</h3>
+      <div className="space-y-3">
+        {rows.map((r, i) => (
+          <button
+            type="button"
+            key={r.storeName}
+            onClick={() => onSelect(r.storeName)}
+            className={`flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:scale-[1.01] ${
+              selected === r.storeName ? "bg-slate-900 text-white" : "bg-white"
+            }`}
+          >
+            <div>
+              <p className={`text-xs ${selected === r.storeName ? "text-slate-300" : "text-slate-500"}`}>#{i + 1}</p>
+              <p className="font-bold">{r.storeName}</p>
+            </div>
+            <div className="text-right">
+              <p className={`font-black ${selected === r.storeName ? "text-white" : mode === "good" ? "text-emerald-600" : "text-red-600"}`}>
+                {r.weekChangeRate >= 0 ? "+" : ""}{pct(r.weekChangeRate)}
+              </p>
+              <p className={`text-xs ${selected === r.storeName ? "text-slate-300" : "text-slate-500"}`}>{won(r.weekSales)}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StoreProductMini({ title, items, mode }: { title: string; items: any[]; mode: "good" | "bad" }) {
+  return (
+    <div className={`rounded-2xl p-4 ${mode === "good" ? "bg-emerald-50" : "bg-rose-50"}`}>
+      <h4 className="mb-3 font-black">{title}</h4>
+      <div className="space-y-2">
+        {items.length === 0 && <p className="text-sm text-slate-500">표시할 상품이 없습니다.</p>}
+        {items.map((p, i) => (
+          <div key={`${p.styleCode}-${i}`} className="rounded-xl bg-white p-3">
+            <p className="text-xs text-slate-500">#{i + 1} · {p.styleCode}</p>
+            <p className="mt-1 font-bold">{p.productName}</p>
+            <p className={`mt-1 text-sm font-black ${mode === "good" ? "text-emerald-600" : "text-red-600"}`}>
+              {p.amountChangeRate >= 0 ? "+" : ""}{pct(p.amountChangeRate)} · {won(p.weekAmount)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; storeRow: any; data: any }) {
+  const [memo, setMemo] = useState("");
+  const [savedMemo, setSavedMemo] = useState("");
+  const [updatedAt, setUpdatedAt] = useState("");
+  const [status, setStatus] = useState("");
+
+  const products = data.weekly?.storeTopProducts?.[storeName] || [];
+  const goodProducts = [...products].sort((a, b) => Number(b.amountChangeRate || 0) - Number(a.amountChangeRate || 0)).slice(0, 2);
+  const badProducts = [...products].filter((p) => Number(p.prevAmount || 0) > 0).sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0)).slice(0, 2);
+
+  useEffect(() => {
+    if (!storeName) return;
+    setStatus("메모 불러오는 중...");
+    fetch(`/api/memos?store=${encodeURIComponent(storeName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setMemo(d.memo || "");
+        setSavedMemo(d.memo || "");
+        setUpdatedAt(d.updatedAt || "");
+        setStatus("");
+      })
+      .catch(() => {
+        setStatus("메모를 불러오지 못했습니다.");
+      });
+  }, [storeName]);
+
+  async function saveMemo() {
+    setStatus("저장 중...");
+    const res = await fetch("/api/memos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ store: storeName, memo }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      setSavedMemo(d.memo || "");
+      setUpdatedAt(d.updatedAt || "");
+      setStatus("저장되었습니다.");
+    } else {
+      setStatus(d.error || "저장 실패");
+    }
+  }
+
+  async function deleteMemo() {
+    setStatus("삭제 중...");
+    const res = await fetch(`/api/memos?store=${encodeURIComponent(storeName)}`, { method: "DELETE" });
+    const d = await res.json();
+    if (d.ok) {
+      setMemo("");
+      setSavedMemo("");
+      setUpdatedAt(d.updatedAt || "");
+      setStatus("삭제되었습니다.");
+    } else {
+      setStatus(d.error || "삭제 실패");
+    }
+  }
+
+  const change = Number(storeRow?.weekChangeRate || 0);
+  const aiReview = storeRow
+    ? `${storeName}은 전주 대비 ${change >= 0 ? "+" : ""}${pct(change)} 흐름이며, 주간 매출 ${won(storeRow.weekSales || 0)} 기준으로 ${change >= 0 ? "호조 요인 유지와 재고 보강을 검토하면 좋습니다." : "상품 구성, 진열, 재고 부족 여부를 우선 점검하는 것이 좋습니다."}`
+    : `${storeName} 점포 데이터를 확인 중입니다.`;
+
+  return (
+    <div className="mt-6 rounded-3xl border border-slate-100 bg-slate-50 p-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">선택 점포</p>
+          <h3 className="text-2xl font-black">{storeName}</h3>
+        </div>
+        {updatedAt && <p className="text-xs text-slate-500">메모 수정일: {updatedAt}</p>}
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-violet-50 p-4">
+        <p className="text-xs font-black text-violet-600">AI 한줄 리뷰</p>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{aiReview}</p>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-white p-4">
+        <div className="flex items-center justify-between">
+          <p className="font-black">담당자 메모</p>
+          {status && <p className="text-xs font-semibold text-slate-500">{status}</p>}
+        </div>
+        <textarea
+          className="mt-3 h-20 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-900"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="점포별 특이사항, 액션 아이템을 두 줄 정도로 적어주세요."
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={saveMemo} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">저장</button>
+          <button type="button" onClick={saveMemo} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">수정</button>
+          <button type="button" onClick={deleteMemo} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">지우기</button>
+          {savedMemo && <span className="self-center text-xs text-slate-500">구글시트 소장군에 저장됨</span>}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <StoreProductMini title="호조상품 TOP2" items={goodProducts} mode="good" />
+        <StoreProductMini title="부진상품 TOP2" items={badProducts} mode="bad" />
+      </div>
+    </div>
+  );
+}
+
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
+  const [dashboardData, setDashboardData] = useState<any>(markData);
+  const [dataStatus, setDataStatus] = useState("내장 데이터");
   const [store, setStore] = useState(markData.weekly?.productStoreNames?.[0] || "");
-  const pageData = markData?.[active] || { current: [], compare: [], year: [], periodLabel: "" };
+  const [reviewStore, setReviewStore] = useState("");
+
+  useEffect(() => {
+    fetch("/api/data", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setDashboardData(d);
+        setDataStatus(d.source === "google-sheet" ? "구글시트 실시간 데이터" : "내장 데이터");
+        const first = d.weekly?.productStoreNames?.[0] || "";
+        if (first && (!store || !(d.weekly?.productStoreNames || []).includes(store))) setStore(first);
+      })
+      .catch(() => setDataStatus("내장 데이터"));
+  }, []);
+
+  const pageData = dashboardData?.[active] || { current: [], compare: [], year: [], periodLabel: "" };
 
   const merged =
     active === "monthly"
@@ -127,19 +311,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
   const field = active === "daily" ? "daySales" : active === "monthly" ? "monthSales" : "weekSales";
   const ranking = salesRank(core, field);
-  const storeProducts = useMemo(() => markData.weekly?.storeTopProducts?.[store] || [], [store]);
+  const storeProducts = useMemo(() => dashboardData.weekly?.storeTopProducts?.[store] || [], [dashboardData, store]);
+
+  const weeklyGood = goodWeekly(core);
+  const weeklyBad = badWeekly(core);
+  const selectedReviewStore = reviewStore || weeklyGood[0]?.storeName || weeklyBad[0]?.storeName || "";
+  const selectedStoreRow = core.find((r) => r.storeName === selectedReviewStore);
 
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark2.9.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
-              {active === "weekly" && "주간 · AI 브리핑 + 상품/재고 인사이트"}
+              {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
               {active === "monthly" && "월간 · 호조/부진 매장 + 상품영역 준비중"}
             </p>
+            <p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active={active} />
         </header>
@@ -173,15 +363,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           )}
         </section>
 
-        {active === "weekly" && <Briefing lines={markData.weekly?.aiBriefing || []} />}
+        {active === "weekly" && <Briefing lines={dashboardData.weekly?.aiBriefing || []} />}
 
         {active !== "monthly" && (
           <section className="grid gap-6 lg:grid-cols-2">
             <Card title="매출관리 필요매장">
-              <div className="grid gap-4 md:grid-cols-2">
-                <StoreMiniList title="호조 매장 TOP3" rows={goodWeekly(core)} mode="good" />
-                <StoreMiniList title="부진 매장 TOP3" rows={badWeekly(core)} mode="bad" />
-              </div>
+              {active === "weekly" ? (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ClickableStoreList title="호조 매장 TOP3" rows={weeklyGood} mode="good" selected={selectedReviewStore} onSelect={setReviewStore} />
+                    <ClickableStoreList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" selected={selectedReviewStore} onSelect={setReviewStore} />
+                  </div>
+                  {selectedReviewStore && <StoreDetailPanel storeName={selectedReviewStore} storeRow={selectedStoreRow} data={dashboardData} />}
+                </>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <StoreMiniList title="호조 매장 TOP3" rows={weeklyGood} mode="good" />
+                  <StoreMiniList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" />
+                </div>
+              )}
             </Card>
             <Card title={active === "daily" ? "매장별 일매출 순위" : "매장별 주간 매출 순위"}>
               <BarList rows={ranking} field={field} />
@@ -193,7 +393,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           <>
             <section className="grid gap-6 lg:grid-cols-2">
               <Card title="전사 TOP 상품">
-                <ProductList items={markData.weekly?.companyTopProducts || []} />
+                <ProductList items={dashboardData.weekly?.companyTopProducts || []} />
               </Card>
               <Card
                 title="점포별 TOP 상품"
@@ -203,14 +403,14 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                     value={store}
                     onChange={(e) => setStore(e.target.value)}
                   >
-                    {(markData.weekly?.productStoreNames || []).map((name: string) => <option key={name} value={name}>{name}</option>)}
+                    {(dashboardData.weekly?.productStoreNames || []).map((name: string) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 }
               >
                 <ProductList items={storeProducts} />
               </Card>
             </section>
-            <WeeklyInsightCards />
+            <WeeklyInsightCards data={dashboardData} />
           </>
         )}
 

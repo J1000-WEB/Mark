@@ -174,6 +174,76 @@ function ItemList({ items, type }: { items: any[]; type: "rt" | "alloc" | "risk"
   );
 }
 
+
+function levelBadgeClass(color: string) {
+  if (color === "red") return "bg-red-600 text-white";
+  if (color === "orange") return "bg-orange-500 text-white";
+  return "bg-yellow-100 text-yellow-800";
+}
+
+function PromotionCard({ it, index }: { it: any; index: number }) {
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm text-slate-500">#{index + 1} · {it.styleCode}</p>
+          <p className="mt-1 text-lg font-black">{it.productName}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">시즌 {it.season} · 최초 출고일 {it.launchDate || "-"}</p>
+        </div>
+        <div className="text-right">
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${levelBadgeClass(it.levelColor)}`}>{it.promotionLevel}</span>
+          <p className="mt-2 text-sm font-black text-slate-700">{it.action}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="출고 후" value={`${Number(it.weeksSinceLaunch || 0).toFixed(1)}주`} />
+        <Stat label="온/오프 합산 재고" value={`${fmtNum(it.totalStock)}개`} colorClass="text-blue-600" />
+        <Stat label="재고주수" value={stockWeekText(it.stockWeeks)} colorClass={stockWeekClass(it.stockWeeks)} />
+        <Stat label="전주비" value={`${Number(it.salesChangeRate || 0) >= 0 ? "+" : ""}${Number(it.salesChangeRate || 0).toFixed(1)}%`} colorClass={Number(it.salesChangeRate || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
+      </div>
+
+      <ReasonBox title="제안 기준">
+        <ul className="space-y-1">
+          {(it.reasons || []).map((reason: string, idx: number) => <li key={idx}>✓ {reason}</li>)}
+        </ul>
+      </ReasonBox>
+    </div>
+  );
+}
+
+function PromotionSection({ data }: { data: any }) {
+  const seasons = data.promotionSeasons || ["전체"];
+  const [season, setSeason] = useState("전체");
+  const allItems = data.promotionSuggestions || [];
+  const items = season === "전체" ? allItems : allItems.filter((it: any) => it.season === season);
+
+  return (
+    <Card
+      title="프로모션 제안 TOP10"
+      tone="yellow"
+      right={
+        <select
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+        >
+          {seasons.map((s: string) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      }
+    >
+      <p className="mb-4 text-sm font-semibold text-slate-600">
+        최초 출고일, 시즌, 온/오프 합산 재고, 재고주수, 전주비를 기준으로 소진 촉진 후보를 제안합니다.
+      </p>
+      <div className="max-h-[860px] space-y-4 overflow-y-auto pr-3">
+        {items.length === 0 && <Empty />}
+        {items.slice(0, 10).map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
+      </div>
+    </Card>
+  );
+}
+
+
 function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over" }) {
   if (!items?.length) return <Empty />;
   return (
@@ -214,7 +284,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark2.9.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark3.1</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
@@ -232,6 +302,8 @@ export default function InventoryDashboard() {
         </section>
 
         <Briefing lines={data.aiBriefing || []} />
+
+        <PromotionSection data={data} />
 
         <section className="grid gap-6 xl:grid-cols-2">
           <Card title="품절 위험 점포 TOP5" tone="purple">

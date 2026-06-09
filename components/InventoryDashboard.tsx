@@ -216,7 +216,8 @@ function PromotionSection({ data }: { data: any }) {
   const seasons = data.promotionSeasons || ["전체"];
   const [season, setSeason] = useState("전체");
   const allItems = data.promotionSuggestions || [];
-  const items = season === "전체" ? allItems : allItems.filter((it: any) => it.season === season);
+  const filteredItems = season === "전체" ? allItems : allItems.filter((it: any) => it.season === season);
+  const items = [...filteredItems].sort((a: any, b: any) => Number(b.promotionScore || 0) - Number(a.promotionScore || 0)).slice(0, 10);
 
   return (
     <Card
@@ -237,7 +238,7 @@ function PromotionSection({ data }: { data: any }) {
       </p>
       <div className="max-h-[860px] space-y-4 overflow-y-auto pr-3">
         {items.length === 0 && <Empty />}
-        {items.slice(0, 10).map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
+        {items.map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
       </div>
     </Card>
   );
@@ -284,7 +285,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark3.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark3.1.1</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />

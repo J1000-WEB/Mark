@@ -88,3 +88,25 @@ export async function appendValues(range: string, values: any[][]) {
     requestBody: { values },
   });
 }
+
+
+export async function ensureSheetExists(title: string, header?: any[]) {
+  const sheets = await getSheetsClient();
+  const spreadsheetId = getSheetId();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === title);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title } } }],
+      },
+    });
+  }
+  if (header?.length) {
+    const values = await getSheetValues(title, "A1:Z1").catch(() => []);
+    if (!values?.[0]?.length) {
+      await updateValues(`'${title.replace(/'/g, "''")}'!A1:${String.fromCharCode(64 + header.length)}1`, [header]);
+    }
+  }
+}

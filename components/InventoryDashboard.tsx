@@ -54,7 +54,7 @@ function Briefing({ lines }: { lines: string[] }) {
 
 function RTCard({ it, index }: { it: any; index: number }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm text-slate-500">#{index + 1} · {it.styleCode}</p>
@@ -105,7 +105,7 @@ function RTCard({ it, index }: { it: any; index: number }) {
 
 function AllocationCard({ it, index }: { it: any; index: number }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm text-slate-500">#{index + 1} · {it.styleCode}</p>
@@ -117,7 +117,7 @@ function AllocationCard({ it, index }: { it: any; index: number }) {
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="점포 재고" value={`${fmtNum(it.storeStock)}개`} />
         <Stat label="온라인 가용" value={`${fmtNum(it.onlineStock)}개`} />
         <Stat label="재고주수" value={stockWeekText(it.offlineWeeks)} colorClass={stockWeekClass(it.offlineWeeks)} />
@@ -134,7 +134,7 @@ function AllocationCard({ it, index }: { it: any; index: number }) {
 
 function SimpleCard({ it, index, type }: { it: any; index: number; type: "risk" | "over" | "consign" }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
       <div className="flex justify-between gap-4">
         <div>
           <p className="text-sm text-slate-500">#{index + 1} · {it.styleCode}</p>
@@ -145,7 +145,7 @@ function SimpleCard({ it, index, type }: { it: any; index: number; type: "risk" 
           <p className="text-xs text-slate-500">금주 판매</p>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="점포 재고" value={`${fmtNum(it.storeStock ?? it.offlineStock)}개`} />
         <Stat label="온라인 가용" value={`${fmtNum(it.onlineStock)}개`} />
         <Stat label="재고주수" value={stockWeekText(it.offlineWeeks)} colorClass={stockWeekClass(it.offlineWeeks)} />
@@ -160,11 +160,11 @@ function SimpleCard({ it, index, type }: { it: any; index: number; type: "risk" 
   );
 }
 
-function ItemList({ items, type }: { items: any[]; type: "rt" | "alloc" | "risk" | "over" | "consign" }) {
+function ItemList({ items, type, maxHeight }: { items: any[]; type: "rt" | "alloc" | "risk" | "over" | "consign"; maxHeight?: string }) {
   if (!items?.length) return <Empty />;
 
   return (
-    <div className="space-y-4">
+    <div className={`${maxHeight || ""} space-y-2 overflow-y-auto pr-2`}>
       {items.map((it, i) => {
         if (type === "rt") return <RTCard key={`${it.styleCode}-${i}`} it={it} index={i} />;
         if (type === "alloc") return <AllocationCard key={`${it.styleCode}-${i}`} it={it} index={i} />;
@@ -173,7 +173,6 @@ function ItemList({ items, type }: { items: any[]; type: "rt" | "alloc" | "risk"
     </div>
   );
 }
-
 
 function levelBadgeClass(color: string) {
   if (color === "red") return "bg-red-600 text-white";
@@ -376,9 +375,9 @@ function ProductAnalysisSection({ data }: { data: any }) {
 function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over" }) {
   if (!items?.length) return <Empty />;
   return (
-    <div className="space-y-3">
+    <div className="max-h-[360px] space-y-2 overflow-y-auto pr-2">
       {items.map((s, i) => (
-        <div key={`${s.storeName}-${i}`} className="flex items-center justify-between rounded-2xl bg-white p-4">
+        <div key={`${s.storeName}-${i}`} className="flex items-center justify-between rounded-2xl bg-white p-3">
           <div>
             <p className="text-xs text-slate-500">#{i + 1}</p>
             <p className="font-black">{s.storeName}</p>
@@ -413,7 +412,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.2</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.3.1.1</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
@@ -445,25 +444,25 @@ export default function InventoryDashboard() {
 
         <section className="grid gap-6 xl:grid-cols-2">
           <Card title="RT 이동 제안 TOP5">
-            <ItemList items={data.rtSuggestions || []} type="rt" />
+            <ItemList items={data.rtSuggestions || []} type="rt" maxHeight="h-[520px]" />
           </Card>
           <Card title="물류 추가 할당 제안 TOP5">
-            <ItemList items={data.allocationSuggestions || []} type="alloc" />
+            <ItemList items={data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
           </Card>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-2">
           <Card title="품절 위험 상품 TOP10">
-            <ItemList items={data.stockoutRisk || []} type="risk" />
+            <ItemList items={data.stockoutRisk || []} type="risk" maxHeight="h-[520px]" />
           </Card>
           <Card title="과재고 상품 TOP10">
-            <ItemList items={data.overstockRisk || []} type="over" />
+            <ItemList items={data.overstockRisk || []} type="over" maxHeight="h-[520px]" />
           </Card>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-2">
           <Card title="위탁 상품 투입 추천" tone="beige">
-            <ItemList items={data.consignmentRecommendations || []} type="consign" />
+            <ItemList items={data.consignmentRecommendations || []} type="consign" maxHeight="h-[420px]" />
           </Card>
           <Card title="운영 프로세스 제안" tone="yellow">
             <ul className="space-y-3 text-sm leading-6 text-slate-700">

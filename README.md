@@ -99,3 +99,10 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - app/layout.tsx 구조 복구
 - app/globals.css에 Tailwind CSS 분리
 - root layout.tsx 오배치 방지
+
+
+## Mark4 Alpha.3
+- 루트 layout.tsx / route.ts 오배치 파일 제거
+- app/inventory/page.tsx 구조 복구
+- app/insights/page.tsx 구조 확인
+- route.ts에 JSX가 들어가는 오류 방지

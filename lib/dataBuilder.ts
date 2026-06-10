@@ -15,6 +15,24 @@ function num(v: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+
+function parseDate(v: any) {
+  if (!v) return null as Date | null;
+  if (v instanceof Date) return v;
+  const s = text(v);
+  if (!s) return null as Date | null;
+  const normalized = s.replace(/[./]/g, "-").slice(0, 10);
+  const parts = normalized.split("-").map((x) => Number(x));
+  if (parts.length >= 3 && parts.every((x) => Number.isFinite(x))) {
+    let year = parts[0];
+    if (year < 100) year += 2000;
+    const d = new Date(year, parts[1] - 1, parts[2]);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function rate(current: number, previous: number) {
   if (!previous) return current ? 100 : 0;
   return ((current - previous) / previous) * 100;
@@ -41,6 +59,11 @@ function pickWeeklyCurrent(titles: string[]) {
 function pickWeeklyCompare(titles: string[]) {
   const candidates = titles.filter((t) => t.startsWith("전주("));
   return candidates[candidates.length - 1] || "전주(531)";
+}
+
+
+function pickProductSheet(titles: string[]) {
+  return titles.find((t) => t === "금주/전주") || titles.find((t) => t === "금주전주") || titles.find((t) => t.replace(/[\\/\s_]/g, "") === "금주전주") || "금주/전주";
 }
 
 function parseTargetSheet(sheetName: string, rows: any[][]) {
@@ -101,7 +124,9 @@ function parseProducts(rows: any[][]) {
     if (!storeName || !styleCode || !productName) continue;
     if (`${storeName}${styleCode}${productName}`.includes("합계")) continue;
 
+    const launch = parseDate(row[29]); // AD
     out.push({
+      season: text(row[0]) || "미지정", // A
       storeName,
       styleCode,
       productName,
@@ -110,6 +135,8 @@ function parseProducts(rows: any[][]) {
       weekAmount: num(row[23]), // X
       prevNet: num(row[26]), // AA
       prevAmount: num(row[27]), // AB
+      launchDate: launch ? launch.toISOString().slice(0, 10) : "",
+      launchTime: launch ? launch.getTime() : 0,
     });
   }
   return out;
@@ -122,12 +149,14 @@ function parseInventory(rows: any[][]) {
     const styleCode = text(row[4]); // E
     const productName = text(row[5]); // F
     if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
+    const tagPrice = num(row[11]); // L
+    const currentPrice = num(row[12]); // M
     const onlineStock = num(row[16]); // Q
     const offlineStock = num(row[17]); // R
     const totalStock = num(row[18]); // S
-    if (!onlineStock && !offlineStock && !totalStock) continue;
+    if (!onlineStock && !offlineStock && !totalStock && !tagPrice && !currentPrice) continue;
 
-    out.push({ styleCode, productName, onlineStock, offlineStock, totalStock });
+    out.push({ styleCode, productName, tagPrice, currentPrice, onlineStock, offlineStock, totalStock });
   }
   return out;
 }
@@ -188,7 +217,254 @@ function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] 
   });
 }
 
+
+function seasonBonus(season: string) {
+  if (season.includes("여름")) return 35;
+  if (season.includes("봄")) return -25;
+  if (season.includes("이월")) return 5;
+  return 0;
+}
+
+
+function buildPriceSuggestion(tagPrice: number, currentPrice: number, levelColor: string, stockWeeks: number, salesChangeRate: number) {
+  const basePrice = currentPrice || tagPrice || 0;
+  let discountRate = 0;
+
+  if (levelColor === "red" || stockWeeks >= 20 || salesChangeRate <= -30) discountRate = 20;
+  else if (levelColor === "orange" || stockWeeks >= 12 || salesChangeRate <= -20) discountRate = 10;
+  else discountRate = 0;
+
+  const promotionPrice = basePrice ? Math.round((basePrice * (100 - discountRate)) / 100 / 100) * 100 : 0;
+  return {
+    tagPrice: tagPrice || 0,
+    currentPrice: currentPrice || 0,
+    promotionPrice,
+    discountRate,
+  };
+}
+
+function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
+  const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
+  const map = new Map<string, any>();
+
+  for (const r of productRows.filter((x) => !isShop(x.storeName))) {
+    const season = r.season || "미지정";
+    const key = `${season}__${r.styleCode}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        season,
+        styleCode: r.styleCode,
+        productName: r.productName,
+        launchDate: r.launchDate || "",
+        launchTime: r.launchTime || 0,
+        storeStock: 0,
+        weekNet: 0,
+        weekAmount: 0,
+        prevNet: 0,
+        prevAmount: 0,
+      });
+    }
+    const item = map.get(key);
+    if (r.launchTime && (!item.launchTime || r.launchTime < item.launchTime)) {
+      item.launchTime = r.launchTime;
+      item.launchDate = r.launchDate || "";
+    }
+    item.storeStock += Number(r.storeStock || 0);
+    item.weekNet += Number(r.weekNet || 0);
+    item.weekAmount += Number(r.weekAmount || 0);
+    item.prevNet += Number(r.prevNet || 0);
+    item.prevAmount += Number(r.prevAmount || 0);
+  }
+
+  const now = new Date();
+  const suggestions: any[] = [];
+
+  for (const item of map.values()) {
+    const inv: any = invMap.get(item.styleCode) || {};
+    const onlineStock = Number(inv.onlineStock || 0);
+    const offlineStock = Number(inv.offlineStock || 0);
+    const totalStock = Number(inv.totalStock || 0) || item.storeStock + onlineStock;
+    const weekNet = Math.max(0, Number(item.weekNet || 0));
+    const prevNet = Math.max(0, Number(item.prevNet || 0));
+    const stockWeeks = weekNet > 0 ? totalStock / weekNet : totalStock > 0 ? 999 : 0;
+    const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
+    const salesChangeRate = !prevNet ? (weekNet ? 100 : 0) : ((weekNet - prevNet) / prevNet) * 100;
+    const amountChangeRate = !item.prevAmount ? (item.weekAmount ? 100 : 0) : ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100;
+
+    let score = 0;
+    score += seasonBonus(item.season);
+    score += Math.min(45, Math.max(0, weeksSinceLaunch - 2) * 3);
+    score += Math.min(70, stockWeeks >= 999 ? 70 : stockWeeks * 3);
+    if (totalStock >= 50) score += 8;
+    if (totalStock >= 100) score += 8;
+    if (totalStock >= 300) score += 10;
+    if (totalStock >= 500) score += 12;
+    if (salesChangeRate <= 0) score += 10;
+    if (salesChangeRate <= -10) score += 10;
+    if (salesChangeRate <= -20) score += 10;
+    if (weekNet <= 2 && totalStock >= 100) score += 12;
+
+    if (totalStock < 30) continue;
+    if (!(stockWeeks >= 5 || totalStock >= 100 || salesChangeRate <= 0)) continue;
+
+    let action = "노출/진열 강화";
+    let promotionLevel = "관찰";
+    let levelColor = "yellow";
+
+    if (stockWeeks >= 20) {
+      action = "세트/쿠폰 프로모션 검토";
+      promotionLevel = "즉시 프로모션 검토";
+      levelColor = "red";
+    } else if (stockWeeks >= 12 || salesChangeRate <= -20) {
+      action = "10% 프로모션 검토";
+      promotionLevel = "프로모션 검토";
+      levelColor = "orange";
+    } else if (String(item.season).includes("여름")) {
+      action = "노출/진열 강화 및 반응 체크";
+      promotionLevel = "여름상품 관찰";
+      levelColor = "yellow";
+    }
+
+    const priceSuggestion = buildPriceSuggestion(Number(inv.tagPrice || 0), Number(inv.currentPrice || 0), levelColor, stockWeeks, salesChangeRate);
+
+    suggestions.push({
+      ...item,
+      onlineStock,
+      offlineStock,
+      totalStock,
+      tagPrice: priceSuggestion.tagPrice,
+      currentPrice: priceSuggestion.currentPrice,
+      promotionPrice: priceSuggestion.promotionPrice,
+      discountRate: priceSuggestion.discountRate,
+      weeksSinceLaunch,
+      stockWeeks,
+      salesChangeRate,
+      amountChangeRate,
+      promotionScore: score,
+      promotionLevel,
+      levelColor,
+      action,
+      reasons: [
+        `최초 출고 후 ${weeksSinceLaunch.toFixed(1)}주 경과`,
+        `온/오프 합산 재고 ${Math.round(totalStock).toLocaleString("ko-KR")}개`,
+        stockWeeks >= 999 ? "주간 판매 없음" : `재고주수 ${stockWeeks.toFixed(1)}주`,
+        `전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%`,
+        `시즌 ${item.season}`,
+      ],
+    });
+  }
+
+  const seasons = [...new Set([...map.values()].map((x: any) => x.season).filter((x: string) => x && x !== "#N/A"))].sort();
+  return {
+    promotionSeasons: ["전체", ...seasons],
+    promotionSuggestions: suggestions.sort((a, b) => Number(b.promotionScore || 0) - Number(a.promotionScore || 0)),
+  };
+}
+
+
+function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
+  const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
+  const map = new Map<string, any>();
+
+  for (const r of productRows.filter((x) => !isShop(x.storeName))) {
+    const key = r.styleCode;
+    if (!key) continue;
+    if (!map.has(key)) {
+      map.set(key, {
+        season: r.season || "미지정",
+        styleCode: r.styleCode,
+        productName: r.productName,
+        launchDate: r.launchDate || "",
+        launchTime: r.launchTime || 0,
+        storeStock: 0,
+        weekNet: 0,
+        weekAmount: 0,
+        prevNet: 0,
+        prevAmount: 0,
+        stores: [] as any[],
+      });
+    }
+    const item = map.get(key);
+    if (r.launchTime && (!item.launchTime || r.launchTime < item.launchTime)) {
+      item.launchTime = r.launchTime;
+      item.launchDate = r.launchDate || "";
+    }
+    item.storeStock += Number(r.storeStock || 0);
+    item.weekNet += Number(r.weekNet || 0);
+    item.weekAmount += Number(r.weekAmount || 0);
+    item.prevNet += Number(r.prevNet || 0);
+    item.prevAmount += Number(r.prevAmount || 0);
+    item.stores.push({
+      storeName: r.storeName,
+      storeStock: Number(r.storeStock || 0),
+      weekNet: Number(r.weekNet || 0),
+      weekAmount: Number(r.weekAmount || 0),
+    });
+  }
+
+  const now = new Date();
+  return [...map.values()].map((item: any) => {
+    const inv: any = invMap.get(item.styleCode) || {};
+    const onlineStock = Number(inv.onlineStock || 0);
+    const offlineStock = Number(inv.offlineStock || 0);
+    const totalStock = Number(inv.totalStock || 0) || item.storeStock + onlineStock;
+    const weekNet = Math.max(0, Number(item.weekNet || 0));
+    const prevNet = Math.max(0, Number(item.prevNet || 0));
+    const stockWeeks = weekNet > 0 ? totalStock / weekNet : totalStock > 0 ? 999 : 0;
+    const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
+    const salesChangeRate = !prevNet ? (weekNet ? 100 : 0) : ((weekNet - prevNet) / prevNet) * 100;
+    const amountChangeRate = !item.prevAmount ? (item.weekAmount ? 100 : 0) : ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100;
+
+    let levelColor = "yellow";
+    let promotionLevel = "정상/관찰";
+    let action = "가격 유지 + 노출 반응 체크";
+
+    if (stockWeeks >= 20 || salesChangeRate <= -30) {
+      levelColor = "red";
+      promotionLevel = "부진/즉시 가격조정 검토";
+      action = "20% 가격조정 또는 세트/쿠폰 검토";
+    } else if (stockWeeks >= 12 || salesChangeRate <= -20) {
+      levelColor = "orange";
+      promotionLevel = "프로모션 검토";
+      action = "10% 가격조정 검토";
+    } else if (stockWeeks >= 8 || salesChangeRate < 0) {
+      promotionLevel = "관찰";
+      action = "노출/진열 강화 후 1~2주 반응 체크";
+    }
+
+    const priceSuggestion = buildPriceSuggestion(Number(inv.tagPrice || 0), Number(inv.currentPrice || 0), levelColor, stockWeeks, salesChangeRate);
+    const topStores = [...item.stores].sort((a: any, b: any) => b.weekAmount - a.weekAmount).slice(0, 5);
+    const riskyStores = [...item.stores]
+      .map((s: any) => ({
+        ...s,
+        stockWeeks: Number(s.weekNet || 0) > 0 ? Number(s.storeStock || 0) / Number(s.weekNet || 0) : Number(s.storeStock || 0) > 0 ? 999 : 0,
+      }))
+      .sort((a: any, b: any) => a.stockWeeks - b.stockWeeks)
+      .slice(0, 5);
+
+    return {
+      ...item,
+      ...priceSuggestion,
+      onlineStock,
+      offlineStock,
+      totalStock,
+      stockWeeks,
+      weeksSinceLaunch,
+      salesChangeRate,
+      amountChangeRate,
+      promotionLevel,
+      levelColor,
+      action,
+      topStores,
+      riskyStores,
+      aiReview: `${item.productName}은 출고 후 ${weeksSinceLaunch.toFixed(1)}주 경과, 전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%, 온/오프 합산 재고 ${Math.round(totalStock).toLocaleString("ko-KR")}개, 재고주수 ${stockWeeks >= 999 ? "판매없음" : `${stockWeeks.toFixed(1)}주`}입니다. ${action}가 적절합니다.`,
+    };
+  });
+}
+
 function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
+  const promotion = buildPromotionSuggestions(productRows, inventoryRows);
+  const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => !isShop(r.storeName));
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const allProducts = aggregateProducts(coreProducts, undefined, 9999);
@@ -309,7 +585,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   });
 
   return {
-    periodLabel: "재고CTRL 기준: 금주전주 판매/점포재고 + 온오프재고현황 Q/R/S",
+    periodLabel: "재고CTRL 기준: 금주/전주 판매/점포재고 + 온오프재고현황 Q/R/S",
     stockoutRisk: stockoutRisk.sort((a, b) => a.offlineWeeks - b.offlineWeeks).slice(0, 10),
     overstockRisk: overstockRisk.sort((a, b) => b.offlineWeeks - a.offlineWeeks).slice(0, 10),
     allocationSuggestions: allocationSuggestions.sort((a, b) => b.weekAmount - a.weekAmount).slice(0, 5),
@@ -317,10 +593,13 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     consignmentRecommendations,
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     overstockStoreTop5: finalize(send).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
+    ...promotion,
+    productAnalysisList,
     aiBriefing: [
       `RT 이동 우선 검토 대상은 ${rtSuggestions.length}건입니다.`,
       `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
+      `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, 시즌별로 선택해 확인할 수 있습니다.`,
       "RT는 목표 재고주수 4주를 기준으로 이동수량을 계산합니다.",
     ],
   };
@@ -335,7 +614,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyCompare = pickWeeklyCompare(titles);
   const prevMonth = pickTitle(titles, "전월마감(2604)", "전월마감");
   const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
-  const productSheet = pickTitle(titles, "금주전주");
+  const productSheet = pickProductSheet(titles);
   const inventorySheet = pickTitle(titles, "온오프재고현황");
 
   const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet]

@@ -1,6 +1,6 @@
 {
-  "name": "sales-review-dashboard-mark3-1-2-google",
-  "version": "3.1.2",
+  "name": "sales-review-dashboard-mark4-alpha",
+  "version": "4.0.0-alpha",
   "private": true,
   "scripts": {
     "dev": "next dev",

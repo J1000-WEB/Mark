@@ -181,6 +181,11 @@ function levelBadgeClass(color: string) {
   return "bg-yellow-100 text-yellow-800";
 }
 
+function priceText(value: any) {
+  const n = Number(value || 0);
+  return n ? `${fmtNum(n)}원` : "-";
+}
+
 function PromotionCard({ it, index }: { it: any; index: number }) {
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -203,9 +208,17 @@ function PromotionCard({ it, index }: { it: any; index: number }) {
         <Stat label="전주비" value={`${Number(it.salesChangeRate || 0) >= 0 ? "+" : ""}${Number(it.salesChangeRate || 0).toFixed(1)}%`} colorClass={Number(it.salesChangeRate || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
       </div>
 
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="TAG가" value={priceText(it.tagPrice)} />
+        <Stat label="현재판매가" value={priceText(it.currentPrice)} />
+        <Stat label="추천 프로모션가" value={priceText(it.promotionPrice)} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
+        <Stat label="권장 할인율" value={`${Number(it.discountRate || 0)}%`} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
+      </div>
+
       <ReasonBox title="제안 기준">
         <ul className="space-y-1">
           {(it.reasons || []).map((reason: string, idx: number) => <li key={idx}>✓ {reason}</li>)}
+          {Number(it.discountRate || 0) > 0 && <li>✓ 가격 제안: TAG가 → 프로모션가 → 할인율 기준 표시</li>}
         </ul>
       </ReasonBox>
     </div>
@@ -240,6 +253,96 @@ function PromotionSection({ data }: { data: any }) {
         {items.length === 0 && <Empty />}
         {items.map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
       </div>
+    </Card>
+  );
+}
+
+
+
+function ProductAnalysisSection({ data }: { data: any }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<any>(null);
+  const products = data.productAnalysisList || [];
+
+  function search() {
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+    const found = products.find((p: any) => String(p.styleCode || "").toLowerCase() === q)
+      || products.find((p: any) => String(p.styleCode || "").toLowerCase().includes(q))
+      || products.find((p: any) => String(p.productName || "").toLowerCase().includes(q));
+    setSelected(found || null);
+  }
+
+  return (
+    <Card title="상품 AI 분석" tone="purple">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-slate-900"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") search(); }}
+          placeholder="품번을 입력하세요. 예: GF2LOP507"
+        />
+        <button type="button" onClick={search} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white">분석하기</button>
+      </div>
+
+      {!selected && (
+        <div className="mt-4 rounded-2xl bg-white/70 p-5 text-sm font-semibold text-slate-600">
+          품번을 검색하면 판매 추이, 재고주수, 온/오프 재고, 가격조정 제안, AI 리뷰를 표시합니다.
+        </div>
+      )}
+
+      {selected && (
+        <div className="mt-5 space-y-4">
+          <div className="rounded-3xl bg-white p-5">
+            <p className="text-sm text-slate-500">{selected.season} · {selected.styleCode}</p>
+            <h3 className="mt-1 text-2xl font-black">{selected.productName}</h3>
+            <p className="mt-2 text-sm font-semibold text-slate-600">최초 출고일 {selected.launchDate || "-"} · 출고 후 {Number(selected.weeksSinceLaunch || 0).toFixed(1)}주</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="금주 판매수량" value={`${fmtNum(selected.weekNet)}개`} />
+            <Stat label="전주 판매수량" value={`${fmtNum(selected.prevNet)}개`} />
+            <Stat label="전주비" value={`${Number(selected.salesChangeRate || 0) >= 0 ? "+" : ""}${Number(selected.salesChangeRate || 0).toFixed(1)}%`} colorClass={Number(selected.salesChangeRate || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
+            <Stat label="재고주수" value={stockWeekText(selected.stockWeeks)} colorClass={stockWeekClass(selected.stockWeeks)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="온라인 재고" value={`${fmtNum(selected.onlineStock)}개`} />
+            <Stat label="오프라인 재고" value={`${fmtNum(selected.offlineStock)}개`} />
+            <Stat label="합산 재고" value={`${fmtNum(selected.totalStock)}개`} colorClass="text-blue-600" />
+            <Stat label="금주 매출" value={won(selected.weekAmount)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="TAG가" value={priceText(selected.tagPrice)} />
+            <Stat label="현재판매가" value={priceText(selected.currentPrice)} />
+            <Stat label="추천 프로모션가" value={priceText(selected.promotionPrice)} colorClass={Number(selected.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
+            <Stat label="권장 할인율" value={`${Number(selected.discountRate || 0)}%`} colorClass={Number(selected.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
+          </div>
+
+          <ReasonBox title="AI 분석">
+            <p>{selected.aiReview}</p>
+          </ReasonBox>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <ReasonBox title="판매 우수 점포">
+              <ul className="space-y-1">
+                {(selected.topStores || []).slice(0, 5).map((s: any, i: number) => (
+                  <li key={`${s.storeName}-${i}`}>#{i + 1} {s.storeName} · {fmtNum(s.weekNet)}개 · {won(s.weekAmount)}</li>
+                ))}
+              </ul>
+            </ReasonBox>
+            <ReasonBox title="재고 점검 점포">
+              <ul className="space-y-1">
+                {(selected.riskyStores || []).slice(0, 5).map((s: any, i: number) => (
+                  <li key={`${s.storeName}-${i}`}>#{i + 1} {s.storeName} · 재고 {fmtNum(s.storeStock)}개 · {stockWeekText(s.stockWeeks)}</li>
+                ))}
+              </ul>
+            </ReasonBox>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -285,7 +388,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark3.1.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark3.2</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
@@ -342,9 +445,12 @@ export default function InventoryDashboard() {
               <li>• 1차: 점포간 RT로 부족 매장을 보완합니다.</li>
               <li>• 2차: RT로 해결이 어려운 품번은 물류 추가 할당을 요청합니다.</li>
               <li>• 3차: 위탁채널은 전사 TOP 상품과 가용재고를 함께 보고 투입 후보를 정합니다.</li>
+              <li>• 4차: 장기 미소진 상품은 프로모션/가격조정을 검토합니다.</li>
             </ul>
           </Card>
         </section>
+
+        <ProductAnalysisSection data={data} />
       </div>
     </main>
   );

@@ -1,0 +1,1 @@
+export default function Page(){return <div style={{padding:24}}><h1>📸 Snapshot Center (Mark4.3)</h1><p>일간 15:00 / 주간 월요일 11:00 / 월간 매월 2일 11:00</p><p>현재 OFF 상태</p></div>}

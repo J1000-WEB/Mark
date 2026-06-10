@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "daily" | "weekly" | "monthly" | "inventory" | "insights" }) {
+export default function NavTabs({ active }: { active: "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" }) {
   const tabs = [
     { key: "weekly", label: "주간", href: "/weekly" },
     { key: "inventory", label: "재고CTRL", href: "/inventory" },
     { key: "insights", label: "AI 인사이트", href: "/insights" },
+    { key: "snapshot", label: "📸 Snapshot", href: "/snapshot" },
     { key: "daily", label: "일간", href: "/daily" },
     { key: "monthly", label: "월간", href: "/monthly" },
   ] as const;

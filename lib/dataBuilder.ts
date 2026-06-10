@@ -42,6 +42,29 @@ function isShop(storeName: string) {
   return String(storeName || "").startsWith("오프라인_");
 }
 
+
+function normalizeSheetName(name: string) {
+  return String(name || "")
+    .replace(/[\\/\s_\-·.]/g, "")
+    .replace(/[()]/g, "")
+    .trim();
+}
+
+function pickNormalizedTitle(titles: string[], candidates: string[], fallback: string) {
+  const normalized = titles.map((title) => ({ title, norm: normalizeSheetName(title) }));
+  for (const candidate of candidates) {
+    const c = normalizeSheetName(candidate);
+    const exact = normalized.find((x) => x.title === candidate || x.norm === c);
+    if (exact) return exact.title;
+  }
+  for (const candidate of candidates) {
+    const c = normalizeSheetName(candidate);
+    const partial = normalized.find((x) => x.norm.includes(c) || c.includes(x.norm));
+    if (partial) return partial.title;
+  }
+  return fallback;
+}
+
 function pickTitle(titles: string[], exact: string, fallbackPrefix?: string) {
   if (titles.includes(exact)) return exact;
   if (fallbackPrefix) {
@@ -63,8 +86,9 @@ function pickWeeklyCompare(titles: string[]) {
 
 
 function pickProductSheet(titles: string[]) {
-  return titles.find((t) => t === "금주/전주") || titles.find((t) => t === "금주전주") || titles.find((t) => t.replace(/[\\/\s_]/g, "") === "금주전주") || "금주/전주";
+  return pickNormalizedTitle(titles, ["금주/전주", "금주전주", "금주_전주", "금주 전주"], "금주/전주");
 }
+
 
 function parseTargetSheet(sheetName: string, rows: any[][]) {
   let headerRow = -1;
@@ -615,7 +639,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const prevMonth = pickTitle(titles, "전월마감(2604)", "전월마감");
   const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
   const productSheet = pickProductSheet(titles);
-  const inventorySheet = pickTitle(titles, "온오프재고현황");
+  const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
 
   const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);

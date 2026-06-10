@@ -188,49 +188,61 @@ function priceText(value: any) {
 
 function PromotionCard({ it, index }: { it: any; index: number }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm text-slate-500">#{index + 1} · {it.styleCode}</p>
-          <p className="mt-1 text-lg font-black">{it.productName}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">시즌 {it.season} · 최초 출고일 {it.launchDate || "-"}</p>
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-500">#{index + 1} · {it.styleCode} · {it.season}</p>
+          <p className="mt-0.5 truncate text-base font-black">{it.productName}</p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-500">최초 출고 {it.launchDate || "-"} · 출고 후 {Number(it.weeksSinceLaunch || 0).toFixed(1)}주</p>
         </div>
-        <div className="text-right">
-          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${levelBadgeClass(it.levelColor)}`}>{it.promotionLevel}</span>
-          <p className="mt-2 text-sm font-black text-slate-700">{it.action}</p>
+        <div className="shrink-0 text-left sm:text-right">
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${levelBadgeClass(it.levelColor)}`}>{it.promotionLevel}</span>
+          <p className="mt-1 text-xs font-black text-slate-700">{it.action}</p>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="출고 후" value={`${Number(it.weeksSinceLaunch || 0).toFixed(1)}주`} />
-        <Stat label="온/오프 합산 재고" value={`${fmtNum(it.totalStock)}개`} colorClass="text-blue-600" />
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Stat label="합산재고" value={`${fmtNum(it.totalStock)}개`} colorClass="text-blue-600" />
         <Stat label="재고주수" value={stockWeekText(it.stockWeeks)} colorClass={stockWeekClass(it.stockWeeks)} />
         <Stat label="전주비" value={`${Number(it.salesChangeRate || 0) >= 0 ? "+" : ""}${Number(it.salesChangeRate || 0).toFixed(1)}%`} colorClass={Number(it.salesChangeRate || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
+        <Stat label="할인율" value={`${Number(it.discountRate || 0)}%`} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="TAG가" value={priceText(it.tagPrice)} />
-        <Stat label="현재판매가" value={priceText(it.currentPrice)} />
-        <Stat label="추천 프로모션가" value={priceText(it.promotionPrice)} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
-        <Stat label="권장 할인율" value={`${Number(it.discountRate || 0)}%`} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
+      <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="text-slate-500">TAG</p>
+          <p className="font-black">{priceText(it.tagPrice)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="text-slate-500">현재</p>
+          <p className="font-black">{priceText(it.currentPrice)}</p>
+        </div>
+        <div className="rounded-xl bg-rose-50 p-2">
+          <p className="text-rose-500">추천</p>
+          <p className="font-black text-rose-600">{priceText(it.promotionPrice)}</p>
+        </div>
       </div>
 
-      <ReasonBox title="제안 기준">
-        <ul className="space-y-1">
-          {(it.reasons || []).map((reason: string, idx: number) => <li key={idx}>✓ {reason}</li>)}
-          {Number(it.discountRate || 0) > 0 && <li>✓ 가격 제안: TAG가 → 프로모션가 → 할인율 기준 표시</li>}
-        </ul>
-      </ReasonBox>
+      <div className="mt-2 rounded-xl bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-600">
+        {(it.reasons || []).slice(0, 3).map((reason: string, idx: number) => <span key={idx} className="mr-3">✓ {reason}</span>)}
+      </div>
     </div>
   );
 }
 
+function normalizeSeason(value: any) {
+  return String(value || "").replace(/\s/g, "").trim();
+}
+
 function PromotionSection({ data }: { data: any }) {
-  const seasons = data.promotionSeasons || ["전체"];
-  const [season, setSeason] = useState("전체");
+  const rawSeasons = data.promotionSeasons || ["전체"];
   const allItems = data.promotionSuggestions || [];
-  const filteredItems = season === "전체" ? allItems : allItems.filter((it: any) => it.season === season);
+  const itemSeasons = Array.from(new Set(allItems.map((it: any) => it.season).filter(Boolean))) as string[];
+  const seasons = Array.from(new Set(["전체", ...rawSeasons.filter(Boolean), ...itemSeasons])) as string[];
+  const [season, setSeason] = useState("전체");
+  const filteredItems = season === "전체" ? allItems : allItems.filter((it: any) => normalizeSeason(it.season) === normalizeSeason(season));
   const items = [...filteredItems].sort((a: any, b: any) => Number(b.promotionScore || 0) - Number(a.promotionScore || 0)).slice(0, 10);
+  const avgWeeks = items.length ? items.reduce((s: number, it: any) => s + Number(it.stockWeeks >= 999 ? 0 : it.stockWeeks || 0), 0) / items.length : 0;
 
   return (
     <Card
@@ -246,17 +258,30 @@ function PromotionSection({ data }: { data: any }) {
         </select>
       }
     >
-      <p className="mb-4 text-sm font-semibold text-slate-600">
-        최초 출고일, 시즌, 온/오프 합산 재고, 재고주수, 전주비를 기준으로 소진 촉진 후보를 제안합니다.
+      <div className="mb-3 grid gap-2 md:grid-cols-3">
+        <div className="rounded-2xl bg-white/80 p-3">
+          <p className="text-xs font-semibold text-slate-500">선택 시즌</p>
+          <p className="mt-1 font-black">{season}</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-3">
+          <p className="text-xs font-semibold text-slate-500">후보 상품</p>
+          <p className="mt-1 font-black">{items.length}개</p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-3">
+          <p className="text-xs font-semibold text-slate-500">평균 재고주수</p>
+          <p className="mt-1 font-black">{avgWeeks ? `${avgWeeks.toFixed(1)}주` : "-"}</p>
+        </div>
+      </div>
+      <p className="mb-3 text-xs font-semibold text-slate-600">
+        시즌, 최초 출고일, 온/오프 합산 재고, 재고주수, 전주비, 가격을 기준으로 후보를 제안합니다.
       </p>
-      <div className="max-h-[860px] space-y-4 overflow-y-auto pr-3">
+      <div className="max-h-[760px] space-y-2 overflow-y-auto pr-2">
         {items.length === 0 && <Empty />}
         {items.map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
       </div>
     </Card>
   );
 }
-
 
 
 function ProductAnalysisSection({ data }: { data: any }) {
@@ -388,7 +413,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4 Alpha</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.2</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />

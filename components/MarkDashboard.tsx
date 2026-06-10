@@ -23,7 +23,7 @@ function BarList({ rows, field }: { rows: any[]; field: string }) {
   if (!rows.length) return <Empty />;
 
   return (
-    <div className="max-h-[690px] space-y-4 overflow-y-auto pr-3">
+    <div className="h-[760px] space-y-4 overflow-y-auto pr-3">
       {rows.map((r) => {
         const value = Number(r[field] || 0);
         const prev = field === "daySales" ? r.compareDaySales : r.compareWeekSales;
@@ -358,7 +358,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4 Alpha.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.2.3</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
@@ -403,20 +403,22 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active !== "monthly" && (
           <section className="grid items-start gap-6 lg:grid-cols-2">
             <Card title="매출관리 필요매장">
-              {active === "weekly" ? (
-                <>
+              <div className={active === "weekly" ? "h-[760px] overflow-y-auto pr-2" : ""}>
+                {active === "weekly" ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <ClickableStoreList title="호조 매장 TOP3" rows={weeklyGood} mode="good" selected={selectedReviewStore} onSelect={setReviewStore} />
+                      <ClickableStoreList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" selected={selectedReviewStore} onSelect={setReviewStore} />
+                    </div>
+                    {selectedReviewStore && <StoreDetailPanel storeName={selectedReviewStore} storeRow={selectedStoreRow} data={dashboardData} />}
+                  </>
+                ) : (
                   <div className="grid gap-4 md:grid-cols-2">
-                    <ClickableStoreList title="호조 매장 TOP3" rows={weeklyGood} mode="good" selected={selectedReviewStore} onSelect={setReviewStore} />
-                    <ClickableStoreList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" selected={selectedReviewStore} onSelect={setReviewStore} />
+                    <StoreMiniList title="호조 매장 TOP3" rows={weeklyGood} mode="good" />
+                    <StoreMiniList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" />
                   </div>
-                  {selectedReviewStore && <StoreDetailPanel storeName={selectedReviewStore} storeRow={selectedStoreRow} data={dashboardData} />}
-                </>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <StoreMiniList title="호조 매장 TOP3" rows={weeklyGood} mode="good" />
-                  <StoreMiniList title="부진 매장 TOP3" rows={weeklyBad} mode="bad" />
-                </div>
-              )}
+                )}
+              </div>
             </Card>
             <Card title={active === "daily" ? "매장별 일매출 순위" : "매장별 주간 매출 순위"}>
               <BarList rows={ranking} field={field} />
@@ -427,11 +429,11 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active === "weekly" && (
           <>
             <section className="grid gap-6 lg:grid-cols-2">
-              <Card title="전사 TOP 상품">
-                <ProductList items={dashboardData.weekly?.companyTopProducts || []} />
+              <Card title="전사 TOP 상품 TOP20">
+                <ProductList items={dashboardData.weekly?.companyTopProducts || []} maxItems={20} compact />
               </Card>
               <Card
-                title="점포별 TOP 상품"
+                title="점포별 TOP 상품 TOP20"
                 right={
                   <select
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
@@ -442,7 +444,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                   </select>
                 }
               >
-                <ProductList items={storeProducts} />
+                <ProductList items={storeProducts} maxItems={20} compact />
               </Card>
             </section>
             <WeeklyInsightCards data={dashboardData} />

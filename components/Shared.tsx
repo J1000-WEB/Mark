@@ -49,23 +49,24 @@ export function Info({ label, value, color }: { label: string; value: string; co
   );
 }
 
-export function ProductList({ items }: { items: any[] }) {
-  if (!items?.length) return <Empty />;
+export function ProductList({ items, maxItems = 20, compact = false }: { items: any[]; maxItems?: number; compact?: boolean }) {
+  const rows = (items || []).slice(0, maxItems);
+  if (!rows?.length) return <Empty />;
   return (
-    <div className="space-y-3">
-      {items.map((p, i) => (
-        <div key={`${p.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-4">
+    <div className={`${compact ? "max-h-[520px]" : "max-h-[560px]"} space-y-2 overflow-y-auto pr-2`}>
+      {rows.map((p, i) => (
+        <div key={`${p.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3">
           <div className="flex justify-between gap-4">
-            <div>
-              <p className="text-sm text-slate-500">#{i + 1} · {p.styleCode}</p>
-              <p className="font-black">{p.productName}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-slate-500">#{i + 1} · {p.styleCode}</p>
+              <p className="truncate text-sm font-black">{p.productName}</p>
             </div>
-            <div className="text-right">
-              <p className="text-lg font-black">{won(p.weekAmount)}</p>
+            <div className="shrink-0 text-right">
+              <p className="text-base font-black">{won(p.weekAmount)}</p>
               <p className="text-xs text-slate-500">금주 매출</p>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
             <Info label="판매수량" value={`${fmtNum(p.weekNet)}개`} />
             <Info label="전주매출" value={won(p.prevAmount)} />
             <Info label="매출 신장률" value={`${p.amountChangeRate >= 0 ? "+" : ""}${pct(p.amountChangeRate)}`} color={p.amountChangeRate < 0 ? "red" : "blue"} />

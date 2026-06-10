@@ -187,6 +187,7 @@ function parseInventory(rows: any[][]) {
   const out: any[] = [];
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r] || [];
+    const season = text(row[0]) || "";
     const styleCode = text(row[4]); // E
     const productName = text(row[5]); // F
     if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
@@ -197,7 +198,7 @@ function parseInventory(rows: any[][]) {
     const totalStock = num(row[18]); // S
     if (!onlineStock && !offlineStock && !totalStock && !tagPrice && !currentPrice) continue;
 
-    out.push({ styleCode, productName, tagPrice, currentPrice, onlineStock, offlineStock, totalStock });
+    out.push({ season, styleCode, productName, tagPrice, currentPrice, onlineStock, offlineStock, totalStock });
   }
   return out;
 }
@@ -322,6 +323,7 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
 
   for (const item of map.values()) {
     const inv: any = invMap.get(item.styleCode) || {};
+    if (inv.season && (!item.season || item.season === "미지정" || item.season === "#N/A")) item.season = inv.season;
     const onlineStock = Number(inv.onlineStock || 0);
     const offlineStock = Number(inv.offlineStock || 0);
     const totalStock = Number(inv.totalStock || 0) || item.storeStock + onlineStock;
@@ -446,6 +448,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   const now = new Date();
   return [...map.values()].map((item: any) => {
     const inv: any = invMap.get(item.styleCode) || {};
+    if (inv.season && (!item.season || item.season === "미지정" || item.season === "#N/A")) item.season = inv.season;
     const onlineStock = Number(inv.onlineStock || 0);
     const offlineStock = Number(inv.offlineStock || 0);
     const totalStock = Number(inv.totalStock || 0) || item.storeStock + onlineStock;
@@ -676,12 +679,12 @@ export async function buildDashboardDataFromGoogleSheet() {
 
   const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
   const storeTopProducts: Record<string, any[]> = {};
-  for (const store of storeNames) storeTopProducts[store] = aggregateProducts(coreProductRows, store, 10);
-  const companyTopProducts = aggregateProducts(coreProductRows, undefined, 10);
+  for (const store of storeNames) storeTopProducts[store] = aggregateProducts(coreProductRows, store, 20);
+  const companyTopProducts = aggregateProducts(coreProductRows, undefined, 20);
 
   const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => !isShop(r.storeName));
   const coreWeekSales = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
-  const top10Amount = companyTopProducts.reduce((s, p) => s + Number(p.weekAmount || 0), 0);
+  const top10Amount = companyTopProducts.slice(0, 10).reduce((s, p) => s + Number(p.weekAmount || 0), 0);
   const top10Concentration = coreWeekSales ? (top10Amount / coreWeekSales) * 100 : 0;
 
   const entrants = companyTopProducts

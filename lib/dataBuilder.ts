@@ -116,19 +116,36 @@ function parseTargetSheet(sheetName: string, rows: any[][]) {
     if (!storeName && no.startsWith("합계")) storeName = "합계";
     if (!storeName || storeName === "합계" || storeName === "채널명") continue;
 
+    const dayTarget = num(row[base]);
+    const daySales = num(row[base + 1]);
+    const dayRate = num(row[base + 2]);
+    const weekTarget = num(row[base + 3]);
+    const rawWeekSales = num(row[base + 4]);
+    const rawWeekRate = num(row[base + 5]);
+    const monthBaseTarget = num(row[base + 6]);
+    const monthTarget = num(row[base + 7]);
+    const monthSales = num(row[base + 8]);
+    const monthRateA = num(row[base + 9]);
+    const monthRate = num(row[base + 10]);
+
+    // 일부 차주 시트는 주실적의 실적 칸이 비어 있고, 실제 누적 매출이 월판매 실적 칸에 들어옵니다.
+    // 주간 화면/매장 순위는 이 값을 현재 주간 실적으로 사용해야 하므로 fallback 처리합니다.
+    const weekSales = rawWeekSales || monthSales;
+    const weekRate = rawWeekRate || (weekTarget ? (weekSales / weekTarget) * 100 : 0);
+
     out.push({
       storeName,
-      dayTarget: num(row[base]),
-      daySales: num(row[base + 1]),
-      dayRate: num(row[base + 2]),
-      weekTarget: num(row[base + 3]),
-      weekSales: num(row[base + 4]),
-      weekRate: num(row[base + 5]),
-      monthBaseTarget: num(row[base + 6]),
-      monthTarget: num(row[base + 7]),
-      monthSales: num(row[base + 8]),
-      monthRateA: num(row[base + 9]),
-      monthRate: num(row[base + 10]),
+      dayTarget,
+      daySales,
+      dayRate,
+      weekTarget,
+      weekSales,
+      weekRate,
+      monthBaseTarget,
+      monthTarget,
+      monthSales,
+      monthRateA,
+      monthRate,
       yearTarget: num(row[base + 11]),
       yearSales: num(row[base + 12]),
       yearRate: num(row[base + 13]),

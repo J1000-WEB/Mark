@@ -106,3 +106,9 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - app/inventory/page.tsx 구조 복구
 - app/insights/page.tsx 구조 확인
 - route.ts에 JSX가 들어가는 오류 방지
+
+
+## Mark4 Alpha.4
+- 차주 시트 주실적 실적칸이 비어 있을 때 월판매 실적을 주간 매출로 fallback
+- 주간 매출 0원 표시 오류 수정
+- 매장별 주간 매출 순위 복구

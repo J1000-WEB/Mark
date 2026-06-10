@@ -93,3 +93,9 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - `금주/전주`, `금주전주`, `금주_전주`, `금주 전주` 모두 인식
 - `온오프재고현황`, `온/오프재고현황` 계열 모두 인식
 - Mark4 AI 인사이트 기능 유지
+
+
+## Mark4 Alpha.2
+- app/layout.tsx 구조 복구
+- app/globals.css에 Tailwind CSS 분리
+- root layout.tsx 오배치 방지

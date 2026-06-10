@@ -358,7 +358,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">오프라인 매출 리뷰 대시보드(소재천) Mark3.0.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4 Alpha.3</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}

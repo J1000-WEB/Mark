@@ -1,5 +1,5 @@
-import MarkDashboard from "@/components/MarkDashboard";
+import SnapshotDashboard from "@/components/SnapshotDashboard";
 
 export default function Page() {
-  return <MarkDashboard active="weekly" />;
+  return <SnapshotDashboard />;
 }

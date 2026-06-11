@@ -1,5 +1,5 @@
-import MarkDashboard from "@/components/MarkDashboard";
+import InsightsDashboard from "@/components/InsightsDashboard";
 
 export default function Page() {
-  return <MarkDashboard active="monthly" />;
+  return <InsightsDashboard />;
 }

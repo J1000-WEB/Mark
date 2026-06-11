@@ -143,3 +143,11 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 ## Mark4.3.3
 - package.json JSON 파싱 오류 복구
 - Mark4.3.2 Snapshot 압축 저장 기능 유지
+
+
+## Mark4.4
+- Snapshot 저장 시 Google Drive JSON 업로드 추가
+- GOOGLE_DRIVE_FOLDER_ID 환경변수 사용
+- Snapshot_Master Drive_URL 컬럼에 업로드 링크 저장
+- Snapshot History에서 Drive 열기 링크 표시
+- Drive 업로드 실패 시에도 시트 저장은 계속 진행

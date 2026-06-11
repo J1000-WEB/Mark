@@ -138,3 +138,8 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - Snapshot 저장 시 구글시트 셀 50,000자 제한 대응
 - Data_JSON을 AI 분석용 핵심 데이터로 압축 저장
 - TOP 리스트는 핵심 필드만 저장
+
+
+## Mark4.3.3
+- package.json JSON 파싱 오류 복구
+- Mark4.3.2 Snapshot 압축 저장 기능 유지

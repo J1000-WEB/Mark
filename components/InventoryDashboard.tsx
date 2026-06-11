@@ -412,7 +412,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.3.1.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.3.3.3.1</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />

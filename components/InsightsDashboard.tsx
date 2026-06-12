@@ -54,7 +54,7 @@ export default function InsightsDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">AI 인사이트 Mark4.5.3.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">AI 인사이트 Mark4.6.3.1</h1>
             <p className="mt-1 text-sm text-slate-500">Claude가 GENERAL IDEA 오프라인 영업 MD 관점으로 이번주 데이터를 분석합니다.</p>
           </div>
           <NavTabs active="insights" />

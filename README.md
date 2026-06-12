@@ -161,3 +161,11 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - 승인/보류/거절 상태 관리
 - LOGIC_CENTER_PASSWORD 환경변수 지원, 기본값 4885
 - Drive 업로드 파일 공개(anyone reader) 권한 부여 제거
+
+
+## Mark4.6
+- Claude Research Agent V1 추가
+- Snapshot_Master / Logic_Master / AI인사이트 / 현재 시트 구조를 묶은 Research Input Pack 생성
+- Claude Code/Claude Chat에 붙여넣을 수 있는 연구 프롬프트 생성
+- 주간 하단 관리자 메뉴에 Logic Center / Research Agent 버튼 배치
+- Logic Center는 여전히 수동 승인/보류/거절 구조 유지

@@ -40,7 +40,7 @@ export default function SnapshotDashboard() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "저장 실패");
-      setStatus(`저장 완료: ${data.summary}`);
+      setStatus(`저장 완료: ${data.summary}${data.driveUrl ? ' / Drive 업로드 완료' : ' / Drive 업로드 실패 또는 미연결'}`);
       await loadHistory();
     } catch (e: any) {
       setStatus(e?.message || "저장 실패");
@@ -58,8 +58,8 @@ export default function SnapshotDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">📸 Snapshot Center Mark4.3.3.3</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-500">현재 데이터 상태를 Snapshot_Master 시트에 압축 저장합니다.</p>
+            <h1 className="text-3xl font-black">📸 Snapshot Center Mark4.5</h1>
+            <p className="mt-1 text-sm font-semibold text-slate-500">현재 데이터 상태를 Snapshot_Master와 Google Drive에 압축 저장합니다.</p>
           </div>
           <NavTabs active="snapshot" />
         </header>
@@ -75,7 +75,7 @@ export default function SnapshotDashboard() {
             <div>
               <p className="text-sm font-bold text-slate-300">Snapshot Engine</p>
               <h2 className="mt-1 text-2xl font-black">수동 스냅샷 저장</h2>
-              <p className="mt-2 text-sm font-semibold text-slate-300">Drive 스크린샷 저장은 Mark4.4에서 연결 예정입니다. 현재는 JSON 데이터 저장입니다.</p>
+              <p className="mt-2 text-sm font-semibold text-slate-300">JSON 파일은 Google Drive에도 업로드됩니다. 스크린샷 저장은 다음 단계에서 연결 예정입니다.</p>
             </div>
             <button
               type="button"
@@ -108,7 +108,10 @@ export default function SnapshotDashboard() {
                     <p className="text-xs font-semibold text-slate-500">{r[0]} · {r[1]}</p>
                     <p className="mt-1 font-black">{r[2]}</p>
                   </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500">JSON 저장</span>
+                  <div className="flex gap-2">
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500">JSON 저장</span>
+                    {r[4] && <a href={r[4]} target="_blank" rel="noreferrer" className="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white">Drive 열기</a>}
+                  </div>
                 </div>
               </div>
             ))}

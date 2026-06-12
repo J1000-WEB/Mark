@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi, ProductList, StoreMiniList } from "@/components/Shared";
 import {
@@ -358,7 +359,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.3.3.3.1.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.5.3.1.3</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
@@ -473,6 +474,21 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               <ComingSoon title="점포별 월간 TOP 상품" />
             </section>
           </>
+        )}
+
+
+        {active === "weekly" && (
+          <section className="rounded-3xl border border-violet-100 bg-violet-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-black">🧠 Logic Center</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-600">Claude Chat/Code가 제안한 로직을 등록하고 승인·보류·거절합니다.</p>
+              </div>
+              <Link href="/logic" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white">
+                Logic Center 열기
+              </Link>
+            </div>
+          </section>
         )}
 
         <section className="grid gap-6 lg:grid-cols-2">

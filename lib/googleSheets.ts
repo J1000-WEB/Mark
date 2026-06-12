@@ -21,7 +21,7 @@ export async function getSheetsClient() {
   const auth = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    scopes: ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"],
   });
 
   await auth.authorize();
@@ -109,4 +109,49 @@ export async function ensureSheetExists(title: string, header?: any[]) {
       await updateValues(`'${title.replace(/'/g, "''")}'!A1:${String.fromCharCode(64 + header.length)}1`, [header]);
     }
   }
+}
+
+
+export function getDriveFolderId() {
+  const id = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!id) throw new Error("GOOGLE_DRIVE_FOLDER_ID is not set");
+  return id;
+}
+
+export async function getDriveClient() {
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!clientEmail) throw new Error("GOOGLE_CLIENT_EMAIL is not set");
+  if (!privateKey) throw new Error("GOOGLE_PRIVATE_KEY is not set");
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/drive.file"],
+  });
+
+  await auth.authorize();
+  return google.drive({ version: "v3", auth });
+}
+
+export async function uploadTextFileToDrive(fileName: string, content: string, mimeType = "application/json") {
+  const drive = await getDriveClient();
+  const folderId = getDriveFolderId();
+
+  const res = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [folderId],
+      mimeType,
+    },
+    media: {
+      mimeType,
+      body: content,
+    },
+    fields: "id,name,webViewLink,webContentLink",
+  });
+
+  const fileId = res.data.id;
+return res.data;
 }

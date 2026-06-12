@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { appendValues, ensureSheetExists, getSheetValues } from "@/lib/googleSheets";
+import { appendValues, ensureSheetExists, getSheetValues, uploadTextFileToDrive } from "@/lib/googleSheets";
 import { buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const SHEET = "Snapshot_Master";
-const HEADER = ["CreatedAt", "Type", "Summary", "Data_JSON", "Screenshot_URL"];
+const HEADER = ["CreatedAt", "Type", "Summary", "Data_JSON", "Drive_URL"];
 
 function n(v: any) {
   const x = Number(v || 0);
@@ -87,7 +87,7 @@ function makeSnapshot(data: any, type: string) {
   const inv = data.inventory || {};
   const weeklySales = weeklyRows.reduce((s: number, r: any) => s + n(r.weekSales), 0);
   const snapshot = {
-    version: "Mark4.3.3.3",
+    version: "Mark4.5",
     createdAt: new Date().toISOString(),
     type,
     schedules: {
@@ -110,7 +110,7 @@ function makeSnapshot(data: any, type: string) {
       promotionSuggestions: slimRows(inv.promotionSuggestions || [], 20),
     },
     ai: {
-      note: "Drive screenshot archive is prepared for Mark4.4. Current snapshot stores compact JSON only.",
+      note: "Snapshot compact JSON is stored in Google Sheet and uploaded to Google Drive. Screenshot archive is prepared for next step.",
     },
   };
 
@@ -130,6 +130,13 @@ export async function GET() {
   }
 }
 
+
+function fileSafeDate() {
+  const now = new Date();
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -145,10 +152,20 @@ export async function POST(req: Request) {
     const { snapshot, summary, dataJson } = makeSnapshot(data, type);
     await ensureSheetExists(SHEET, HEADER);
 
-    const createdAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-    await appendValues(`'${SHEET}'!A:E`, [[createdAt, type, summary, dataJson, ""]]);
+    let driveUrl = "";
+    let driveFileName = "";
+    try {
+      driveFileName = `snapshot-${type}-${fileSafeDate()}.json`;
+      const uploaded = await uploadTextFileToDrive(driveFileName, dataJson, "application/json");
+      driveUrl = uploaded.webViewLink || "";
+    } catch (driveError) {
+      console.error("Drive upload failed:", driveError);
+    }
 
-    return NextResponse.json({ ok: true, createdAt, type, summary, snapshot }, { headers: { "Cache-Control": "no-store" } });
+    const createdAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+    await appendValues(`'${SHEET}'!A:E`, [[createdAt, type, summary, dataJson, driveUrl]]);
+
+    return NextResponse.json({ ok: true, createdAt, type, summary, snapshot, driveUrl, driveFileName }, { headers: { "Cache-Control": "no-store" } });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Snapshot save failed" }, { status: 500 });
   }

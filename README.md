@@ -151,3 +151,13 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - Snapshot_Master Drive_URL 컬럼에 업로드 링크 저장
 - Snapshot History에서 Drive 열기 링크 표시
 - Drive 업로드 실패 시에도 시트 저장은 계속 진행
+
+
+## Mark4.5
+- Logic Center 추가
+- 주간 대시보드 하단 Logic Center 버튼 추가
+- Logic_Master 시트 자동 생성
+- Claude Chat/Claude Code 제안 붙여넣기 등록
+- 승인/보류/거절 상태 관리
+- LOGIC_CENTER_PASSWORD 환경변수 지원, 기본값 4885
+- Drive 업로드 파일 공개(anyone reader) 권한 부여 제거

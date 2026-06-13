@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSheetValues, getSpreadsheetTitles } from "@/lib/googleSheets";
+import { appendValues, ensureSheetExists, getSheetValues, getSpreadsheetTitles } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -142,5 +142,41 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, pack, prompt }, { headers: { "Cache-Control": "no-store" } });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Research pack build failed" }, { status: 500 });
+  }
+}
+
+
+const LOGIC_SHEET = "Logic_Master";
+const LOGIC_HEADER = ["CreatedAt","Category","Title","Proposal","Status","ApprovedBy"];
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const resultText = String(body.resultText || "");
+    const password = String(body.password || "");
+    if (password !== (process.env.LOGIC_CENTER_PASSWORD || "4885")) {
+      return NextResponse.json({ ok:false, error:"비밀번호 오류" }, { status:401 });
+    }
+
+    await ensureSheetExists(LOGIC_SHEET, LOGIC_HEADER);
+
+    const blocks = resultText.split("[로직 제안]").map(v=>v.trim()).filter(Boolean);
+    const proposals = blocks.length ? blocks : [resultText];
+
+    const now = new Date().toLocaleString("ko-KR",{timeZone:"Asia/Seoul"});
+    const rows = proposals.map((p,idx)=>[
+      now,
+      "Research",
+      `Research Proposal ${idx+1}`,
+      p,
+      "pending",
+      ""
+    ]);
+
+    await appendValues(`'${LOGIC_SHEET}'!A:F`, rows);
+
+    return NextResponse.json({ ok:true, count: rows.length });
+  } catch(e:any) {
+    return NextResponse.json({ ok:false, error:e?.message || "save failed" }, { status:500 });
   }
 }

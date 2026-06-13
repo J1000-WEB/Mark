@@ -59,7 +59,7 @@ export default function ResearchAgent() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">🔬 Claude Research Agent Mark4.6</h1>
+            <h1 className="text-3xl font-black">🔬 Claude Research Agent Mark4.7.1</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Snapshot, Logic, AI인사이트, 시트 구조를 묶어 Claude Code/Chat 연구용 프롬프트를 만듭니다.</p>
           </div>
           <NavTabs active="research" />
@@ -98,6 +98,12 @@ export default function ResearchAgent() {
               <Link href="/logic" className="rounded-2xl border border-white/30 px-5 py-3 text-sm font-black text-white">Logic Center 열기</Link>
             </div>
           </div>
+        
+</section>
+
+        <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+          <h2 className="text-xl font-black">Research 결과 등록</h2>
+          <p className="mt-2 text-sm">Claude 결과를 붙여넣고 pending 로직으로 저장</p>
         </section>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">

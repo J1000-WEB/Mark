@@ -87,7 +87,7 @@ function makeSnapshot(data: any, type: string) {
   const inv = data.inventory || {};
   const weeklySales = weeklyRows.reduce((s: number, r: any) => s + n(r.weekSales), 0);
   const snapshot = {
-    version: "Mark4.6",
+    version: "Mark4.7.2",
     createdAt: new Date().toISOString(),
     type,
     schedules: {

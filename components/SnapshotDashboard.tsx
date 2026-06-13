@@ -58,7 +58,7 @@ export default function SnapshotDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">📸 Snapshot Center Mark4.6</h1>
+            <h1 className="text-3xl font-black">📸 Snapshot Center Mark4.7.2</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">현재 데이터 상태를 Snapshot_Master와 Google Drive에 압축 저장합니다.</p>
           </div>
           <NavTabs active="snapshot" />

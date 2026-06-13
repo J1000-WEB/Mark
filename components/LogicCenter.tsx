@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 
 function Badge({ status }: { status: string }) {
@@ -102,13 +103,27 @@ export default function LogicCenter() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">🧠 Logic Center Mark4.6</h1>
+            <h1 className="text-3xl font-black">🧠 Logic Center Mark4.7.2</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Claude Chat/Code 제안을 붙여넣고 승인·보류·거절합니다.</p>
           </div>
           <NavTabs active="weekly" />
         </header>
 
         {status && <section className="rounded-2xl bg-blue-50 p-4 text-sm font-black text-blue-700">{status}</section>}
+
+
+        <section className="rounded-3xl border border-violet-100 bg-violet-50 p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black text-violet-500">RESEARCH AGENT</p>
+              <h2 className="text-xl font-black">🔬 Claude Research Agent</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-600">Snapshot, Logic, AI인사이트, 시트 구조를 묶어 Claude Code/Chat 연구 프롬프트를 생성합니다.</p>
+            </div>
+            <Link href="/research" className="rounded-2xl bg-violet-600 px-5 py-3 text-sm font-black text-white">
+              Research Agent 열기
+            </Link>
+          </div>
+        </section>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="text-xl font-black">Claude 제안 등록</h2>

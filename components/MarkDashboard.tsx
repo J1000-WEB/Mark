@@ -359,7 +359,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.6.3.1.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.7.2.3.1.3</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
@@ -491,21 +491,17 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           </Card>
         </section>
 
+
         {active === "weekly" && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <section className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-black text-slate-400">ADMIN ONLY</p>
-                <h2 className="text-lg font-black">관리자 메뉴</h2>
+                <p className="text-[11px] font-black text-slate-400">ADMIN ONLY</p>
+                <p className="text-sm font-black text-slate-700">관리자 메뉴</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Link href="/logic" className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white">
-                  🧠 Logic Center
-                </Link>
-                <Link href="/research" className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white">
-                  🔬 Research Agent
-                </Link>
-              </div>
+              <Link href="/logic" className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white">
+                🧠 Logic Center
+              </Link>
             </div>
           </section>
         )}

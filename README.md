@@ -169,3 +169,11 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - Claude Code/Claude Chat에 붙여넣을 수 있는 연구 프롬프트 생성
 - 주간 하단 관리자 메뉴에 Logic Center / Research Agent 버튼 배치
 - Logic Center는 여전히 수동 승인/보류/거절 구조 유지
+
+
+## Mark4.7.2
+- 상단 Research 메뉴 제거
+- Research Agent를 Logic Center 내부로 이동
+- 주간 맨 하단에는 Logic Center 버튼만 표시
+- Claude Code/Chat 연구 결과를 붙여넣으면 [로직 제안] 블록 자동 분리
+- 분리된 제안을 Logic_Master에 pending 상태로 저장

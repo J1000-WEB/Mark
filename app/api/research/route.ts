@@ -99,6 +99,59 @@ Priority: High/Medium/Low
 ${JSON.stringify(pack, null, 2)}`;
 }
 
+
+const LOGIC_SHEET = "Logic_Master";
+const LOGIC_HEADER = ["CreatedAt", "Category", "Title", "Proposal", "Status", "ApprovedBy"];
+
+function pickField(block: string, field: string) {
+  const re = new RegExp(`^${field}:\\s*([\\s\\S]*?)(?=^Category:|^Title:|^Problem:|^Condition_JSON:|^Action:|^Reason:|^Expected_Effect:|^Risk:|^Priority:|$)`, "im");
+  const m = block.match(re);
+  return (m?.[1] || "").trim();
+}
+
+function parseResearchResult(text: string) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const blocks = raw
+    .split(/\[로직 제안\]/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const sourceBlocks = blocks.length ? blocks : raw.split(/\n(?=Category:)/gi).map((x) => x.trim()).filter(Boolean);
+
+  const proposals = sourceBlocks.map((block, idx) => {
+    const category = pickField(block, "Category") || "General";
+    const title = pickField(block, "Title") || `Research 제안 ${idx + 1}`;
+    const problem = pickField(block, "Problem");
+    const condition = pickField(block, "Condition_JSON");
+    const action = pickField(block, "Action");
+    const reason = pickField(block, "Reason");
+    const expected = pickField(block, "Expected_Effect");
+    const risk = pickField(block, "Risk");
+    const priority = pickField(block, "Priority");
+
+    const proposal = [
+      problem ? `Problem:\n${problem}` : "",
+      condition ? `Condition_JSON:\n${condition}` : "",
+      action ? `Action:\n${action}` : "",
+      reason ? `Reason:\n${reason}` : "",
+      expected ? `Expected_Effect:\n${expected}` : "",
+      risk ? `Risk:\n${risk}` : "",
+      priority ? `Priority:\n${priority}` : "",
+      !problem && !condition && !action && !reason ? block : "",
+    ].filter(Boolean).join("\n\n");
+
+    return { category, title, proposal };
+  }).filter((x) => x.proposal.trim());
+
+  if (!proposals.length && raw) {
+    return [{ category: "General", title: "Research Agent 제안", proposal: raw }];
+  }
+
+  return proposals.slice(0, 10);
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -114,7 +167,7 @@ export async function GET(req: Request) {
 
     const pack = {
       generatedAt: new Date().toISOString(),
-      version: "Mark4.6",
+      version: "Mark4.7.2",
       purpose: "Claude Code/Claude Chat Research Agent input pack",
       snapshotMaster: {
         header: snapshotRows[0] || [],
@@ -146,37 +199,34 @@ export async function GET(req: Request) {
 }
 
 
-const LOGIC_SHEET = "Logic_Master";
-const LOGIC_HEADER = ["CreatedAt","Category","Title","Proposal","Status","ApprovedBy"];
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const resultText = String(body.resultText || "");
-    const password = String(body.password || "");
-    if (password !== (process.env.LOGIC_CENTER_PASSWORD || "4885")) {
-      return NextResponse.json({ ok:false, error:"비밀번호 오류" }, { status:401 });
+    if (!checkPassword(body.password)) {
+      return NextResponse.json({ ok: false, error: "비밀번호가 올바르지 않습니다." }, { status: 401 });
+    }
+
+    const proposals = parseResearchResult(String(body.resultText || ""));
+    if (!proposals.length) {
+      return NextResponse.json({ ok: false, error: "등록할 로직 제안을 찾지 못했습니다." }, { status: 400 });
     }
 
     await ensureSheetExists(LOGIC_SHEET, LOGIC_HEADER);
 
-    const blocks = resultText.split("[로직 제안]").map(v=>v.trim()).filter(Boolean);
-    const proposals = blocks.length ? blocks : [resultText];
-
-    const now = new Date().toLocaleString("ko-KR",{timeZone:"Asia/Seoul"});
-    const rows = proposals.map((p,idx)=>[
-      now,
-      "Research",
-      `Research Proposal ${idx+1}`,
-      p,
+    const createdAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+    const rows = proposals.map((p) => [
+      createdAt,
+      p.category,
+      p.title,
+      p.proposal,
       "pending",
-      ""
+      "",
     ]);
 
     await appendValues(`'${LOGIC_SHEET}'!A:F`, rows);
 
-    return NextResponse.json({ ok:true, count: rows.length });
-  } catch(e:any) {
-    return NextResponse.json({ ok:false, error:e?.message || "save failed" }, { status:500 });
+    return NextResponse.json({ ok: true, count: rows.length, proposals });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error?.message || "Research result save failed" }, { status: 500 });
   }
 }

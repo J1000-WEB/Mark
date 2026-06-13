@@ -1,6 +1,6 @@
 {
-  "name": "general-idea-dashboard-mark4-6",
-  "version": "4.7.1",
+  "name": "general-idea-dashboard-mark4-7-2",
+  "version": "4.7.2",
   "private": true,
   "scripts": {
     "dev": "next dev",

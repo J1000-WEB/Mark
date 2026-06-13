@@ -1,1 +1,2 @@
-module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };
+const nextConfig = {};
+export default nextConfig;

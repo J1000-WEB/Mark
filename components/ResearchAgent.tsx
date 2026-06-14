@@ -89,7 +89,7 @@ export default function ResearchAgent() {
             <h1 className="text-3xl font-black">🔬 Claude Research Agent Mark4.7.2</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Snapshot, Logic, AI인사이트, 시트 구조를 묶어 Claude Code/Chat 연구용 프롬프트를 만듭니다.</p>
           </div>
-          <NavTabs active="logic" />
+          <NavTabs active="weekly" />
         </header>
 
         {status && <section className="rounded-2xl bg-blue-50 p-4 text-sm font-black text-blue-700">{status}</section>}

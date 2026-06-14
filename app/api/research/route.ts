@@ -167,7 +167,7 @@ export async function GET(req: Request) {
 
     const pack = {
       generatedAt: new Date().toISOString(),
-      version: "Mark4.8.1",
+      version: "Mark4.7.2",
       purpose: "Claude Code/Claude Chat Research Agent input pack",
       snapshotMaster: {
         header: snapshotRows[0] || [],

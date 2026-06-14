@@ -1,1 +1,2 @@
-{"name":"research-agent","version":"1.0.0","private":true,"scripts":{"agent":"node agent.js"}}
+const nextConfig = {};
+export default nextConfig;

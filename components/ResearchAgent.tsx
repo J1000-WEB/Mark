@@ -86,7 +86,7 @@ export default function ResearchAgent() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">🔬 Claude Research Agent Mark4.7.2</h1>
+            <h1 className="text-3xl font-black">🔬 Claude Research Agent Mark4.8.1</h1>
             <p className="mt-1 text-sm font-semibold text-slate-500">Snapshot, Logic, AI인사이트, 시트 구조를 묶어 Claude Code/Chat 연구용 프롬프트를 만듭니다.</p>
           </div>
           <NavTabs active="logic" />

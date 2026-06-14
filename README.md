@@ -177,3 +177,11 @@ Google Sheet 연동 실패 시 내장 데이터로 자동 fallback 됩니다.
 - 주간 맨 하단에는 Logic Center 버튼만 표시
 - Claude Code/Chat 연구 결과를 붙여넣으면 [로직 제안] 블록 자동 분리
 - 분리된 제안을 Logic_Master에 pending 상태로 저장
+
+
+## Mark4.8.1
+- Research Agent 폴더 추가
+- Vercel 빌드와 분리된 로컬 PC용 Agent skeleton
+- vercel.json 정상 JSON으로 고정
+- .vercelignore에 research-agent 제외 추가
+- Claude CLI 자동 호출은 아직 미구현

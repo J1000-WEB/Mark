@@ -1,1 +1,2 @@
-console.log('Mark4.8 Research Agent started'); setInterval(()=>console.log('[Agent] watching Research_Request...'),300000);
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />

@@ -1,0 +1,13 @@
+{
+  "name": "mark-research-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "agent": "node agent.js",
+    "check": "node agent.js --check"
+  },
+  "dependencies": {
+    "googleapis": "^140.0.1"
+  }
+}

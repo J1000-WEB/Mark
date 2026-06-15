@@ -244,19 +244,38 @@ function aggregateProducts(rows: any[], storeName?: string, top = 10) {
 function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] = []) {
   const compareMap = new Map(compareRows.map((r: any) => [r.storeName, r]));
   const yearMap = new Map(yearRows.map((r: any) => [r.storeName, r]));
+
   return currentRows.map((r: any) => {
     const prev: any = compareMap.get(r.storeName) || {};
     const year: any = yearMap.get(r.storeName) || {};
+
+    // Mark4.8 weekly fix:
+    // 일부 차주/전주 목표 시트는 주실적 실적칸이 비어 있고 월누계만 들어옵니다.
+    // 이때 주간매출을 월누계 전체로 쓰면 전전주+전주가 합산되어 과대계상됩니다.
+    // 따라서 현재 월누계 - 비교 월누계를 주간 실적으로 보정합니다.
+    const currentRawWeekSales = Number(r.weekSales || 0);
+    const prevRawWeekSales = Number(prev.weekSales || 0);
+    const currentMonthSales = Number(r.monthSales || 0);
+    const prevMonthSales = Number(prev.monthSales || 0);
+
+    const inferredWeekSales =
+      !currentRawWeekSales && currentMonthSales && prevMonthSales && currentMonthSales >= prevMonthSales
+        ? currentMonthSales - prevMonthSales
+        : currentRawWeekSales;
+
+    const inferredPrevWeekSales = prevRawWeekSales || prevMonthSales;
+
     return {
       ...r,
+      weekSales: inferredWeekSales,
       compareDaySales: Number(prev.daySales || 0),
-      compareWeekSales: Number(prev.weekSales || 0),
-      compareMonthSales: Number(prev.monthSales || 0),
+      compareWeekSales: inferredPrevWeekSales,
+      compareMonthSales: prevMonthSales,
       prevYearMonthSales: Number(year.monthSales || 0),
       dayChangeRate: rate(Number(r.daySales || 0), Number(prev.daySales || 0)),
-      weekChangeRate: rate(Number(r.weekSales || 0), Number(prev.weekSales || 0)),
-      monthChangeRate: rate(Number(r.monthSales || 0), Number(prev.monthSales || 0)),
-      yearMonthChangeRate: rate(Number(r.monthSales || 0), Number(year.monthSales || 0)),
+      weekChangeRate: rate(inferredWeekSales, inferredPrevWeekSales),
+      monthChangeRate: rate(currentMonthSales, prevMonthSales),
+      yearMonthChangeRate: rate(currentMonthSales, Number(year.monthSales || 0)),
     };
   });
 }

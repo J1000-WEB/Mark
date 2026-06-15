@@ -128,9 +128,11 @@ function parseTargetSheet(sheetName: string, rows: any[][]) {
     const monthRateA = num(row[base + 9]);
     const monthRate = num(row[base + 10]);
 
-    // 일부 차주 시트는 주실적의 실적 칸이 비어 있고, 실제 누적 매출이 월판매 실적 칸에 들어옵니다.
-    // 주간 화면/매장 순위는 이 값을 현재 주간 실적으로 사용해야 하므로 fallback 처리합니다.
-    const weekSales = rawWeekSales || monthSales;
+    // Mark4.8 fix:
+    // 주간 매출은 반드시 주실적 실적 칸(rawWeekSales)만 사용합니다.
+    // 월판매 실적(monthSales)은 월누계이므로 주간 매출에 fallback으로 합산하면
+    // 전주/전전주 누계가 섞여 주간 매출이 과대계상됩니다.
+    const weekSales = rawWeekSales;
     const weekRate = rawWeekRate || (weekTarget ? (weekSales / weekTarget) * 100 : 0);
 
     out.push({

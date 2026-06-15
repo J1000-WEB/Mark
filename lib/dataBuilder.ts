@@ -86,7 +86,16 @@ function pickWeeklyCompare(titles: string[]) {
 
 
 function pickProductSheet(titles: string[]) {
-  return pickNormalizedTitle(titles, ["금주/전주", "금주전주", "금주_전주", "금주 전주"], "금주/전주");
+  // 실제 탭명은 보통 "금주/전주"입니다.
+  // 없는 이름("금주전주")을 fallback으로 반환하면 Google Sheets batchGet 전체가 실패합니다.
+  const exact = titles.find((t) => t === "금주/전주");
+  if (exact) return exact;
+
+  const found = titles.find((t) => {
+    const n = normalizeSheetName(t);
+    return n.includes("금주") && n.includes("전주");
+  });
+  return found || "";
 }
 
 
@@ -128,10 +137,8 @@ function parseTargetSheet(sheetName: string, rows: any[][]) {
     const monthRateA = num(row[base + 9]);
     const monthRate = num(row[base + 10]);
 
-    // Mark4.8 fix:
-    // 주간 매출은 반드시 주실적 실적 칸(rawWeekSales)만 사용합니다.
-    // 월판매 실적(monthSales)은 월누계이므로 주간 매출에 fallback으로 합산하면
-    // 전주/전전주 누계가 섞여 주간 매출이 과대계상됩니다.
+    // 일부 차주 시트는 주실적의 실적 칸이 비어 있고, 실제 누적 매출이 월판매 실적 칸에 들어옵니다.
+    // 주간 화면/매장 순위는 이 값을 현재 주간 실적으로 사용해야 하므로 fallback 처리합니다.
     const weekSales = rawWeekSales;
     const weekRate = rawWeekRate || (weekTarget ? (weekSales / weekTarget) * 100 : 0);
 
@@ -251,7 +258,7 @@ function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] 
 
     // Mark4.8 weekly fix:
     // 일부 차주/전주 목표 시트는 주실적 실적칸이 비어 있고 월누계만 들어옵니다.
-    // 이때 주간매출을 월누계 전체로 쓰면 전전주+전주가 합산되어 과대계상됩니다.
+    // 이때 월누계 전체를 주간매출로 쓰면 전전주+전주가 합산되어 과대계상됩니다.
     // 따라서 현재 월누계 - 비교 월누계를 주간 실적으로 보정합니다.
     const currentRawWeekSales = Number(r.weekSales || 0);
     const prevRawWeekSales = Number(prev.weekSales || 0);

@@ -27,19 +27,37 @@ export function rate(current: number, previous: number) {
 export function mergeRows(currentRows: any[] = [], compareRows: any[] = [], yearRows: any[] = []) {
   const compareMap = new Map(compareRows.map((r: any) => [r.storeName, r]));
   const yearMap = new Map(yearRows.map((r: any) => [r.storeName, r]));
+
   return currentRows.map((r: any) => {
     const prev: any = compareMap.get(r.storeName) || {};
     const year: any = yearMap.get(r.storeName) || {};
+
+    // Mark4.8 weekly display fix:
+    // 주실적 값이 비어있는 목표 시트에서는 월누계 차액으로 주간 매출을 계산합니다.
+    // current week = current month cumulative - previous month cumulative
+    const rawWeekSales = Number(r.weekSales || 0);
+    const rawPrevWeekSales = Number(prev.weekSales || 0);
+    const currentMonthSales = Number(r.monthSales || 0);
+    const prevMonthSales = Number(prev.monthSales || 0);
+
+    const weekSales =
+      !rawWeekSales && currentMonthSales && prevMonthSales && currentMonthSales >= prevMonthSales
+        ? currentMonthSales - prevMonthSales
+        : rawWeekSales;
+
+    const compareWeekSales = rawPrevWeekSales || prevMonthSales;
+
     return {
       ...r,
+      weekSales,
       compareDaySales: Number(prev.daySales || 0),
-      compareWeekSales: Number(prev.weekSales || 0),
-      compareMonthSales: Number(prev.monthSales || 0),
+      compareWeekSales,
+      compareMonthSales: prevMonthSales,
       prevYearMonthSales: Number(year.monthSales || 0),
       dayChangeRate: rate(Number(r.daySales || 0), Number(prev.daySales || 0)),
-      weekChangeRate: rate(Number(r.weekSales || 0), Number(prev.weekSales || 0)),
-      monthChangeRate: rate(Number(r.monthSales || 0), Number(prev.monthSales || 0)),
-      yearMonthChangeRate: rate(Number(r.monthSales || 0), Number(year.monthSales || 0)),
+      weekChangeRate: rate(weekSales, compareWeekSales),
+      monthChangeRate: rate(currentMonthSales, prevMonthSales),
+      yearMonthChangeRate: rate(currentMonthSales, Number(year.monthSales || 0)),
     };
   });
 }

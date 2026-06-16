@@ -534,7 +534,186 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   });
 }
 
-function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
+
+function stripCodeFence(value: string) {
+  let s = text(value);
+  if (!s) return "";
+  s = s.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  s = s.replace(/""/g, '"');
+  return s;
+}
+
+function extractConditionJsonFromProposal(proposal: string) {
+  const raw = text(proposal);
+  if (!raw) return "";
+  const match = raw.match(/Condition_JSON\s*:?\s*```json\s*([\s\S]*?)```/i)
+    || raw.match(/Condition_JSON\s*:?\s*```\s*([\s\S]*?)```/i)
+    || raw.match(/Condition_JSON\s*:?\s*([\s\S]*?)(?=\nAction:|\nReason:|\nExpected_Effect:|\nRisk:|\nPriority:|$)/i);
+  return match ? stripCodeFence(match[1]) : "";
+}
+
+function safeJsonParse(value: string) {
+  const s = stripCodeFence(value);
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function parseActiveLogics(rows: any[][]) {
+  return (rows || [])
+    .slice(1)
+    .map((row) => {
+      const conditionCell = text(row[5]);
+      const proposalCondition = extractConditionJsonFromProposal(row[4]);
+      const cellJson = safeJsonParse(conditionCell);
+      const proposalJson = safeJsonParse(proposalCondition);
+      const conditionRaw = cellJson ? conditionCell : proposalCondition || conditionCell;
+      const json = cellJson || proposalJson;
+      return {
+        id: text(row[0]),
+        createdAt: text(row[1]),
+        category: text(row[2]),
+        title: text(row[3]),
+        proposal: text(row[4]),
+        conditionJson: conditionRaw,
+        condition: json,
+        version: text(row[6]) || "v1.0",
+        status: text(row[7]).toLowerCase(),
+        approvedBy: text(row[8]),
+        approvedAt: text(row[9]),
+      };
+    })
+    .filter((x) => x.status === "active");
+}
+
+function isRtLogic(logic: any) {
+  const s = `${logic.category} ${logic.title} ${logic.conditionJson}`.toLowerCase();
+  return s.includes("rt") || s.includes('"engine":"rt"') || s.includes('"engine": "rt"');
+}
+
+function buildRtRuleSet(activeLogics: any[]) {
+  const rules = {
+    scorePenalties: [] as any[],
+    boosts: [] as any[],
+    excludes: [] as any[],
+  };
+
+  for (const logic of (activeLogics || []).filter(isRtLogic)) {
+    const c = logic.condition || {};
+    const raw = `${logic.title} ${logic.proposal} ${logic.conditionJson}`.toLowerCase();
+
+    const engine = text(c.engine).toUpperCase();
+    const ruleType = text(c.rule_type || c.ruleType || c.action_type || c.actionType).toLowerCase();
+    const metric = text(c.metric || c.target).toLowerCase();
+
+    const isWeeklyDecline =
+      metric.includes("weekly") ||
+      metric.includes("decline") ||
+      raw.includes("급락") ||
+      raw.includes("하락") ||
+      raw.includes("weekly_sales_change_rate");
+
+    // 1) 주간 판매 급락 감점
+    if (
+      isWeeklyDecline &&
+      (ruleType.includes("penalty") || raw.includes("감점") || c.penalty)
+    ) {
+      const thresholdRaw = Number(c.threshold ?? c.condition?.threshold ?? -0.3);
+      const thresholdPct = Math.abs(thresholdRaw) <= 1 ? thresholdRaw * 100 : thresholdRaw;
+      const penaltyRaw =
+        typeof c.penalty === "object"
+          ? Number(c.penalty.points ?? c.penalty.score ?? 20)
+          : Number(c.penalty ?? c.points ?? 20);
+      rules.scorePenalties.push({
+        id: logic.id,
+        title: logic.title,
+        target: "weekly_decline",
+        thresholdPct: Number.isFinite(thresholdPct) ? thresholdPct : -30,
+        points: Math.abs(Number.isFinite(penaltyRaw) ? penaltyRaw : 20),
+      });
+      continue;
+    }
+
+    // 2) RT 제외
+    if (
+      ruleType.includes("exclude") ||
+      raw.includes("exclude_from_rt") ||
+      raw.includes("rt 제외") ||
+      raw.includes("이동 제외")
+    ) {
+      const thresholdRaw = Number(c.threshold ?? -0.3);
+      const thresholdPct = Math.abs(thresholdRaw) <= 1 ? thresholdRaw * 100 : thresholdRaw;
+      rules.excludes.push({
+        id: logic.id,
+        title: logic.title,
+        target: isWeeklyDecline ? "weekly_decline" : text(c.target || "custom"),
+        thresholdPct: Number.isFinite(thresholdPct) ? thresholdPct : -30,
+      });
+      continue;
+    }
+
+    // 3) 점수 가중/부스트
+    if (
+      ruleType.includes("boost") ||
+      raw.includes("가중치") ||
+      raw.includes("boost_score")
+    ) {
+      const boost = Number(c.boost ?? c.points ?? c.score ?? 10);
+      rules.boosts.push({
+        id: logic.id,
+        title: logic.title,
+        target: text(c.target || c.metric || "custom"),
+        points: Number.isFinite(boost) ? Math.abs(boost) : 10,
+      });
+    }
+  }
+
+  return rules;
+}
+
+function applyRtRules(item: any, rules: any) {
+  let rtScore = Number(item.rtScore || 0);
+  const applied: string[] = [];
+  let excluded = false;
+
+  const weekNet = Number(item.weekNet || 0);
+  const prevNet = Number(item.prevNet || 0);
+  const weekChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : weekNet > 0 ? 100 : 0;
+
+  for (const rule of rules.scorePenalties || []) {
+    if (rule.target === "weekly_decline" && prevNet > 0 && weekChangeRate <= Number(rule.thresholdPct || -30)) {
+      const points = Math.abs(Number(rule.points || 20));
+      rtScore = Math.max(0, rtScore - points);
+      applied.push(`${rule.title || "주간 판매 하락 감점"} -${points}점(WoW ${weekChangeRate.toFixed(1)}%)`);
+    }
+  }
+
+  for (const rule of rules.excludes || []) {
+    if (rule.target === "weekly_decline" && prevNet > 0 && weekChangeRate <= Number(rule.thresholdPct || -30)) {
+      excluded = true;
+      applied.push(`${rule.title || "RT 제외"}(WoW ${weekChangeRate.toFixed(1)}%)`);
+    }
+  }
+
+  for (const rule of rules.boosts || []) {
+    // V8-1에서는 boost는 기록만 남기고 특정 target 매칭은 보수적으로 운영합니다.
+    // 향후 new_product_boost 등 명확한 target이 쌓이면 여기서 확장합니다.
+  }
+
+  return {
+    ...item,
+    rtScore,
+    originalRtScore: Number(item.rtScore || 0),
+    weekChangeRate,
+    rtLogicApplied: applied,
+    rtExcludedByLogic: excluded,
+  };
+}
+
+function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[], activeLogics: any[] = []) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => !isShop(r.storeName));
@@ -594,6 +773,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   });
 
   const rtSuggestions: any[] = [];
+  const rtRules = buildRtRuleSet(activeLogics);
 
   for (const [styleCode, rows] of byStyle.entries()) {
     if (rows.length < 2) continue;
@@ -645,10 +825,11 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         storePowerScore,
         rtScore,
       };
-    });
+    }).map((item) => applyRtRules(item, rtRules));
 
     // 입고점: 해당 상품 판매력이 있고, 재고가 부족한 점포.
     const receivers = enriched
+      .filter((r) => !r.rtExcludedByLogic)
       .filter((r) => Number(r.weekNet || 0) > 0)
       .filter((r) => r.stock < r.targetStock || r.stockWeeks <= 2)
       .sort((a, b) => b.rtScore - a.rtScore);
@@ -711,7 +892,10 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         shortageScore: Number(to.shortageScore.toFixed(1)),
         storePowerScore: Number(to.storePowerScore.toFixed(1)),
         companyRank,
-        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점 / ${from.storeName} 과재고 출고`,
+        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점 / ${from.storeName} 과재고 출고${to.rtLogicApplied?.length ? ` / 적용로직: ${to.rtLogicApplied.join(", ")}` : ""}`,
+        originalRtScore: Number(to.originalRtScore?.toFixed ? to.originalRtScore.toFixed(1) : to.originalRtScore || to.rtScore),
+        weekChangeRate: Number(to.weekChangeRate?.toFixed ? to.weekChangeRate.toFixed(1) : to.weekChangeRate || 0),
+        rtLogicApplied: to.rtLogicApplied || [],
       });
     }
   }
@@ -760,6 +944,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
       `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, 시즌별로 선택해 확인할 수 있습니다.`,
+      `Logic_Master active RT 로직 ${rtRules.scorePenalties.length + rtRules.excludes.length + rtRules.boosts.length}개를 RT 엔진에 반영했습니다.`,
       "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정합니다.",
     ],
   };
@@ -776,8 +961,9 @@ export async function buildDashboardDataFromGoogleSheet() {
   const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
   const productSheet = pickProductSheet(titles);
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
+  const logicMasterSheet = pickNormalizedTitle(titles, ["Logic_Master", "Logic Master", "로직마스터"], "Logic_Master");
 
-  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet]
+  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet, logicMasterSheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
@@ -792,6 +978,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const productRows = parseProducts(values[productSheet] || []);
   const coreProductRows = productRows.filter((r) => !isShop(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
+  const activeLogics = parseActiveLogics(values[logicMasterSheet] || []);
 
   const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
   const storeTopProducts: Record<string, any[]> = {};
@@ -815,7 +1002,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
   const topProduct = companyTopProducts[0];
 
-  const inventory = buildInventory(productRows, inventoryRows, companyTopProducts);
+  const inventory = buildInventory(productRows, inventoryRows, companyTopProducts, activeLogics);
 
   return {
     ...(fallback as any),

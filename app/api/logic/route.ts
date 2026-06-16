@@ -16,6 +16,7 @@ const PROPOSAL_HEADER = [
   "Category",
   "Title",
   "Proposal",
+  "Condition_JSON",
   "Priority",
   "Status",
   "ApprovedBy",
@@ -28,6 +29,7 @@ const MASTER_HEADER = [
   "Category",
   "Title",
   "Proposal",
+  "Condition_JSON",
   "Version",
   "Status",
   "ApprovedBy",
@@ -66,10 +68,11 @@ function proposalRow(row: any[], idx: number) {
     category: row[3] || "General",
     title: row[4] || "제목 없음",
     proposal: row[5] || "",
-    priority: row[6] || "Medium",
-    status: String(row[7] || "pending").toLowerCase(),
-    approvedBy: row[8] || "",
-    approvedAt: row[9] || "",
+    conditionJson: row[6] || "",
+    priority: row[7] || "Medium",
+    status: String(row[8] || "pending").toLowerCase(),
+    approvedBy: row[9] || "",
+    approvedAt: row[10] || "",
   };
 }
 
@@ -81,10 +84,11 @@ function masterRow(row: any[], idx: number) {
     category: row[2] || "General",
     title: row[3] || "제목 없음",
     proposal: row[4] || "",
-    version: row[5] || "v1.0",
-    status: String(row[6] || "active").toLowerCase(),
-    approvedBy: row[7] || "",
-    approvedAt: row[8] || "",
+    conditionJson: row[5] || "",
+    version: row[6] || "v1.0",
+    status: String(row[7] || "active").toLowerCase(),
+    approvedBy: row[8] || "",
+    approvedAt: row[9] || "",
   };
 }
 
@@ -121,8 +125,8 @@ export async function GET(req: Request) {
     
 
     const [proposalRows, masterRows, requestRows, resultRows] = await Promise.all([
-      getSheetValues(PROPOSAL_SHEET, "A:J").catch(() => []),
-      getSheetValues(MASTER_SHEET, "A:I").catch(() => []),
+      getSheetValues(PROPOSAL_SHEET, "A:K").catch(() => []),
+      getSheetValues(MASTER_SHEET, "A:J").catch(() => []),
       getSheetValues(REQUEST_SHEET, "A:F").catch(() => []),
       getSheetValues(RESULT_SHEET, "A:E").catch(() => []),
     ]);
@@ -152,13 +156,14 @@ export async function POST(req: Request) {
 
     if (body.action === "create") {
       const createdAt = nowKST();
-      await appendValues(`'${PROPOSAL_SHEET}'!A:J`, [[
+      await appendValues(`'${PROPOSAL_SHEET}'!A:K`, [[
         makeId("LP"),
         createdAt,
         body.sourceRequestId || "manual",
         body.category || "General",
         body.title || "제목 없음",
         body.proposal || "",
+        body.conditionJson || "",
         body.priority || "Medium",
         "pending",
         "",
@@ -176,7 +181,7 @@ export async function POST(req: Request) {
 
       const approvedBy = status === "approved" ? (body.approvedBy || "소천") : "";
       const approvedAt = status === "approved" ? nowKST() : "";
-      await updateValues(`'${PROPOSAL_SHEET}'!H${rowNumber}:J${rowNumber}`, [[status, approvedBy, approvedAt]]);
+      await updateValues(`'${PROPOSAL_SHEET}'!I${rowNumber}:K${rowNumber}`, [[status, approvedBy, approvedAt]]);
 
       return NextResponse.json({ ok: true });
     }

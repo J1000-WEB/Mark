@@ -1,15 +1,21 @@
 import { fmtNum, pct, won } from "@/lib/mark";
 
-export function Kpi({ title, value, sub, tone = "plain" }: { title: string; value: string; sub?: string; tone?: "plain" | "blue" | "green" | "purple" | "orange" }) {
-  const tones = {
-    plain: "bg-white",
-    blue: "bg-blue-50 border border-blue-100",
-    green: "bg-emerald-50 border border-emerald-100",
-    purple: "bg-violet-50 border border-violet-100",
-    orange: "bg-orange-50 border border-orange-100",
-  } as const;
+type Tone = "plain" | "white" | "blue" | "green" | "purple" | "orange" | "yellow" | "beige";
+
+const toneClasses: Record<Tone, string> = {
+  plain: "bg-white",
+  white: "bg-white",
+  blue: "bg-blue-50 border border-blue-100",
+  green: "bg-emerald-50 border border-emerald-100",
+  purple: "bg-violet-50 border border-violet-100",
+  orange: "bg-orange-50 border border-orange-100",
+  yellow: "bg-yellow-50 border border-yellow-100",
+  beige: "bg-stone-50 border border-stone-100",
+};
+
+export function Kpi({ title, value, sub, tone = "plain" }: { title: string; value: string; sub?: string; tone?: Tone }) {
   return (
-    <div className={`rounded-3xl p-5 shadow-sm ${tones[tone]}`}>
+    <div className={`rounded-3xl p-5 shadow-sm ${toneClasses[tone]}`}>
       <p className="text-sm font-semibold text-slate-500">{title}</p>
       <p className="mt-3 text-2xl font-black">{value}</p>
       {sub && <p className="mt-1 text-sm font-bold text-slate-500">{sub}</p>}
@@ -17,15 +23,9 @@ export function Kpi({ title, value, sub, tone = "plain" }: { title: string; valu
   );
 }
 
-export function Card({ title, children, right, tone = "white" }: { title: string; children: React.ReactNode; right?: React.ReactNode; tone?: "white" | "purple" | "yellow" | "beige" }) {
-  const tones = {
-    white: "bg-white",
-    purple: "bg-violet-50 border border-violet-100",
-    yellow: "bg-yellow-50 border border-yellow-100",
-    beige: "bg-stone-50 border border-stone-100",
-  } as const;
+export function Card({ title, children, right, tone = "white" }: { title: string; children: React.ReactNode; right?: React.ReactNode; tone?: Tone }) {
   return (
-    <section className={`rounded-3xl p-5 shadow-sm ${tones[tone]}`}>
+    <section className={`rounded-3xl p-5 shadow-sm ${toneClasses[tone]}`}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-xl font-black">{title}</h2>
         {right}

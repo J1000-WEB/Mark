@@ -220,7 +220,7 @@ function RTSection({ items }: { items: any[] }) {
   return (
     <Card
       title="RT 이동 제안"
-      tone="blue"
+      tone="white"
       right={
         <div className="flex flex-wrap gap-2">
           {tabs.map(([key, label, count]) => (
@@ -591,7 +591,7 @@ export default function InventoryDashboard() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-4">
-          <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="blue" />
+          <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="white" />
           <Kpi title="물류 추가 할당" value={`${data.allocationSuggestions?.length || 0}건`} tone="green" />
           <Kpi title="품절 위험" value={`${data.stockoutRisk?.length || 0}품번`} tone="orange" />
           <Kpi title="과재고 위험" value={`${data.overstockRisk?.length || 0}품번`} tone="purple" />

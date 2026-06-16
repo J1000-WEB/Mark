@@ -118,7 +118,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
-    await ensureLogicSheets();
+    
 
     const [proposalRows, masterRows, requestRows, resultRows] = await Promise.all([
       getSheetValues(PROPOSAL_SHEET, "A:J").catch(() => []),

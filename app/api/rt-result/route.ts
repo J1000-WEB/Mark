@@ -1,123 +1,135 @@
 import { NextResponse } from "next/server";
 import { appendValues, ensureSheetExists, getSheetValues } from "@/lib/googleSheets";
 
-const RT_RESULT_SHEET = "RT_Result";
-const STORE_SHEET = "객_전주";
-const LAUNCH_SHEET = "기준_런칭";
+const RESULT_SHEET = "RT_Result";
+const CHANNEL_SHEET = "객_전주";
+const PRODUCT_SHEET = "금주/전주";
 
-const HEADER = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "수량"];
+const RESULT_HEADER = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "수량", "승인날짜"];
 
 function text(v: any) {
   return String(v ?? "").trim();
 }
 
 function num(v: any) {
-  const n = Number(String(v ?? "").replace(/,/g, "").replace(/[^0-9.\-]/g, ""));
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = Number(String(v).replace(/,/g, "").replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
-function distribute(totalQty: number, variants: Array<{ color: string; size: string }>) {
-  const qty = Math.max(1, Math.round(totalQty || 0));
-  const list = variants.length ? variants : [{ color: "", size: "" }];
-  const base = Math.floor(qty / list.length);
-  const rest = qty % list.length;
-
-  return list
-    .map((v, i) => ({ ...v, qty: base + (i < rest ? 1 : 0) }))
-    .filter((v) => v.qty > 0);
+function todayKST() {
+  const d = new Date();
+  const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
 }
 
-function buildStoreCodeMap(rows: any[][]) {
-  const map = new Map<string, string>();
+function norm(v: any) {
+  return text(v).replace(/\s/g, "").toLowerCase();
+}
 
-  for (const row of rows.slice(1)) {
-    const code = text(row[2]); // C열 채널코드
-    const name = text(row[3]); // D열 점포명
-    if (!code || !name) continue;
-    map.set(name, code);
-    map.set(name.replace(/\s/g, ""), code);
+function findChannelCode(rows: any[][], storeName: string) {
+  const target = norm(storeName);
+
+  // 객_전주: C 채널코드(index 2), D 점포명(index 3)
+  const found = rows.slice(1).find((row) => {
+    const name = norm(row[3]);
+    return name === target || name.includes(target) || target.includes(name);
+  });
+
+  return text(found?.[2] || storeName);
+}
+
+function getSkuStocks(rows: any[][], fromStore: string, styleCode: string) {
+  const targetStore = norm(fromStore);
+  const targetStyle = norm(styleCode);
+
+  const candidates = rows.slice(2).map((row) => {
+    // 신규 금주/전주 시트:
+    // A 채널코드, B 채널명, C 스타일, D 스타일명, E 칼라, F 칼라명, G 사이즈, H 재고
+    const storeName = text(row[1]);
+    const style = text(row[2]);
+    const color = text(row[4]);
+    const colorName = text(row[5]);
+    const size = text(row[6]);
+    const stock = num(row[7]);
+
+    return { storeName, style, color, colorName, size, stock };
+  }).filter((r) => {
+    const s = norm(r.storeName);
+    const st = norm(r.style);
+    return r.stock > 0 && st === targetStyle && (s === targetStore || s.includes(targetStore) || targetStore.includes(s));
+  });
+
+  return candidates;
+}
+
+function distributeQty(skus: { color: string; colorName: string; size: string; stock: number }[], requestedQty: number) {
+  const qty = Math.max(0, Math.floor(num(requestedQty)));
+  const totalStock = skus.reduce((s, r) => s + Math.max(0, Number(r.stock || 0)), 0);
+  const target = Math.min(qty, totalStock);
+
+  if (!skus.length || target <= 0) return [];
+
+  const base = skus.map((sku) => {
+    const exact = (sku.stock / totalStock) * target;
+    const floor = Math.min(sku.stock, Math.floor(exact));
+    return { ...sku, qty: floor, rest: exact - floor };
+  });
+
+  let remain = target - base.reduce((s, r) => s + r.qty, 0);
+  base.sort((a, b) => b.rest - a.rest || b.stock - a.stock);
+
+  for (const row of base) {
+    if (remain <= 0) break;
+    const add = Math.min(remain, row.stock - row.qty);
+    row.qty += add;
+    remain -= add;
   }
 
-  return map;
-}
-
-function findStoreCode(map: Map<string, string>, storeName: string) {
-  const name = text(storeName);
-  return map.get(name) || map.get(name.replace(/\s/g, "")) || "";
-}
-
-function findVariants(rows: any[][], styleCode: string) {
-  const style = text(styleCode);
-  const seen = new Set<string>();
-  const variants: Array<{ color: string; size: string }> = [];
-
-  for (const row of rows.slice(1)) {
-    const hasStyle = row.some((cell) => text(cell) === style);
-    if (!hasStyle) continue;
-
-    const color = text(row[5]); // F열 칼라
-    const size = text(row[6]);  // G열 사이즈
-    const key = `${color}__${size}`;
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      variants.push({ color, size });
-    }
-  }
-
-  return variants;
+  return base.filter((r) => r.qty > 0);
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const item = body.item || {};
+    const item = body?.item || {};
 
-    const styleCode = text(item.styleCode);
     const fromStore = text(item.fromStore);
     const toStore = text(item.toStore);
+    const styleCode = text(item.styleCode);
     const suggestQty = num(item.suggestQty);
+    const approvedDate = text(body.approvedDate) || todayKST();
 
-    if (!styleCode || !fromStore || !toStore || !suggestQty) {
-      return NextResponse.json({ ok: false, error: "RT 저장에 필요한 값이 부족합니다." }, { status: 400 });
+    if (!fromStore || !toStore || !styleCode || !suggestQty) {
+      return NextResponse.json({ ok: false, error: "RT 저장에 필요한 fromStore, toStore, styleCode, suggestQty가 없습니다." }, { status: 400 });
     }
 
-    await ensureSheetExists(RT_RESULT_SHEET, HEADER);
+    await ensureSheetExists(RESULT_SHEET, RESULT_HEADER);
 
-    const [storeRows, launchRows] = await Promise.all([
-      getSheetValues(STORE_SHEET, "A:Z").catch(() => []),
-      getSheetValues(LAUNCH_SHEET, "A:Z").catch(() => []),
+    const [channelRows, productRows] = await Promise.all([
+      getSheetValues(CHANNEL_SHEET, "A:Z").catch(() => []),
+      getSheetValues(PRODUCT_SHEET, "A:AZ").catch(() => []),
     ]);
 
-    const storeMap = buildStoreCodeMap(storeRows);
-    const fromCode = findStoreCode(storeMap, fromStore);
-    const toCode = findStoreCode(storeMap, toStore);
+    const fromCode = findChannelCode(channelRows, fromStore);
+    const toCode = findChannelCode(channelRows, toStore);
 
-    if (!fromCode || !toCode) {
-      return NextResponse.json({
-        ok: false,
-        error: `채널코드 매칭 실패: ${!fromCode ? fromStore : ""} ${!toCode ? toStore : ""}`.trim(),
-      }, { status: 400 });
-    }
+    const skuStocks = getSkuStocks(productRows, fromStore, styleCode);
+    const allocations = distributeQty(skuStocks, suggestQty);
 
-    const variants = findVariants(launchRows, styleCode);
-    const distributed = distribute(suggestQty, variants);
+    const rows = allocations.length
+      ? allocations.map((r) => [fromCode, toCode, styleCode, r.color || r.colorName || "", r.size || "", r.qty, approvedDate])
+      : [[fromCode, toCode, styleCode, "", "", Math.floor(suggestQty), approvedDate]];
 
-    const rows = distributed.map((v) => [
-      fromCode,
-      toCode,
-      styleCode,
-      v.color,
-      v.size,
-      v.qty,
-    ]);
-
-    await appendValues(`'${RT_RESULT_SHEET}'!A:F`, rows);
+    await appendValues(`'${RESULT_SHEET}'!A:G`, rows);
 
     return NextResponse.json({
       ok: true,
-      rows: rows.length,
-      quantity: rows.reduce((s, r) => s + Number(r[5] || 0), 0),
+      savedRows: rows.length,
+      requestedQty: Math.floor(suggestQty),
+      savedQty: rows.reduce((s, r) => s + Number(r[5] || 0), 0),
+      approvedDate,
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "RT_Result 저장 실패" }, { status: 500 });

@@ -164,32 +164,115 @@ function parseTargetSheet(sheetName: string, rows: any[][]) {
   return { sheet: sheetName, rows: out };
 }
 
+function findHeaderRow(rows: any[][], labels: string[]) {
+  for (let r = 0; r < Math.min(rows.length, 20); r++) {
+    const joined = (rows[r] || []).map(text).join("|");
+    if (labels.every((label) => joined.includes(label))) return r;
+  }
+  return -1;
+}
+
+function findCol(row: any[], labels: string[], fallback = -1) {
+  const normalized = (row || []).map((v) => text(v).replace(/\s/g, ""));
+  for (const label of labels) {
+    const target = label.replace(/\s/g, "");
+    const idx = normalized.findIndex((v) => v === target || v.includes(target));
+    if (idx >= 0) return idx;
+  }
+  return fallback;
+}
+
 function parseProducts(rows: any[][]) {
-  const out: any[] = [];
-  for (let r = 3; r < rows.length; r++) {
+  const headerRow = findHeaderRow(rows, ["채널명", "스타일"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : [];
+  const subHeader = headerRow >= 0 ? rows[headerRow + 1] || [] : [];
+
+  const storeCol = findCol(header, ["채널명"], 1);
+  const styleCol = findCol(header, ["스타일"], 2);
+  const productCol = findCol(header, ["스타일명"], 3);
+  const colorCol = findCol(header, ["칼라"], 4);
+  const colorNameCol = findCol(header, ["칼라명"], 5);
+  const sizeCol = findCol(header, ["사이즈"], 6);
+  const stockCol = findCol(header, ["재고"], 7);
+  const launchCol = findCol(header, ["최초출고일"], 29);
+
+  const period1Col = findCol(header, ["기간판매1"], -1);
+  const period2Col = findCol(header, ["기간판매2"], -1);
+
+  // 기간판매1/2는 병합 헤더 아래에 수량/금액이 오는 구조입니다.
+  // 병합 헤더가 잡히면 +1/+2를 수량/금액으로 사용하고, 실패하면 기존 MARK 4.7 매핑을 fallback으로 씁니다.
+  const weekNetCol = period1Col >= 0 ? period1Col + 1 : 22;
+  const weekAmountCol = period1Col >= 0 ? period1Col + 2 : 23;
+  const prevNetCol = period2Col >= 0 ? period2Col + 1 : 26;
+  const prevAmountCol = period2Col >= 0 ? period2Col + 2 : 27;
+
+  const startRow = headerRow >= 0 ? headerRow + 2 : 3;
+  const grouped = new Map<string, any>();
+
+  for (let r = startRow; r < rows.length; r++) {
     const row = rows[r] || [];
-    const storeName = text(row[4]); // E
-    const styleCode = text(row[5]); // F
-    const productName = text(row[6]); // G
+    const storeName = text(row[storeCol]);
+    const styleCode = text(row[styleCol]);
+    const productName = text(row[productCol]);
     if (!storeName || !styleCode || !productName) continue;
     if (`${storeName}${styleCode}${productName}`.includes("합계")) continue;
+    if (styleCode.includes("스타일") || productName.includes("스타일")) continue;
 
-    const launch = parseDate(row[29]); // AD
-    out.push({
-      season: text(row[0]) || "미지정", // A
-      storeName,
-      styleCode,
-      productName,
-      storeStock: num(row[8]), // I
-      weekNet: num(row[22]), // W
-      weekAmount: num(row[23]), // X
-      prevNet: num(row[26]), // AA
-      prevAmount: num(row[27]), // AB
-      launchDate: launch ? launch.toISOString().slice(0, 10) : "",
-      launchTime: launch ? launch.getTime() : 0,
-    });
+    const color = text(row[colorCol]);
+    const colorName = text(row[colorNameCol]);
+    const size = text(row[sizeCol]);
+    const stock = num(row[stockCol]);
+    const weekNet = num(row[weekNetCol]);
+    const weekAmount = num(row[weekAmountCol]);
+    const prevNet = num(row[prevNetCol]);
+    const prevAmount = num(row[prevAmountCol]);
+    const launch = parseDate(row[launchCol]);
+
+    // RT 판단은 스타일 단위로 해야 하므로 채널+스타일 기준으로 먼저 합산합니다.
+    // 단, RT_Result 지시서 생성을 위해 칼라/사이즈별 실제 재고는 skuRows에 보존합니다.
+    const key = `${storeName}__${styleCode}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        season: text(row[0]) || "미지정",
+        storeName,
+        styleCode,
+        productName,
+        storeStock: 0,
+        weekNet: 0,
+        weekAmount: 0,
+        prevNet: 0,
+        prevAmount: 0,
+        launchDate: launch ? launch.toISOString().slice(0, 10) : "",
+        launchTime: launch ? launch.getTime() : 0,
+        skuRows: [] as any[],
+      });
+    }
+
+    const item = grouped.get(key);
+    item.storeStock += stock;
+    item.weekNet += weekNet;
+    item.weekAmount += weekAmount;
+    item.prevNet += prevNet;
+    item.prevAmount += prevAmount;
+    if (!item.launchTime && launch) {
+      item.launchDate = launch.toISOString().slice(0, 10);
+      item.launchTime = launch.getTime();
+    }
+    if (color || colorName || size || stock) {
+      item.skuRows.push({
+        color,
+        colorName,
+        size,
+        stock,
+        weekNet,
+        weekAmount,
+        prevNet,
+        prevAmount,
+      });
+    }
   }
-  return out;
+
+  return Array.from(grouped.values());
 }
 
 function parseInventory(rows: any[][]) {
@@ -534,186 +617,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   });
 }
 
-
-function stripCodeFence(value: string) {
-  let s = text(value);
-  if (!s) return "";
-  s = s.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-  s = s.replace(/""/g, '"');
-  return s;
-}
-
-function extractConditionJsonFromProposal(proposal: string) {
-  const raw = text(proposal);
-  if (!raw) return "";
-  const match = raw.match(/Condition_JSON\s*:?\s*```json\s*([\s\S]*?)```/i)
-    || raw.match(/Condition_JSON\s*:?\s*```\s*([\s\S]*?)```/i)
-    || raw.match(/Condition_JSON\s*:?\s*([\s\S]*?)(?=\nAction:|\nReason:|\nExpected_Effect:|\nRisk:|\nPriority:|$)/i);
-  return match ? stripCodeFence(match[1]) : "";
-}
-
-function safeJsonParse(value: string) {
-  const s = stripCodeFence(value);
-  if (!s) return null;
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
-  }
-}
-
-function parseActiveLogics(rows: any[][]) {
-  return (rows || [])
-    .slice(1)
-    .map((row) => {
-      const conditionCell = text(row[5]);
-      const proposalCondition = extractConditionJsonFromProposal(row[4]);
-      const cellJson = safeJsonParse(conditionCell);
-      const proposalJson = safeJsonParse(proposalCondition);
-      const conditionRaw = cellJson ? conditionCell : proposalCondition || conditionCell;
-      const json = cellJson || proposalJson;
-      return {
-        id: text(row[0]),
-        createdAt: text(row[1]),
-        category: text(row[2]),
-        title: text(row[3]),
-        proposal: text(row[4]),
-        conditionJson: conditionRaw,
-        condition: json,
-        version: text(row[6]) || "v1.0",
-        status: text(row[7]).toLowerCase(),
-        approvedBy: text(row[8]),
-        approvedAt: text(row[9]),
-      };
-    })
-    .filter((x) => x.status === "active");
-}
-
-function isRtLogic(logic: any) {
-  const s = `${logic.category} ${logic.title} ${logic.conditionJson}`.toLowerCase();
-  return s.includes("rt") || s.includes('"engine":"rt"') || s.includes('"engine": "rt"');
-}
-
-function buildRtRuleSet(activeLogics: any[]) {
-  const rules = {
-    scorePenalties: [] as any[],
-    boosts: [] as any[],
-    excludes: [] as any[],
-  };
-
-  for (const logic of (activeLogics || []).filter(isRtLogic)) {
-    const c = logic.condition || {};
-    const raw = `${logic.title} ${logic.proposal} ${logic.conditionJson}`.toLowerCase();
-
-    const engine = text(c.engine).toUpperCase();
-    const ruleType = text(c.rule_type || c.ruleType || c.action_type || c.actionType).toLowerCase();
-    const metric = text(c.metric || c.target).toLowerCase();
-
-    const isWeeklyDecline =
-      metric.includes("weekly") ||
-      metric.includes("decline") ||
-      raw.includes("급락") ||
-      raw.includes("하락") ||
-      raw.includes("weekly_sales_change_rate");
-
-    // 1) 주간 판매 급락 감점
-    if (
-      isWeeklyDecline &&
-      (ruleType.includes("penalty") || raw.includes("감점") || c.penalty)
-    ) {
-      const thresholdRaw = Number(c.threshold ?? c.condition?.threshold ?? -0.3);
-      const thresholdPct = Math.abs(thresholdRaw) <= 1 ? thresholdRaw * 100 : thresholdRaw;
-      const penaltyRaw =
-        typeof c.penalty === "object"
-          ? Number(c.penalty.points ?? c.penalty.score ?? 20)
-          : Number(c.penalty ?? c.points ?? 20);
-      rules.scorePenalties.push({
-        id: logic.id,
-        title: logic.title,
-        target: "weekly_decline",
-        thresholdPct: Number.isFinite(thresholdPct) ? thresholdPct : -30,
-        points: Math.abs(Number.isFinite(penaltyRaw) ? penaltyRaw : 20),
-      });
-      continue;
-    }
-
-    // 2) RT 제외
-    if (
-      ruleType.includes("exclude") ||
-      raw.includes("exclude_from_rt") ||
-      raw.includes("rt 제외") ||
-      raw.includes("이동 제외")
-    ) {
-      const thresholdRaw = Number(c.threshold ?? -0.3);
-      const thresholdPct = Math.abs(thresholdRaw) <= 1 ? thresholdRaw * 100 : thresholdRaw;
-      rules.excludes.push({
-        id: logic.id,
-        title: logic.title,
-        target: isWeeklyDecline ? "weekly_decline" : text(c.target || "custom"),
-        thresholdPct: Number.isFinite(thresholdPct) ? thresholdPct : -30,
-      });
-      continue;
-    }
-
-    // 3) 점수 가중/부스트
-    if (
-      ruleType.includes("boost") ||
-      raw.includes("가중치") ||
-      raw.includes("boost_score")
-    ) {
-      const boost = Number(c.boost ?? c.points ?? c.score ?? 10);
-      rules.boosts.push({
-        id: logic.id,
-        title: logic.title,
-        target: text(c.target || c.metric || "custom"),
-        points: Number.isFinite(boost) ? Math.abs(boost) : 10,
-      });
-    }
-  }
-
-  return rules;
-}
-
-function applyRtRules(item: any, rules: any) {
-  let rtScore = Number(item.rtScore || 0);
-  const applied: string[] = [];
-  let excluded = false;
-
-  const weekNet = Number(item.weekNet || 0);
-  const prevNet = Number(item.prevNet || 0);
-  const weekChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : weekNet > 0 ? 100 : 0;
-
-  for (const rule of rules.scorePenalties || []) {
-    if (rule.target === "weekly_decline" && prevNet > 0 && weekChangeRate <= Number(rule.thresholdPct || -30)) {
-      const points = Math.abs(Number(rule.points || 20));
-      rtScore = Math.max(0, rtScore - points);
-      applied.push(`${rule.title || "주간 판매 하락 감점"} -${points}점(WoW ${weekChangeRate.toFixed(1)}%)`);
-    }
-  }
-
-  for (const rule of rules.excludes || []) {
-    if (rule.target === "weekly_decline" && prevNet > 0 && weekChangeRate <= Number(rule.thresholdPct || -30)) {
-      excluded = true;
-      applied.push(`${rule.title || "RT 제외"}(WoW ${weekChangeRate.toFixed(1)}%)`);
-    }
-  }
-
-  for (const rule of rules.boosts || []) {
-    // V8-1에서는 boost는 기록만 남기고 특정 target 매칭은 보수적으로 운영합니다.
-    // 향후 new_product_boost 등 명확한 target이 쌓이면 여기서 확장합니다.
-  }
-
-  return {
-    ...item,
-    rtScore,
-    originalRtScore: Number(item.rtScore || 0),
-    weekChangeRate,
-    rtLogicApplied: applied,
-    rtExcludedByLogic: excluded,
-  };
-}
-
-function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[], activeLogics: any[] = []) {
+function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => !isShop(r.storeName));
@@ -773,7 +677,6 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   });
 
   const rtSuggestions: any[] = [];
-  const rtRules = buildRtRuleSet(activeLogics);
 
   for (const [styleCode, rows] of byStyle.entries()) {
     if (rows.length < 2) continue;
@@ -825,11 +728,10 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         storePowerScore,
         rtScore,
       };
-    }).map((item) => applyRtRules(item, rtRules));
+    });
 
     // 입고점: 해당 상품 판매력이 있고, 재고가 부족한 점포.
     const receivers = enriched
-      .filter((r) => !r.rtExcludedByLogic)
       .filter((r) => Number(r.weekNet || 0) > 0)
       .filter((r) => r.stock < r.targetStock || r.stockWeeks <= 2)
       .sort((a, b) => b.rtScore - a.rtScore);
@@ -892,10 +794,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         shortageScore: Number(to.shortageScore.toFixed(1)),
         storePowerScore: Number(to.storePowerScore.toFixed(1)),
         companyRank,
-        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점 / ${from.storeName} 과재고 출고${to.rtLogicApplied?.length ? ` / 적용로직: ${to.rtLogicApplied.join(", ")}` : ""}`,
-        originalRtScore: Number(to.originalRtScore?.toFixed ? to.originalRtScore.toFixed(1) : to.originalRtScore || to.rtScore),
-        weekChangeRate: Number(to.weekChangeRate?.toFixed ? to.weekChangeRate.toFixed(1) : to.weekChangeRate || 0),
-        rtLogicApplied: to.rtLogicApplied || [],
+        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점 / ${from.storeName} 과재고 출고`,
       });
     }
   }
@@ -944,7 +843,6 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
       `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, 시즌별로 선택해 확인할 수 있습니다.`,
-      `Logic_Master active RT 로직 ${rtRules.scorePenalties.length + rtRules.excludes.length + rtRules.boosts.length}개를 RT 엔진에 반영했습니다.`,
       "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정합니다.",
     ],
   };
@@ -961,9 +859,8 @@ export async function buildDashboardDataFromGoogleSheet() {
   const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
   const productSheet = pickProductSheet(titles);
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
-  const logicMasterSheet = pickNormalizedTitle(titles, ["Logic_Master", "Logic Master", "로직마스터"], "Logic_Master");
 
-  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet, logicMasterSheet]
+  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
@@ -978,7 +875,6 @@ export async function buildDashboardDataFromGoogleSheet() {
   const productRows = parseProducts(values[productSheet] || []);
   const coreProductRows = productRows.filter((r) => !isShop(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
-  const activeLogics = parseActiveLogics(values[logicMasterSheet] || []);
 
   const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
   const storeTopProducts: Record<string, any[]> = {};
@@ -1002,7 +898,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
   const topProduct = companyTopProducts[0];
 
-  const inventory = buildInventory(productRows, inventoryRows, companyTopProducts, activeLogics);
+  const inventory = buildInventory(productRows, inventoryRows, companyTopProducts);
 
   return {
     ...(fallback as any),

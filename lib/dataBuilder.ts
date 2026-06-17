@@ -849,6 +849,38 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   };
 }
 
+function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
+  // 임시 월간 카드용: 기준!E 품번 + 기준!W = 이월 상품만 연간판매에서 합산
+  // 연간판매: D 품번, AG 판매수량, AH 판매금액
+  const carryoverStyles = new Set<string>();
+
+  for (const row of standardRows.slice(1)) {
+    const styleCode = text(row[4]); // E
+    const flag = text(row[22]); // W
+    if (styleCode && flag.includes("이월")) carryoverStyles.add(styleCode);
+  }
+
+  let qty = 0;
+  let amount = 0;
+  let rowCount = 0;
+
+  for (const row of annualRows.slice(1)) {
+    const styleCode = text(row[3]); // D
+    if (!styleCode || !carryoverStyles.has(styleCode)) continue;
+    qty += num(row[32]); // AG
+    amount += num(row[33]); // AH
+    rowCount += 1;
+  }
+
+  return {
+    qty,
+    amount,
+    styleCount: carryoverStyles.size,
+    matchedRows: rowCount,
+    note: "기준!W=이월 / 기준!E 품번 ↔ 연간판매!D 품번 / AG 판매수량 / AH 판매금액",
+  };
+}
+
 export async function buildDashboardDataFromGoogleSheet() {
   const titles = await getSpreadsheetTitles();
 
@@ -860,8 +892,10 @@ export async function buildDashboardDataFromGoogleSheet() {
   const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
   const productSheet = pickProductSheet(titles);
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
+  const annualSalesSheet = pickNormalizedTitle(titles, ["연간판매", "연간 판매"], "연간판매");
+  const standardSheet = pickNormalizedTitle(titles, ["기준"], "기준");
 
-  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet]
+  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet, annualSalesSheet, standardSheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
@@ -876,6 +910,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const productRows = parseProducts(values[productSheet] || []);
   const coreProductRows = productRows.filter((r) => !isShop(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
+  const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
 
   const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
   const storeTopProducts: Record<string, any[]> = {};
@@ -932,6 +967,7 @@ export async function buildDashboardDataFromGoogleSheet() {
       current: monthCur,
       compare: monthCmp,
       year: monthYear,
+      carryoverAnnualSales,
     },
     inventory,
   };

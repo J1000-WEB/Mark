@@ -10,6 +10,7 @@ import {
   goodMonthly,
   goodWeekly,
   markData,
+  fmtNum,
   mergeRows,
   pct,
   salesRank,
@@ -359,7 +360,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 Mark4.7.2.3.1.3</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 MARK 4.73</h1>
             <p className="mt-1 text-sm text-slate-500">
               {active === "daily" && "일간 · 일_전일 vs 일_전주"}
               {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
@@ -472,6 +473,19 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             <section className="grid gap-6 lg:grid-cols-2">
               <ComingSoon title="월간 TOP 상품" />
               <ComingSoon title="점포별 월간 TOP 상품" />
+            </section>
+            <section className="grid gap-6">
+              <Card title="이월 상품 연간 판매 현황" tone="yellow">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Kpi title="이월 판매수량" value={`${fmtNum(dashboardData.monthly?.carryoverAnnualSales?.qty || 0)}개`} tone="blue" />
+                  <Kpi title="이월 판매금액" value={won(dashboardData.monthly?.carryoverAnnualSales?.amount || 0)} tone="green" />
+                  <Kpi title="이월 품번 수" value={`${fmtNum(dashboardData.monthly?.carryoverAnnualSales?.styleCount || 0)}개`} tone="purple" />
+                  <Kpi title="매칭 행 수" value={`${fmtNum(dashboardData.monthly?.carryoverAnnualSales?.matchedRows || 0)}행`} tone="orange" />
+                </div>
+                <p className="mt-4 text-xs font-semibold text-slate-500">
+                  임시 집계 · 기준 W열이 이월인 품번만 연간판매 D열과 매칭해서 AG 판매수량, AH 판매금액을 합산합니다.
+                </p>
+              </Card>
             </section>
           </>
         )}

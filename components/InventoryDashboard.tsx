@@ -52,109 +52,87 @@ function Briefing({ lines }: { lines: string[] }) {
   );
 }
 
-function rtKey(it: any) {
-  return [it.fromStore, it.toStore, it.styleCode, it.productName].map((v) => String(v || "")).join("|");
+function rtItemKey(it: any, index: number) {
+  return `${it.fromStore || ""}__${it.toStore || ""}__${it.styleCode || ""}__${it.suggestQty || ""}__${index}`;
 }
 
-function rtStatusText(status: string) {
+function statusLabel(status?: string) {
   if (status === "approved") return "승인";
   if (status === "hold") return "보류";
   if (status === "rejected") return "거절";
   return "제안";
 }
 
-function rtStatusClass(status: string) {
-  if (status === "approved") return "bg-emerald-100 text-emerald-700";
-  if (status === "hold") return "bg-amber-100 text-amber-700";
-  if (status === "rejected") return "bg-rose-100 text-rose-700";
-  return "bg-blue-100 text-blue-700";
+function statusBadge(status?: string) {
+  if (status === "approved") return "bg-emerald-600 text-white";
+  if (status === "hold") return "bg-amber-500 text-white";
+  if (status === "rejected") return "bg-rose-600 text-white";
+  return "bg-slate-100 text-slate-700";
 }
 
-async function saveRTResult(it: any) {
-  const res = await fetch("/api/rt-result", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item: it }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.ok) throw new Error(data?.error || "RT_Result 저장 실패");
-  return data;
+function ActionButton({ children, onClick, tone = "slate", disabled = false }: { children: React.ReactNode; onClick: () => void; tone?: "green" | "amber" | "rose" | "slate"; disabled?: boolean }) {
+  const tones = {
+    green: "bg-emerald-600 text-white hover:bg-emerald-700",
+    amber: "bg-amber-500 text-white hover:bg-amber-600",
+    rose: "bg-rose-600 text-white hover:bg-rose-700",
+    slate: "bg-slate-900 text-white hover:bg-slate-800",
+  } as const;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`h-10 w-full rounded-xl px-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]}`}
+    >
+      {children}
+    </button>
+  );
 }
 
 function RTCard({
   it,
   index,
-  status,
-  onStatusChange,
+  status = "suggested",
+  saving = false,
+  onStatus,
 }: {
   it: any;
   index: number;
-  status: string;
-  onStatusChange: (status: "approved" | "hold" | "rejected") => void;
+  status?: string;
+  saving?: boolean;
+  onStatus?: (status: "approved" | "hold" | "rejected") => void;
 }) {
-  const [saving, setSaving] = useState(false);
-
-  async function approve() {
-    try {
-      setSaving(true);
-      await saveRTResult(it);
-      onStatusChange("approved");
-      alert("RT_Result에 저장되었습니다.");
-    } catch (error: any) {
-      alert(error?.message || "RT_Result 저장 중 오류가 발생했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-bold text-slate-500">#{index + 1} · {it.styleCode}</p>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusBadge(status)}`}>{statusLabel(status)}</span>
             <PriorityBadge value={it.priority || "C"} />
-            <span className={`rounded-full px-3 py-1 text-xs font-black ${rtStatusClass(status)}`}>{rtStatusText(status)}</span>
           </div>
-          <p className="mt-2 text-2xl font-black tracking-tight">{it.productName}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-500">RT Score {it.rtScore ? Number(it.rtScore).toFixed(1) : "-"} · 전사순위 {it.companyRank || "-"}</p>
+          <p className="mt-2 text-xl font-black">{it.productName}</p>
+          {it.rtScore !== undefined && (
+            <p className="mt-1 text-sm font-bold text-blue-600">RT Score {Number(it.rtScore || 0).toFixed(1)} · 전사순위 {it.companyRank || "-"}</p>
+          )}
         </div>
-
-        <div className="grid min-w-[260px] grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={approve}
-            disabled={saving || status === "approved"}
-            className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
-          >
-            {saving ? "저장중" : "승인"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onStatusChange("hold")}
-            className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-700"
-          >
-            보류
-          </button>
-          <button
-            type="button"
-            onClick={() => onStatusChange("rejected")}
-            className="rounded-2xl bg-rose-100 px-4 py-3 text-sm font-black text-rose-700"
-          >
-            거절
-          </button>
-          <div className="rounded-2xl bg-slate-900 px-4 py-3 text-right text-white">
+        <div className="grid min-w-[220px] grid-cols-2 gap-2">
+          <div className="col-span-2 rounded-2xl bg-slate-900 px-4 py-3 text-center text-white">
             <p className="text-xs text-slate-300">이동 제안</p>
-            <p className="text-xl font-black">{fmtNum(it.suggestQty)}장</p>
+            <p className="text-2xl font-black">{fmtNum(it.suggestQty)}장</p>
           </div>
+          <ActionButton tone="green" disabled={saving} onClick={() => onStatus?.("approved")}>승인</ActionButton>
+          <ActionButton tone="amber" disabled={saving} onClick={() => onStatus?.("hold")}>보류</ActionButton>
+          <ActionButton tone="rose" disabled={saving} onClick={() => onStatus?.("rejected")}>거절</ActionButton>
+          <ActionButton tone="slate" disabled={saving} onClick={() => onStatus?.("approved")}>{saving ? "저장중" : "RT 저장"}</ActionButton>
         </div>
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_auto_1fr] xl:items-stretch">
-        <div className="rounded-3xl bg-blue-50 p-5">
+        <div className="rounded-3xl bg-blue-50 p-4">
           <p className="text-xs font-bold text-blue-600">보내는 점포</p>
-          <p className="mt-1 text-xl font-black">{it.fromStore}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <p className="mt-1 text-lg font-black">{it.fromStore}</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <Stat label="현재 재고" value={`${fmtNum(it.fromStock)}개`} />
             <Stat label="현재 재고주수" value={stockWeekText(it.fromStockWeeks)} colorClass={stockWeekClass(it.fromStockWeeks)} />
             <Stat label="RT 후 재고주수" value={stockWeekText(it.fromAfterWeeks)} colorClass={stockWeekClass(it.fromAfterWeeks)} />
@@ -163,13 +141,13 @@ function RTCard({
         </div>
 
         <div className="flex items-center justify-center">
-          <div className="rounded-full bg-slate-900 px-5 py-3 text-sm font-black text-white">→</div>
+          <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white">→</div>
         </div>
 
-        <div className="rounded-3xl bg-emerald-50 p-5">
+        <div className="rounded-3xl bg-emerald-50 p-4">
           <p className="text-xs font-bold text-emerald-600">받는 점포</p>
-          <p className="mt-1 text-xl font-black">{it.toStore}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <p className="mt-1 text-lg font-black">{it.toStore}</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <Stat label="현재 재고" value={`${fmtNum(it.toStock)}개`} />
             <Stat label="현재 재고주수" value={stockWeekText(it.toStockWeeks)} colorClass={stockWeekClass(it.toStockWeeks)} />
             <Stat label="RT 후 재고주수" value={stockWeekText(it.toAfterWeeks)} colorClass={stockWeekClass(it.toAfterWeeks)} />
@@ -180,94 +158,9 @@ function RTCard({
 
       <ReasonBox title="추천 사유">
         <p>{it.reason}</p>
-        <p className="mt-1">승인 시 출고점의 실제 칼라/사이즈 재고 기준으로 RT_Result에 분배 저장합니다.</p>
+        <p className="mt-1">RT 판단은 스타일 단위로 집계하고, 승인 시 출고점 실제 칼라/사이즈 재고 기준으로 RT_Result에 저장합니다.</p>
       </ReasonBox>
     </div>
-  );
-}
-
-function RTSection({ items }: { items: any[] }) {
-  const [filter, setFilter] = useState<"all" | "suggested" | "approved" | "hold" | "rejected">("all");
-  const [statusMap, setStatusMap] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("mark-rt-status-map");
-      if (raw) setStatusMap(JSON.parse(raw));
-    } catch {}
-  }, []);
-
-  function setStatus(it: any, status: "approved" | "hold" | "rejected") {
-    const key = rtKey(it);
-    setStatusMap((prev) => {
-      const next = { ...prev, [key]: status };
-      try { localStorage.setItem("mark-rt-status-map", JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }
-
-  const rows = (items || []).map((it) => ({ ...it, __status: statusMap[rtKey(it)] || "suggested" }));
-  const filtered = rows.filter((it) => filter === "all" ? true : it.__status === filter);
-
-  const tabs = [
-    ["all", "전체보기", rows.length],
-    ["suggested", "제안만 보기", rows.filter((x) => x.__status === "suggested").length],
-    ["approved", "승인 보기", rows.filter((x) => x.__status === "approved").length],
-    ["hold", "보류 보기", rows.filter((x) => x.__status === "hold").length],
-    ["rejected", "거절 보기", rows.filter((x) => x.__status === "rejected").length],
-  ] as const;
-
-  return (
-    <Card
-      title="RT 이동 제안"
-      tone="white"
-      right={
-        <div className="flex flex-wrap gap-2">
-          {tabs.map(([key, label, count]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setFilter(key)}
-              className={`rounded-full px-3 py-2 text-xs font-black ${filter === key ? "bg-slate-900 text-white" : "bg-white text-slate-600"}`}
-            >
-              {label} {count}
-            </button>
-          ))}
-        </div>
-      }
-    >
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
-        <div className="rounded-2xl bg-white/80 p-4">
-          <p className="text-xs font-semibold text-slate-500">총 제안</p>
-          <p className="mt-1 text-2xl font-black">{rows.length}건</p>
-        </div>
-        <div className="rounded-2xl bg-white/80 p-4">
-          <p className="text-xs font-semibold text-slate-500">승인</p>
-          <p className="mt-1 text-2xl font-black text-emerald-600">{rows.filter((x) => x.__status === "approved").length}건</p>
-        </div>
-        <div className="rounded-2xl bg-white/80 p-4">
-          <p className="text-xs font-semibold text-slate-500">보류</p>
-          <p className="mt-1 text-2xl font-black text-amber-600">{rows.filter((x) => x.__status === "hold").length}건</p>
-        </div>
-        <div className="rounded-2xl bg-white/80 p-4">
-          <p className="text-xs font-semibold text-slate-500">거절</p>
-          <p className="mt-1 text-2xl font-black text-rose-600">{rows.filter((x) => x.__status === "rejected").length}건</p>
-        </div>
-      </div>
-
-      <div className="max-h-[920px] space-y-4 overflow-y-auto pr-2">
-        {!filtered.length && <Empty />}
-        {filtered.map((it, i) => (
-          <RTCard
-            key={`${rtKey(it)}-${i}`}
-            it={it}
-            index={i}
-            status={it.__status}
-            onStatusChange={(status) => setStatus(it, status)}
-          />
-        ))}
-      </div>
-    </Card>
   );
 }
 
@@ -328,17 +221,88 @@ function SimpleCard({ it, index, type }: { it: any; index: number; type: "risk" 
   );
 }
 
-function ItemList({ items, type, maxHeight }: { items: any[]; type: "rt" | "alloc" | "risk" | "over" | "consign"; maxHeight?: string }) {
+function ItemList({ items, type, maxHeight }: { items: any[]; type: "alloc" | "risk" | "over" | "consign"; maxHeight?: string }) {
   if (!items?.length) return <Empty />;
 
   return (
     <div className={`${maxHeight || ""} space-y-2 overflow-y-auto pr-2`}>
       {items.map((it, i) => {
-        if (type === "rt") return null;
         if (type === "alloc") return <AllocationCard key={`${it.styleCode}-${i}`} it={it} index={i} />;
         return <SimpleCard key={`${it.styleCode}-${i}`} it={it} index={i} type={type} />;
       })}
     </div>
+  );
+}
+
+function RTSuggestionSection({
+  items,
+  statusMap,
+  savingKey,
+  filter,
+  onFilter,
+  onStatus,
+}: {
+  items: any[];
+  statusMap: Record<string, string>;
+  savingKey: string;
+  filter: string;
+  onFilter: (value: string) => void;
+  onStatus: (item: any, index: number, status: "approved" | "hold" | "rejected") => void;
+}) {
+  const withIndex = (items || []).map((item, index) => ({ item, index, key: rtItemKey(item, index), status: statusMap[rtItemKey(item, index)] || "suggested" }));
+  const counts = {
+    all: withIndex.length,
+    suggested: withIndex.filter((x) => x.status === "suggested").length,
+    approved: withIndex.filter((x) => x.status === "approved").length,
+    hold: withIndex.filter((x) => x.status === "hold").length,
+    rejected: withIndex.filter((x) => x.status === "rejected").length,
+  };
+  const filtered = filter === "all" ? withIndex : withIndex.filter((x) => x.status === filter);
+
+  const tabs: [string, string, number][] = [
+    ["all", "전체보기", counts.all],
+    ["suggested", "제안만", counts.suggested],
+    ["approved", "승인", counts.approved],
+    ["hold", "보류", counts.hold],
+    ["rejected", "거절", counts.rejected],
+  ];
+
+  return (
+    <Card
+      title="RT 이동 제안"
+      tone="white"
+      right={
+        <div className="flex flex-wrap gap-2">
+          {tabs.map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onFilter(key)}
+              className={`h-9 rounded-full px-3 text-xs font-black transition ${filter === key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+            >
+              {label} {count}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {!filtered.length ? (
+        <Empty />
+      ) : (
+        <div className="max-h-[760px] space-y-4 overflow-y-auto pr-2">
+          {filtered.map(({ item, index, key, status }) => (
+            <RTCard
+              key={key}
+              it={item}
+              index={index}
+              status={status}
+              saving={savingKey === key}
+              onStatus={(nextStatus) => onStatus(item, index, nextStatus)}
+            />
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -563,6 +527,9 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
 export default function InventoryDashboard() {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
+  const [rtFilter, setRtFilter] = useState("all");
+  const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
+  const [rtSavingKey, setRtSavingKey] = useState("");
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -575,12 +542,38 @@ export default function InventoryDashboard() {
   }, []);
 
   const data = dashboardData?.inventory || {};
+
+  async function updateRtStatus(item: any, index: number, status: "approved" | "hold" | "rejected") {
+    const key = rtItemKey(item, index);
+    setRtStatusMap((prev) => ({ ...prev, [key]: status }));
+
+    if (status !== "approved") return;
+
+    setRtSavingKey(key);
+    try {
+      const res = await fetch("/api/rt-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error || "RT_Result 저장 실패");
+      }
+    } catch (error: any) {
+      alert(error?.message || "RT_Result 저장 실패");
+      setRtStatusMap((prev) => ({ ...prev, [key]: "suggested" }));
+    } finally {
+      setRtSavingKey("");
+    }
+  }
+
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL Mark4.7.2.3.1</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL MARK 4.72</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
@@ -590,14 +583,21 @@ export default function InventoryDashboard() {
           {data.periodLabel}
         </section>
 
+        <RTSuggestionSection
+          items={data.rtSuggestions || []}
+          statusMap={rtStatusMap}
+          savingKey={rtSavingKey}
+          filter={rtFilter}
+          onFilter={setRtFilter}
+          onStatus={updateRtStatus}
+        />
+
         <section className="grid gap-4 md:grid-cols-4">
-          <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="white" />
+          <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="blue" />
           <Kpi title="물류 추가 할당" value={`${data.allocationSuggestions?.length || 0}건`} tone="green" />
           <Kpi title="품절 위험" value={`${data.stockoutRisk?.length || 0}품번`} tone="orange" />
           <Kpi title="과재고 위험" value={`${data.overstockRisk?.length || 0}품번`} tone="purple" />
         </section>
-
-        <RTSection items={data.rtSuggestions || []} />
 
         <Briefing lines={data.aiBriefing || []} />
 
@@ -612,7 +612,7 @@ export default function InventoryDashboard() {
           </Card>
         </section>
 
-        <section>
+        <section className="grid gap-6">
           <Card title="물류 추가 할당 제안 TOP5">
             <ItemList items={data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
           </Card>

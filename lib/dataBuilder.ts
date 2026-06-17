@@ -199,12 +199,13 @@ function parseProducts(rows: any[][]) {
   const period1Col = findCol(header, ["기간판매1"], -1);
   const period2Col = findCol(header, ["기간판매2"], -1);
 
-  // 기간판매1/2는 병합 헤더 아래에 수량/금액이 오는 구조입니다.
-  // 병합 헤더가 잡히면 +1/+2를 수량/금액으로 사용하고, 실패하면 기존 MARK 4.7 매핑을 fallback으로 씁니다.
-  const weekNetCol = period1Col >= 0 ? period1Col + 1 : 22;
-  const weekAmountCol = period1Col >= 0 ? period1Col + 2 : 23;
-  const prevNetCol = period2Col >= 0 ? period2Col + 1 : 26;
-  const prevAmountCol = period2Col >= 0 ? period2Col + 2 : 27;
+  // MARK 4.73: 신규 금주/전주 시트는 병합 헤더 아래가
+  // 판매 / 반품 / 합계 / 판매금액 순서입니다.
+  // 따라서 순판매수량은 +2(합계), 판매금액은 +3(판매금액)을 사용합니다.
+  const weekNetCol = period1Col >= 0 ? period1Col + 2 : 22;
+  const weekAmountCol = period1Col >= 0 ? period1Col + 3 : 23;
+  const prevNetCol = period2Col >= 0 ? period2Col + 2 : 26;
+  const prevAmountCol = period2Col >= 0 ? period2Col + 3 : 27;
 
   const startRow = headerRow >= 0 ? headerRow + 2 : 3;
   const grouped = new Map<string, any>();

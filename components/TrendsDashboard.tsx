@@ -44,12 +44,31 @@ export default function TrendsDashboard() {
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentMessage, setAgentMessage] = useState("");
   const [agentNote, setAgentNote] = useState("");
+  const [agentResult, setAgentResult] = useState<any>(null);
+  const [agentResultLoading, setAgentResultLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/trends", { cache: "no-store" })
       .then((res) => res.json())
       .then(setData)
       .catch((err) => setData({ source: "error", error: String(err), productSummary: [], items: [] }));
+  }, []);
+
+  async function loadAgentResult() {
+    setAgentResultLoading(true);
+    try {
+      const res = await fetch("/api/trends-agent", { cache: "no-store" });
+      const json = await res.json();
+      setAgentResult(json?.latest || null);
+    } catch {
+      setAgentResult(null);
+    } finally {
+      setAgentResultLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAgentResult();
   }, []);
 
   const products = useMemo(() => {
@@ -83,6 +102,7 @@ export default function TrendsDashboard() {
       if (!res.ok || !json.ok) throw new Error(json.error || "Agent 요청 실패");
       setAgentMessage(`Agent 분석 요청 완료: ${json.requestId}`);
       setAgentNote("");
+      await loadAgentResult();
     } catch (err: any) {
       setAgentMessage(`Agent 분석 요청 실패: ${err?.message || String(err)}`);
     } finally {
@@ -112,6 +132,65 @@ export default function TrendsDashboard() {
 
   return (
     <div className="space-y-6">
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-black text-slate-950">AI INSIGHT</span>
+              {agentResult?.createdAt ? <span className="text-xs font-bold text-slate-400">최근 분석: {agentResult.createdAt}</span> : null}
+              {agentResult?.requestId ? <span className="text-xs font-bold text-slate-400">요청ID: {agentResult.requestId}</span> : null}
+            </div>
+            <h2 className="mt-4 text-3xl font-black tracking-tight">AI 상품동향 분석</h2>
+            <div className="mt-4 min-h-[180px] rounded-3xl bg-white/10 p-5">
+              {agentResultLoading ? (
+                <p className="text-sm font-bold text-slate-300">AI 분석 결과 불러오는 중...</p>
+              ) : agentResult?.result ? (
+                <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.result}</pre>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-lg font-black text-slate-100">아직 표시할 AI 분석 결과가 없습니다.</p>
+                  <p className="text-sm font-semibold leading-6 text-slate-300">
+                    아래 버튼으로 상품동향 분석 요청을 등록한 뒤, CMD에서 Research Agent를 실행하면 결과가 이 영역에 표시됩니다.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full rounded-3xl bg-white p-5 text-slate-900 lg:w-[360px]">
+            <h3 className="text-sm font-black">Agent 분석 요청</h3>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+              현재 상품동향 요약을 Research_Request에 등록합니다.
+            </p>
+            <textarea
+              value={agentNote}
+              onChange={(e) => setAgentNote(e.target.value)}
+              placeholder="추가 요청사항이 있으면 입력"
+              className="mt-4 h-24 w-full rounded-2xl border border-slate-200 p-3 text-xs font-semibold outline-none focus:border-slate-400"
+            />
+            <button
+              type="button"
+              onClick={requestAgentAnalysis}
+              disabled={agentLoading}
+              className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {agentLoading ? "Agent 요청 중..." : "상품동향 Agent 분석 요청"}
+            </button>
+            <button
+              type="button"
+              onClick={loadAgentResult}
+              disabled={agentResultLoading}
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              {agentResultLoading ? "새로고침 중..." : "AI 결과 새로고침"}
+            </button>
+            {agentMessage ? (
+              <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-xs font-black text-slate-600">{agentMessage}</p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -176,28 +255,11 @@ export default function TrendsDashboard() {
       <section className="grid gap-4 lg:grid-cols-3">
         <MiniInsight title="재고/조치 필요" items={data.headlineInsights?.urgent || []} />
         <MiniInsight title="판매 반응 우수" items={data.headlineInsights?.positive || []} />
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900">Agent 분석 요청</h3>
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-black text-slate-900">AI 분석 영역 이동</h3>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-            현재 상품동향 요약을 Research_Request에 등록합니다. CMD에서 Agent가 실행 중이면 pending 요청을 읽고 분석합니다.
+            Agent 분석 결과와 요청 버튼은 최상단 AI 상품동향 분석 영역으로 이동했습니다.
           </p>
-          <textarea
-            value={agentNote}
-            onChange={(e) => setAgentNote(e.target.value)}
-            placeholder="추가 요청사항이 있으면 입력"
-            className="mt-4 h-20 w-full rounded-2xl border border-slate-200 p-3 text-xs font-semibold outline-none focus:border-slate-400"
-          />
-          <button
-            type="button"
-            onClick={requestAgentAnalysis}
-            disabled={agentLoading}
-            className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {agentLoading ? "Agent 요청 중..." : "상품동향 Agent 분석 요청"}
-          </button>
-          {agentMessage ? (
-            <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-xs font-black text-slate-600">{agentMessage}</p>
-          ) : null}
         </div>
       </section>
 

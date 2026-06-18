@@ -144,13 +144,58 @@ export default function TrendsDashboard() {
             <div className="mt-4 min-h-[180px] rounded-3xl bg-white/10 p-5">
               {agentResultLoading ? (
                 <p className="text-sm font-bold text-slate-300">AI 분석 결과 불러오는 중...</p>
-              ) : agentResult?.result ? (
-                <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.result}</pre>
+              ) : agentResult?.executiveSummary || agentResult?.rawSummary ? (
+                <div className="space-y-5">
+                  {agentResult.week ? (
+                    <p className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-black text-emerald-200">{agentResult.week}</p>
+                  ) : null}
+
+                  {agentResult.executiveSummary ? (
+                    <div>
+                      <h3 className="text-sm font-black text-emerald-200">이번주 핵심 요약</h3>
+                      <pre className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.executiveSummary}</pre>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {agentResult.keyProducts ? (
+                      <div className="rounded-2xl bg-white/10 p-4">
+                        <h3 className="text-sm font-black text-sky-200">핵심 상품</h3>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-semibold leading-6 text-slate-100">{agentResult.keyProducts}</pre>
+                      </div>
+                    ) : null}
+
+                    {agentResult.risks ? (
+                      <div className="rounded-2xl bg-white/10 p-4">
+                        <h3 className="text-sm font-black text-rose-200">리스크</h3>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-semibold leading-6 text-slate-100">{agentResult.risks}</pre>
+                      </div>
+                    ) : null}
+
+                    {agentResult.recommendedActions ? (
+                      <div className="rounded-2xl bg-white/10 p-4">
+                        <h3 className="text-sm font-black text-amber-200">추천 액션</h3>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-semibold leading-6 text-slate-100">{agentResult.recommendedActions}</pre>
+                      </div>
+                    ) : null}
+
+                    {agentResult.rtCandidates ? (
+                      <div className="rounded-2xl bg-white/10 p-4">
+                        <h3 className="text-sm font-black text-violet-200">RT 검토 후보</h3>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs font-semibold leading-6 text-slate-100">{agentResult.rtCandidates}</pre>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!agentResult.executiveSummary && agentResult.rawSummary ? (
+                    <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.rawSummary}</pre>
+                  ) : null}
+                </div>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-lg font-black text-slate-100">아직 표시할 AI 분석 결과가 없습니다.</p>
+                  <p className="text-lg font-black text-slate-100">아직 표시할 AI 상품동향 요약이 없습니다.</p>
                   <p className="text-sm font-semibold leading-6 text-slate-300">
-                    아래 버튼으로 상품동향 분석 요청을 등록한 뒤, CMD에서 Research Agent를 실행하면 결과가 이 영역에 표시됩니다.
+                    아래 버튼으로 상품동향 분석 요청을 등록한 뒤, CMD에서 Research Agent를 실행하면 Trend_Summary 결과가 이 영역에 표시됩니다.
                   </p>
                 </div>
               )}

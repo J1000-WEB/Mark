@@ -122,32 +122,55 @@ async function getSheetValuesLocal(sheetName: string, range = "A:AZ") {
   return getSheetValues(sheetName, range);
 }
 
+function splitLines(value: any) {
+  return text(value)
+    .split(/\n+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function parseKoreanDateText(value: any) {
+  const s = text(value);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+async function getSheetValuesLocal(sheetName: string, range = "A:AZ") {
+  const { getSheetValues } = await import("@/lib/googleSheets");
+  return getSheetValues(sheetName, range);
+}
+
 export async function GET() {
   try {
-    const rows = await getSheetValuesLocal("Research_Result", "A:E").catch(() => []);
-    const trendRows = rows.slice(1)
+    const rows = await getSheetValuesLocal("Trend_Summary", "A:J").catch(() => []);
+    const summaryRows = rows.slice(1)
       .map((row: any[]) => ({
         id: text(row[0]),
         createdAt: text(row[1]),
         requestId: text(row[2]),
-        result: text(row[3]),
-        status: text(row[4]),
+        week: text(row[3]),
+        executiveSummary: text(row[4]),
+        keyProducts: text(row[5]),
+        risks: text(row[6]),
+        recommendedActions: text(row[7]),
+        rtCandidates: text(row[8]),
+        rawSummary: text(row[9]),
       }))
-      .filter((row: any) => row.requestId.startsWith("TREND-") || row.id.startsWith("TREND-"))
+      .filter((row: any) => row.requestId || row.executiveSummary || row.rawSummary)
       .sort((a: any, b: any) => parseKoreanDateText(b.createdAt) - parseKoreanDateText(a.createdAt));
 
-    const latest = trendRows[0] || null;
+    const latest = summaryRows[0] || null;
 
     return NextResponse.json({
       ok: true,
       latest,
-      count: trendRows.length,
+      count: summaryRows.length,
     }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
-    console.error("Trend agent result load failed:", error);
+    console.error("Trend summary load failed:", error);
     return NextResponse.json({
       ok: false,
-      error: error?.message || "Agent 분석 결과를 불러오지 못했습니다.",
+      error: error?.message || "Trend_Summary를 불러오지 못했습니다.",
       latest: null,
       count: 0,
     }, { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } });

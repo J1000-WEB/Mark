@@ -165,19 +165,39 @@ function excelDateKST() {
   return todayKST();
 }
 
-export async function GET() {
+function normalizeDateText(value: any) {
+  const s = text(value);
+  const m = s.match(/\d{4}-\d{2}-\d{2}/);
+  if (m) return m[0];
+  const korean = s.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if (korean) {
+    return `${korean[1]}-${String(korean[2]).padStart(2, "0")}-${String(korean[3]).padStart(2, "0")}`;
+  }
+  return s;
+}
+
+export async function GET(req: Request) {
   try {
     await ensureSheetExists(RESULT_SHEET, RESULT_HEADER);
 
+    const url = new URL(req.url);
+    const approvedDate = normalizeDateText(url.searchParams.get("approvedDate") || url.searchParams.get("date") || "");
+
     const rows = await getSheetValues(RESULT_SHEET, "A:H");
     const dataRows = rows.slice(1).filter((row) => {
-      return text(row[0]) && text(row[1]) && text(row[2]) && text(row[5]);
+      const hasRequired = text(row[0]) && text(row[1]) && text(row[2]) && text(row[5]);
+      const dateMatched = !approvedDate || normalizeDateText(row[6]) === approvedDate;
+      return hasRequired && dateMatched;
     });
 
     const downloadDate = excelDateKST();
 
-    if (rows.length > 1) {
-      const updatedDownloadDates = rows.slice(1).map((row) => [text(row[7]) || downloadDate]);
+    if (rows.length > 1 && approvedDate) {
+      const updatedDownloadDates = rows.slice(1).map((row) => {
+        const hasRequired = text(row[0]) && text(row[1]) && text(row[2]) && text(row[5]);
+        const dateMatched = normalizeDateText(row[6]) === approvedDate;
+        return [hasRequired && dateMatched ? downloadDate : text(row[7])];
+      });
       await updateValues(`'${RESULT_SHEET}'!H2:H${rows.length}`, updatedDownloadDates);
     }
 
@@ -208,7 +228,7 @@ ${tableRows}
 </body>
 </html>`;
 
-    const fileName = `RT_지시서_${downloadDate}.xls`;
+    const fileName = `RT_지시서_${approvedDate || '전체'}_${downloadDate}.xls`;
     return new Response(html, {
       status: 200,
       headers: {

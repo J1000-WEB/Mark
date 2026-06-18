@@ -5,6 +5,16 @@ import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
 
+
+function todayKSTInputValue() {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const y = kst.getFullYear();
+  const m = String(kst.getMonth() + 1).padStart(2, "0");
+  const d = String(kst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function stockWeekText(value: any) {
   const n = Number(value || 0);
   if (n >= 999) return "판매없음";
@@ -243,6 +253,7 @@ function RTSuggestionSection({
   onFilter: (value: string) => void;
   onStatus: (item: any, index: number, status: "approved" | "hold" | "rejected") => void;
 }) {
+  const [downloadDate, setDownloadDate] = useState(todayKSTInputValue());
   const withIndex = (items || []).map((item, index) => ({ item, index, key: rtItemKey(item, index), status: statusMap[rtItemKey(item, index)] || "suggested" }));
   const counts = {
     all: withIndex.length,
@@ -266,9 +277,18 @@ function RTSuggestionSection({
       title="RT 이동 제안"
       tone="white"
       right={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex h-9 items-center gap-2 rounded-full bg-slate-100 px-3 text-xs font-black text-slate-700">
+            승인날짜
+            <input
+              type="date"
+              value={downloadDate}
+              onChange={(e) => setDownloadDate(e.target.value)}
+              className="bg-transparent text-xs font-black text-slate-900 outline-none"
+            />
+          </label>
           <a
-            href="/api/rt-result?download=1"
+            href={`/api/rt-result?download=1&approvedDate=${encodeURIComponent(downloadDate)}`}
             className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-xs font-black text-white transition hover:bg-emerald-700"
           >
             RT 지시서 다운로드

@@ -42,6 +42,38 @@ function isShop(storeName: string) {
   return String(storeName || "").startsWith("오프라인_");
 }
 
+function normalizeStoreKey(storeName: string) {
+  const raw = String(storeName || "").trim();
+  return raw
+    .replace(/^오프라인[_\s-]*/i, "")
+    .replace(/점$/g, "")
+    .replace(/[\s_\-·.()]/g, "")
+    .toLowerCase();
+}
+
+function displayStoreName(storeName: string) {
+  const raw = String(storeName || "").replace(/^오프라인[_\s-]*/i, "").trim();
+  const key = normalizeStoreKey(raw);
+  const aliases: Record<string, string> = {
+    "성수플래그십": "성수 플래그십",
+    "성수flagship": "성수 플래그십",
+    "신사플래그십": "신사 플래그십",
+    "광주신세계": "신세계 광주점",
+    "신세계광주": "신세계 광주점",
+  };
+  return aliases[key] || raw;
+}
+
+function isPriorityStore(storeName: string) {
+  const key = normalizeStoreKey(storeName);
+  return key.includes("성수") || key.includes("신사") || key.includes("플래그십") || key.includes("강남");
+}
+
+function weeksSince(dateMs: number) {
+  if (!dateMs) return 999;
+  return (Date.now() - Number(dateMs || 0)) / (1000 * 60 * 60 * 24 * 7);
+}
+
 
 function normalizeSheetName(name: string) {
   return String(name || "")
@@ -193,7 +225,7 @@ function parseProducts(rows: any[][]) {
   const colorCol = findCol(header, ["칼라"], 4);
   const colorNameCol = findCol(header, ["칼라명"], 5);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = findCol(header, ["재고"], 7);
+  const stockCol = 8; // I열 재고 고정
   const launchCol = findCol(header, ["최초출고일"], 29);
 
   const period1Col = findCol(header, ["기간판매1"], -1);
@@ -212,7 +244,9 @@ function parseProducts(rows: any[][]) {
 
   for (let r = startRow; r < rows.length; r++) {
     const row = rows[r] || [];
-    const storeName = text(row[storeCol]);
+    const rawStoreName = text(row[storeCol]);
+    const storeName = displayStoreName(rawStoreName);
+    const storeKey = normalizeStoreKey(rawStoreName);
     const styleCode = text(row[styleCol]);
     const productName = text(row[productCol]);
     if (!storeName || !styleCode || !productName) continue;
@@ -231,11 +265,12 @@ function parseProducts(rows: any[][]) {
 
     // RT 판단은 스타일 단위로 해야 하므로 채널+스타일 기준으로 먼저 합산합니다.
     // 단, RT_Result 지시서 생성을 위해 칼라/사이즈별 실제 재고는 skuRows에 보존합니다.
-    const key = `${storeName}__${styleCode}`;
+    const key = `${storeKey || normalizeStoreKey(storeName)}__${styleCode}`;
     if (!grouped.has(key)) {
       grouped.set(key, {
         season: text(row[0]) || "미지정",
         storeName,
+        storeKey: storeKey || normalizeStoreKey(storeName),
         styleCode,
         productName,
         storeStock: 0,
@@ -656,7 +691,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     }
   }
 
-  // RT Smart Transfer Engine V1
+  // RT Smart Transfer Engine V2
   // 목적: 단순 재고 이동이 아니라 "판매 전환 가능성이 높은 점포"로 재고를 이동합니다.
   // 핵심 가중치: 상품 판매력 70% + 재고 부족도 20% + 점포 매출력 10%
   const byStyle = new Map<string, any[]>();
@@ -693,31 +728,39 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
 
     const enriched = rows.map((r) => {
       const weekNet = Number(r.weekNet || 0);
+      const prevNet = Number(r.prevNet || 0);
       const weekAmount = Number(r.weekAmount || 0);
       const stock = Number(r.storeStock || 0);
       const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
+      const salesChangeRate = rate(weekNet, prevNet);
+      const isNewProduct = weeksSince(Number(r.launchTime || 0)) <= 4;
+      const priorityStore = isPriorityStore(r.storeName);
 
-      // 해당 상품을 이 점포가 얼마나 잘 파는지.
-      // 수량과 금액을 함께 보되, 수량 중심으로 평가합니다.
-      const productPowerScore = Math.min(
+      let productPowerScore = Math.min(
         100,
         ((weekNet / maxStyleWeekNet) * 75) + ((weekAmount / maxStyleWeekAmount) * 25)
       );
 
-      // 점포 자체 매출력. 단, 보조 지표이므로 10%만 반영합니다.
+      // MARK 4.74: Agent 제안 반영
+      // - 신상품 4주 이내 + 판매 발생 시 판매력 가중
+      // - 판매 급락 상품은 RT Score 감점
+      if (isNewProduct && weekNet > 0) productPowerScore = Math.min(100, productPowerScore * 1.2);
+      if (prevNet > 0 && salesChangeRate <= -25) productPowerScore = Math.max(0, productPowerScore - 20);
+
       const storePowerScore = Math.min(
         100,
         (Number(storeAmountMap.get(r.storeName) || 0) / maxStoreAmount) * 100
       );
 
-      // 판매력 대비 재고가 부족할수록 점수 상승.
-      // 목표재고는 2주 판매분을 기본으로 둡니다.
       const targetStock = Math.max(1, Math.ceil(weekNet * 2));
       const shortageScore = weekNet > 0
         ? Math.max(0, Math.min(100, (1 - stock / targetStock) * 100))
         : 0;
 
-      const rtScore = (productPowerScore * 0.7) + (shortageScore * 0.2) + (storePowerScore * 0.1);
+      let rtScore = (productPowerScore * 0.7) + (shortageScore * 0.2) + (storePowerScore * 0.1);
+      if (priorityStore && companyRank <= 30 && weekNet > 0 && stock <= 0) rtScore += 15;
+      if (prevNet > 0 && salesChangeRate <= -40) rtScore -= 10;
+      rtScore = Math.max(0, Math.min(100, rtScore));
 
       return {
         ...r,
@@ -728,20 +771,28 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         shortageScore,
         storePowerScore,
         rtScore,
+        salesChangeRate,
+        isNewProduct,
+        priorityStore,
       };
     });
 
     // 입고점: 해당 상품 판매력이 있고, 재고가 부족한 점포.
     const receivers = enriched
       .filter((r) => Number(r.weekNet || 0) > 0)
+      .filter((r) => !(Number(r.prevNet || 0) > 0 && Number(r.salesChangeRate || 0) <= -50))
       .filter((r) => r.stock < r.targetStock || r.stockWeeks <= 2)
       .sort((a, b) => b.rtScore - a.rtScore);
 
     // 출고점: 재고가 과다하고, 이동 후에도 최소 재고를 유지할 수 있는 점포.
     // 판매력이 낮거나 재고주수가 긴 점포를 우선 출고 대상으로 봅니다.
-    const senders = enriched
+    const senderPool = enriched
       .filter((r) => r.stock > 0)
-      .filter((r) => r.stock > Math.max(r.targetStock * 1.5, r.weekNet * 4))
+      .filter((r) => r.stock > Math.max(r.targetStock * 1.5, r.weekNet * 4));
+
+    const hasNonPrioritySender = senderPool.some((r) => !r.priorityStore);
+    const senders = senderPool
+      .filter((r) => hasNonPrioritySender ? !r.priorityStore : true)
       .sort((a, b) => {
         const aOver = a.stock / Math.max(1, a.targetStock);
         const bOver = b.stock / Math.max(1, b.targetStock);
@@ -753,7 +804,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     const usedFrom = new Set<string>();
 
     for (const to of receivers.slice(0, 3)) {
-      const from = senders.find((s) => s.storeName !== to.storeName && !usedFrom.has(s.storeName));
+      const from = senders.find((s) => normalizeStoreKey(s.storeName) !== normalizeStoreKey(to.storeName) && !usedFrom.has(s.storeName));
       if (!from) continue;
 
       const toNeed = Math.max(0, Math.ceil(to.targetStock - to.stock));
@@ -771,6 +822,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       const stockoutDays = to.stockWeeks * 7;
 
       const priority =
+        to.priorityStore && companyRank <= 30 && to.stock <= 0 ? "A" :
         to.rtScore >= 80 && companyRank <= 20 ? "A" :
         to.rtScore >= 65 && companyRank <= 50 ? "B" :
         "C";
@@ -795,7 +847,10 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         shortageScore: Number(to.shortageScore.toFixed(1)),
         storePowerScore: Number(to.storePowerScore.toFixed(1)),
         companyRank,
-        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점 / ${from.storeName} 과재고 출고`,
+        salesChangeRate: Number(to.salesChangeRate.toFixed(1)),
+        isNewProduct: to.isNewProduct,
+        priorityStore: to.priorityStore,
+        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점${to.isNewProduct ? "·신상품 가중" : ""}${to.priorityStore && to.stock <= 0 ? "·우수매장 결품" : ""} / ${from.storeName} 과재고 출고`,
       });
     }
   }
@@ -844,7 +899,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
       `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, 시즌별로 선택해 확인할 수 있습니다.`,
-      "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정합니다.",
+      "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% + 4.74 보정 기준으로 입고점을 선정합니다.",
     ],
   };
 }

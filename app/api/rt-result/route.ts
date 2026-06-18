@@ -19,6 +19,28 @@ function num(v: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+
+function normalizeStoreKey(storeName: string) {
+  return String(storeName || "")
+    .replace(/^오프라인[_\s-]*/i, "")
+    .replace(/점$/g, "")
+    .replace(/[\s_\-·.()]/g, "")
+    .toLowerCase();
+}
+
+function displayStoreName(storeName: string) {
+  const raw = String(storeName || "").replace(/^오프라인[_\s-]*/i, "").trim();
+  const key = normalizeStoreKey(raw);
+  const aliases: Record<string, string> = {
+    "성수플래그십": "성수 플래그십",
+    "성수flagship": "성수 플래그십",
+    "신사플래그십": "신사 플래그십",
+    "광주신세계": "신세계 광주점",
+    "신세계광주": "신세계 광주점",
+  };
+  return aliases[key] || raw;
+}
+
 function todayKST() {
   const d = new Date();
   const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
@@ -68,7 +90,11 @@ function channelCodeMap(rows: any[][]) {
   for (const row of rows.slice(1)) {
     const code = text(row[2]);
     const name = text(row[3]);
-    if (code && name) map.set(name, code);
+    if (code && name) {
+      map.set(name, code);
+      map.set(displayStoreName(name), code);
+      map.set(normalizeStoreKey(name), code);
+    }
   }
   return map;
 }
@@ -81,18 +107,19 @@ function skuRowsForTransfer(productRows: any[][], fromStore: string, styleCode: 
   const styleCol = findCol(header, ["스타일"], 2);
   const colorCol = findCol(header, ["칼라"], 4);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = findCol(header, ["재고"], 7);
+  const stockCol = 8; // I열 재고 고정
   const startRow = headerRow >= 0 ? headerRow + 2 : 3;
 
   return productRows.slice(startRow)
     .map((row) => ({
-      storeName: text(row[storeCol]),
+      storeName: displayStoreName(text(row[storeCol])),
+      storeKey: normalizeStoreKey(text(row[storeCol])),
       styleCode: text(row[styleCol]),
       color: text(row[colorCol]),
       size: text(row[sizeCol]),
       stock: num(row[stockCol]),
     }))
-    .filter((r) => r.storeName === fromStore && r.styleCode === styleCode && r.stock > 0 && r.color && r.size);
+    .filter((r) => normalizeStoreKey(r.storeName) === normalizeStoreKey(fromStore) && r.styleCode === styleCode && r.stock > 0 && r.color && r.size);
 }
 
 function allocateByStock(rows: { color: string; size: string; stock: number }[], qty: number) {
@@ -125,6 +152,76 @@ function allocateByStock(rows: { color: string; size: string; stock: number }[],
   }));
 }
 
+
+function excelEscape(value: any) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function excelDateKST() {
+  return todayKST();
+}
+
+export async function GET() {
+  try {
+    await ensureSheetExists(RESULT_SHEET, RESULT_HEADER);
+
+    const rows = await getSheetValues(RESULT_SHEET, "A:H");
+    const dataRows = rows.slice(1).filter((row) => {
+      return text(row[0]) && text(row[1]) && text(row[2]) && text(row[5]);
+    });
+
+    const downloadDate = excelDateKST();
+
+    if (rows.length > 1) {
+      const updatedDownloadDates = rows.slice(1).map((row) => [text(row[7]) || downloadDate]);
+      await updateValues(`'${RESULT_SHEET}'!H2:H${rows.length}`, updatedDownloadDates);
+    }
+
+    const exportHeader = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "지시수량", "승인날짜"];
+    const exportRows = dataRows.map((row) => [
+      row[0],
+      row[1],
+      row[2],
+      row[3],
+      row[4],
+      row[5],
+      row[6],
+    ]);
+
+    const tableRows = [exportHeader, ...exportRows]
+      .map((row) => `<tr>${row.map((cell) => `<td style="mso-number-format:'\\@';">${excelEscape(cell)}</td>`).join("")}</tr>`)
+      .join("\n");
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+</head>
+<body>
+<table border="1">
+${tableRows}
+</table>
+</body>
+</html>`;
+
+    const fileName = `RT_지시서_${downloadDate}.xls`;
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error?.message || "RT 지시서 다운로드 실패" }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -148,8 +245,8 @@ export async function POST(req: Request) {
 
     const productRows = values[productSheet] || [];
     const channels = channelCodeMap(values[channelSheet] || []);
-    const fromCode = channels.get(fromStore) || fromStore;
-    const toCode = channels.get(toStore) || toStore;
+    const fromCode = channels.get(fromStore) || channels.get(normalizeStoreKey(fromStore)) || fromStore;
+    const toCode = channels.get(toStore) || channels.get(normalizeStoreKey(toStore)) || toStore;
 
     const skus = skuRowsForTransfer(productRows, fromStore, styleCode);
     const allocated = allocateByStock(skus, suggestQty);

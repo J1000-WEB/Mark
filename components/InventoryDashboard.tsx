@@ -102,64 +102,58 @@ function RTCard({
   saving?: boolean;
   onStatus?: (status: "approved" | "hold" | "rejected") => void;
 }) {
+  const stockoutLabel = Number(it.stockoutDays || 0) >= 999 ? "판매없음" : `${Number(it.stockoutDays || 0).toFixed(0)}일 내`;
+  const reason = String(it.reason || "");
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <div className="grid gap-3 lg:grid-cols-[1fr_180px] lg:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-bold text-slate-500">#{index + 1} · {it.styleCode}</p>
+            <p className="text-xs font-bold text-slate-500">#{index + 1} · {it.styleCode}</p>
             <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusBadge(status)}`}>{statusLabel(status)}</span>
             <PriorityBadge value={it.priority || "C"} />
           </div>
-          <p className="mt-2 text-xl font-black">{it.productName}</p>
-          {it.rtScore !== undefined && (
-            <p className="mt-1 text-sm font-bold text-blue-600">RT Score {Number(it.rtScore || 0).toFixed(1)} · 전사순위 {it.companyRank || "-"}</p>
-          )}
+          <p className="mt-1 truncate text-lg font-black">{it.productName}</p>
+          <p className="mt-1 text-xs font-bold text-blue-600">
+            RT Score {Number(it.rtScore || 0).toFixed(1)} · 전사순위 {it.companyRank || "-"} · 제안 {fmtNum(it.suggestQty)}장
+          </p>
         </div>
-        <div className="grid min-w-[220px] grid-cols-2 gap-2">
-          <div className="col-span-2 rounded-2xl bg-slate-900 px-4 py-3 text-center text-white">
-            <p className="text-xs text-slate-300">이동 제안</p>
-            <p className="text-2xl font-black">{fmtNum(it.suggestQty)}장</p>
-          </div>
-          <ActionButton tone="green" disabled={saving} onClick={() => onStatus?.("approved")}>승인</ActionButton>
+        <div className="grid grid-cols-3 gap-2">
+          <ActionButton tone="green" disabled={saving} onClick={() => onStatus?.("approved")}>{saving ? "저장중" : "승인"}</ActionButton>
           <ActionButton tone="amber" disabled={saving} onClick={() => onStatus?.("hold")}>보류</ActionButton>
           <ActionButton tone="rose" disabled={saving} onClick={() => onStatus?.("rejected")}>거절</ActionButton>
-          <ActionButton tone="slate" disabled={saving} onClick={() => onStatus?.("approved")}>{saving ? "저장중" : "RT 저장"}</ActionButton>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_auto_1fr] xl:items-stretch">
-        <div className="rounded-3xl bg-blue-50 p-4">
+      <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_auto_1fr] xl:items-stretch">
+        <div className="rounded-2xl bg-blue-50 p-3">
           <p className="text-xs font-bold text-blue-600">보내는 점포</p>
-          <p className="mt-1 text-lg font-black">{it.fromStore}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Stat label="현재 재고" value={`${fmtNum(it.fromStock)}개`} />
-            <Stat label="현재 재고주수" value={stockWeekText(it.fromStockWeeks)} colorClass={stockWeekClass(it.fromStockWeeks)} />
-            <Stat label="RT 후 재고주수" value={stockWeekText(it.fromAfterWeeks)} colorClass={stockWeekClass(it.fromAfterWeeks)} />
-            <Stat label="금주매출" value={won(it.weekAmount)} />
+          <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+            <p className="text-base font-black">{it.fromStore}</p>
+            <p className="text-sm font-black text-slate-700">재고 {fmtNum(it.fromStock)}개 · {stockWeekText(it.fromStockWeeks)}</p>
           </div>
+          <p className="mt-1 text-xs font-semibold text-slate-600">RT 후 {stockWeekText(it.fromAfterWeeks)} · 금주매출 {won(it.weekAmount)}</p>
         </div>
 
         <div className="flex items-center justify-center">
-          <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white">→</div>
+          <div className="rounded-full bg-slate-900 px-3 py-1 text-sm font-black text-white">→</div>
         </div>
 
-        <div className="rounded-3xl bg-emerald-50 p-4">
+        <div className="rounded-2xl bg-emerald-50 p-3">
           <p className="text-xs font-bold text-emerald-600">받는 점포</p>
-          <p className="mt-1 text-lg font-black">{it.toStore}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Stat label="현재 재고" value={`${fmtNum(it.toStock)}개`} />
-            <Stat label="현재 재고주수" value={stockWeekText(it.toStockWeeks)} colorClass={stockWeekClass(it.toStockWeeks)} />
-            <Stat label="RT 후 재고주수" value={stockWeekText(it.toAfterWeeks)} colorClass={stockWeekClass(it.toAfterWeeks)} />
-            <Stat label="예상 품절" value={Number(it.stockoutDays || 0) >= 999 ? "판매없음" : `${Number(it.stockoutDays || 0).toFixed(0)}일 내`} colorClass={Number(it.stockoutDays || 0) <= 7 ? "text-red-600" : "text-slate-900"} />
+          <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+            <p className="text-base font-black">{it.toStore}</p>
+            <p className={`text-sm font-black ${stockWeekClass(it.toStockWeeks)}`}>재고 {fmtNum(it.toStock)}개 · {stockWeekText(it.toStockWeeks)}</p>
           </div>
+          <p className="mt-1 text-xs font-semibold text-slate-600">RT 후 {stockWeekText(it.toAfterWeeks)} · 예상품절 {stockoutLabel}</p>
         </div>
       </div>
 
-      <ReasonBox title="추천 사유">
-        <p>{it.reason}</p>
-        <p className="mt-1">RT 판단은 스타일 단위로 집계하고, 승인 시 출고점 실제 칼라/사이즈 재고 기준으로 RT_Result에 저장합니다.</p>
-      </ReasonBox>
+      <details className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-black text-slate-600">추천 사유 보기</summary>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{reason}</p>
+        <p className="mt-1 text-xs font-semibold text-slate-500">승인 시 RT_Result에 자동 저장됩니다. RT 판단은 스타일 단위, 출고는 칼라/사이즈 실재고 기준입니다.</p>
+      </details>
     </div>
   );
 }
@@ -273,6 +267,12 @@ function RTSuggestionSection({
       tone="white"
       right={
         <div className="flex flex-wrap gap-2">
+          <a
+            href="/api/rt-result?download=1"
+            className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-xs font-black text-white transition hover:bg-emerald-700"
+          >
+            RT 지시서 다운로드
+          </a>
           {tabs.map(([key, label, count]) => (
             <button
               key={key}
@@ -573,7 +573,7 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL MARK 4.73</h1>
+            <h1 className="text-3xl font-bold tracking-tight">재고CTRL MARK 4.74</h1>
             <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />

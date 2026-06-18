@@ -107,7 +107,7 @@ function skuRowsForTransfer(productRows: any[][], fromStore: string, styleCode: 
   const styleCol = findCol(header, ["스타일"], 2);
   const colorCol = findCol(header, ["칼라"], 4);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = findCol(header, ["재고"], 7);
+  const stockCol = 8; // I열 재고 고정
   const startRow = headerRow >= 0 ? headerRow + 2 : 3;
 
   return productRows.slice(startRow)

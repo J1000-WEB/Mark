@@ -225,7 +225,7 @@ function parseProducts(rows: any[][]) {
   const colorCol = findCol(header, ["칼라"], 4);
   const colorNameCol = findCol(header, ["칼라명"], 5);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = findCol(header, ["재고"], 7);
+  const stockCol = 8; // I열 재고 고정
   const launchCol = findCol(header, ["최초출고일"], 29);
 
   const period1Col = findCol(header, ["기간판매1"], -1);

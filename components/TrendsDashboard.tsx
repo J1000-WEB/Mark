@@ -41,6 +41,9 @@ export default function TrendsDashboard() {
   const [channel, setChannel] = useState("전체");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentMessage, setAgentMessage] = useState("");
+  const [agentNote, setAgentNote] = useState("");
 
   useEffect(() => {
     fetch("/api/trends", { cache: "no-store" })
@@ -58,6 +61,34 @@ export default function TrendsDashboard() {
       return channelMatched && queryMatched;
     });
   }, [data, channel, query]);
+
+  async function requestAgentAnalysis() {
+    if (!data || agentLoading) return;
+    setAgentLoading(true);
+    setAgentMessage("");
+
+    try {
+      const res = await fetch("/api/trends-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          items: data.productSummary || [],
+          channelSummary: data.channelSummary || [],
+          headlineInsights: data.headlineInsights || {},
+          note: agentNote,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "Agent 요청 실패");
+      setAgentMessage(`Agent 분석 요청 완료: ${json.requestId}`);
+      setAgentNote("");
+    } catch (err: any) {
+      setAgentMessage(`Agent 분석 요청 실패: ${err?.message || String(err)}`);
+    } finally {
+      setAgentLoading(false);
+    }
+  }
 
   if (!data) {
     return (
@@ -145,14 +176,28 @@ export default function TrendsDashboard() {
       <section className="grid gap-4 lg:grid-cols-3">
         <MiniInsight title="재고/조치 필요" items={data.headlineInsights?.urgent || []} />
         <MiniInsight title="판매 반응 우수" items={data.headlineInsights?.positive || []} />
-        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900">Agent 분석 준비</h3>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-black text-slate-900">Agent 분석 요청</h3>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-            다음 단계에서 Research Agent가 상품동향_RAW를 요약해 상품동향_SUMMARY에 저장하고, 이 영역에 AI 요약을 표시합니다.
+            현재 상품동향 요약을 Research_Request에 등록합니다. CMD에서 Agent가 실행 중이면 pending 요청을 읽고 분석합니다.
           </p>
-          <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-500">
-            예정: 긍정/부정 태그 · 재고위험 · RT 우선상품 · VMD 제안
-          </div>
+          <textarea
+            value={agentNote}
+            onChange={(e) => setAgentNote(e.target.value)}
+            placeholder="추가 요청사항이 있으면 입력"
+            className="mt-4 h-20 w-full rounded-2xl border border-slate-200 p-3 text-xs font-semibold outline-none focus:border-slate-400"
+          />
+          <button
+            type="button"
+            onClick={requestAgentAnalysis}
+            disabled={agentLoading}
+            className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {agentLoading ? "Agent 요청 중..." : "상품동향 Agent 분석 요청"}
+          </button>
+          {agentMessage ? (
+            <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-xs font-black text-slate-600">{agentMessage}</p>
+          ) : null}
         </div>
       </section>
 

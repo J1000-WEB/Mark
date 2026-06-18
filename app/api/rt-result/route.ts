@@ -19,6 +19,28 @@ function num(v: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+
+function normalizeStoreKey(storeName: string) {
+  return String(storeName || "")
+    .replace(/^오프라인[_\s-]*/i, "")
+    .replace(/점$/g, "")
+    .replace(/[\s_\-·.()]/g, "")
+    .toLowerCase();
+}
+
+function displayStoreName(storeName: string) {
+  const raw = String(storeName || "").replace(/^오프라인[_\s-]*/i, "").trim();
+  const key = normalizeStoreKey(raw);
+  const aliases: Record<string, string> = {
+    "성수플래그십": "성수 플래그십",
+    "성수flagship": "성수 플래그십",
+    "신사플래그십": "신사 플래그십",
+    "광주신세계": "신세계 광주점",
+    "신세계광주": "신세계 광주점",
+  };
+  return aliases[key] || raw;
+}
+
 function todayKST() {
   const d = new Date();
   const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
@@ -68,7 +90,11 @@ function channelCodeMap(rows: any[][]) {
   for (const row of rows.slice(1)) {
     const code = text(row[2]);
     const name = text(row[3]);
-    if (code && name) map.set(name, code);
+    if (code && name) {
+      map.set(name, code);
+      map.set(displayStoreName(name), code);
+      map.set(normalizeStoreKey(name), code);
+    }
   }
   return map;
 }
@@ -86,13 +112,14 @@ function skuRowsForTransfer(productRows: any[][], fromStore: string, styleCode: 
 
   return productRows.slice(startRow)
     .map((row) => ({
-      storeName: text(row[storeCol]),
+      storeName: displayStoreName(text(row[storeCol])),
+      storeKey: normalizeStoreKey(text(row[storeCol])),
       styleCode: text(row[styleCol]),
       color: text(row[colorCol]),
       size: text(row[sizeCol]),
       stock: num(row[stockCol]),
     }))
-    .filter((r) => r.storeName === fromStore && r.styleCode === styleCode && r.stock > 0 && r.color && r.size);
+    .filter((r) => normalizeStoreKey(r.storeName) === normalizeStoreKey(fromStore) && r.styleCode === styleCode && r.stock > 0 && r.color && r.size);
 }
 
 function allocateByStock(rows: { color: string; size: string; stock: number }[], qty: number) {
@@ -148,8 +175,8 @@ export async function POST(req: Request) {
 
     const productRows = values[productSheet] || [];
     const channels = channelCodeMap(values[channelSheet] || []);
-    const fromCode = channels.get(fromStore) || fromStore;
-    const toCode = channels.get(toStore) || toStore;
+    const fromCode = channels.get(fromStore) || channels.get(normalizeStoreKey(fromStore)) || fromStore;
+    const toCode = channels.get(toStore) || channels.get(normalizeStoreKey(toStore)) || toStore;
 
     const skus = skuRowsForTransfer(productRows, fromStore, styleCode);
     const allocated = allocateByStock(skus, suggestQty);

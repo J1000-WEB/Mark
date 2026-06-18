@@ -110,39 +110,20 @@ ${topProducts || "상품동향 데이터 없음"}`;
   }
 }
 
-
-function parseKoreanDateText(value: any) {
+function parseTrendDateText(value: any) {
   const s = text(value);
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
-async function getSheetValuesLocal(sheetName: string, range = "A:AZ") {
-  const { getSheetValues } = await import("@/lib/googleSheets");
-  return getSheetValues(sheetName, range);
-}
-
-function splitLines(value: any) {
-  return text(value)
-    .split(/\n+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function parseKoreanDateText(value: any) {
-  const s = text(value);
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
-}
-
-async function getSheetValuesLocal(sheetName: string, range = "A:AZ") {
+async function getTrendSummaryValues(sheetName: string, range = "A:AZ") {
   const { getSheetValues } = await import("@/lib/googleSheets");
   return getSheetValues(sheetName, range);
 }
 
 export async function GET() {
   try {
-    const rows = await getSheetValuesLocal("Trend_Summary", "A:J").catch(() => []);
+    const rows = await getTrendSummaryValues("Trend_Summary", "A:J").catch(() => []);
     const summaryRows = rows.slice(1)
       .map((row: any[]) => ({
         id: text(row[0]),
@@ -157,7 +138,7 @@ export async function GET() {
         rawSummary: text(row[9]),
       }))
       .filter((row: any) => row.requestId || row.executiveSummary || row.rawSummary)
-      .sort((a: any, b: any) => parseKoreanDateText(b.createdAt) - parseKoreanDateText(a.createdAt));
+      .sort((a: any, b: any) => parseTrendDateText(b.createdAt) - parseTrendDateText(a.createdAt));
 
     const latest = summaryRows[0] || null;
 

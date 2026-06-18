@@ -25,11 +25,12 @@ function includesAny(value: any, words: string[]) {
   return words.some((w) => n.includes(normalize(w)));
 }
 
-function channelTypeFromSheetName(sheetName: string) {
-  const s = text(sheetName);
+function channelTypeFromSheetName(sheetName: string, storeScope = "") {
+  const s = `${text(sheetName)} ${text(storeScope)}`;
   if (s.includes("백화점")) return "백화점";
   if (s.includes("로드샵")) return "로드샵";
-  if (s.includes("아울렛") || s.includes("몰")) return "아울렛몰";
+  if (s.includes("아울렛")) return "아울렛";
+  if (s.includes("몰")) return "쇼핑몰";
   return "기타";
 }
 
@@ -68,9 +69,9 @@ function parseReportSheet(sheetName: string, rows: any[][]) {
   const targetReactionCol = findCol(header, ["타겟", "연령층"], 5);
   const actionCol = findCol(header, ["향후전망", "조치사항"], 6);
 
-  const channelType = channelTypeFromSheetName(sheetName);
   const week = weekFromSheetName(sheetName);
   const storeScope = extractStores(rows, sheetName);
+  const channelType = channelTypeFromSheetName(sheetName, storeScope);
 
   return rows.slice(headerIndex + 1)
     .map((row, idx) => {
@@ -101,6 +102,70 @@ function parseReportSheet(sheetName: string, rows: any[][]) {
 function compactText(value: string, max = 220) {
   const s = text(value).replace(/\n{3,}/g, "\n\n");
   return s.length > max ? `${s.slice(0, max)}...` : s;
+}
+
+
+function buildChannelSummary(items: any[]) {
+  const map = new Map<string, any>();
+  for (const item of items) {
+    const key = item.channelType || "기타";
+    if (!map.has(key)) {
+      map.set(key, {
+        channelType: key,
+        mentionCount: 0,
+        products: new Set<string>(),
+        stores: new Set<string>(),
+        issueCount: 0,
+      });
+    }
+    const bucket = map.get(key);
+    bucket.mentionCount += 1;
+    bucket.products.add(item.productName);
+    if (item.storeScope) bucket.stores.add(item.storeScope);
+
+    const combined = `${item.salesReaction || ""} ${item.targetReaction || ""} ${item.actionPlan || ""}`;
+    if (combined.includes("결품") || combined.includes("브로큰") || combined.includes("품절") || combined.includes("경고") || combined.includes("조치")) {
+      bucket.issueCount += 1;
+    }
+  }
+
+  return Array.from(map.values()).map((x) => ({
+    channelType: x.channelType,
+    mentionCount: x.mentionCount,
+    productCount: x.products.size,
+    storeCount: x.stores.size,
+    issueCount: x.issueCount,
+  })).sort((a, b) => b.mentionCount - a.mentionCount);
+}
+
+function buildHeadlineInsights(items: any[]) {
+  const issueWords = ["결품", "브로큰", "품절", "경고", "리밸런싱", "재고", "보충", "소진"];
+  const positiveWords = ["반응", "판매", "인기", "호응", "전환", "베스트", "상위"];
+  const urgent = items
+    .filter((item: any) => {
+      const s = `${item.salesReaction || ""} ${item.actionPlan || ""}`;
+      return issueWords.some((w) => s.includes(w));
+    })
+    .slice(0, 5)
+    .map((item: any) => ({
+      productName: item.productName,
+      channelType: item.channelType,
+      text: compactText(item.actionPlan || item.salesReaction, 130),
+    }));
+
+  const positive = items
+    .filter((item: any) => {
+      const s = `${item.salesReaction || ""} ${item.targetReaction || ""}`;
+      return positiveWords.some((w) => s.includes(w));
+    })
+    .slice(0, 5)
+    .map((item: any) => ({
+      productName: item.productName,
+      channelType: item.channelType,
+      text: compactText(item.salesReaction || item.targetReaction, 130),
+    }));
+
+  return { urgent, positive };
 }
 
 function buildProductSummary(items: any[]) {
@@ -163,6 +228,8 @@ export async function GET() {
       channelTypes,
       weeks,
       items,
+      channelSummary: buildChannelSummary(items),
+      headlineInsights: buildHeadlineInsights(items),
       productSummary: buildProductSummary(items),
       generatedAt: new Date().toISOString(),
     }, {
@@ -177,6 +244,8 @@ export async function GET() {
       channelTypes: [],
       weeks: [],
       items: [],
+      channelSummary: [],
+      headlineInsights: { urgent: [], positive: [] },
       productSummary: [],
     }, {
       status: 200,

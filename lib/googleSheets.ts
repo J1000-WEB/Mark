@@ -28,6 +28,48 @@ export async function getSheetsClient() {
   return google.sheets({ version: "v4", auth });
 }
 
+
+export function getDbSheetId() {
+  const id = process.env.GOOGLE_SHEET_ID_DB || process.env.GOOGLE_DB_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+  if (!id) throw new Error("GOOGLE_SHEET_ID_DB is not set");
+  return id;
+}
+
+export async function getSpreadsheetTitlesById(spreadsheetId: string) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.get({ spreadsheetId });
+  return (res.data.sheets || []).map((s) => s.properties?.title || "").filter(Boolean);
+}
+
+export async function getSheetValuesById(spreadsheetId: string, sheetName: string, range = "A:AZ") {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${escaped}'!${range}`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+    dateTimeRenderOption: "FORMATTED_STRING",
+  });
+  return (res.data.values || []) as any[][];
+}
+
+export async function getManySheetValuesById(spreadsheetId: string, sheetNames: string[], range = "A:AZ") {
+  const sheets = await getSheetsClient();
+  const ranges = sheetNames.map((name) => `'${name.replace(/'/g, "''")}'!${range}`);
+  const res = await sheets.spreadsheets.values.batchGet({
+    spreadsheetId,
+    ranges,
+    valueRenderOption: "UNFORMATTED_VALUE",
+    dateTimeRenderOption: "FORMATTED_STRING",
+  });
+
+  const out: Record<string, any[][]> = {};
+  (res.data.valueRanges || []).forEach((vr, idx) => {
+    out[sheetNames[idx]] = (vr.values || []) as any[][];
+  });
+  return out;
+}
+
 export async function getSpreadsheetTitles() {
   const sheets = await getSheetsClient();
   const spreadsheetId = getSheetId();

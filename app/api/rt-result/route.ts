@@ -152,6 +152,76 @@ function allocateByStock(rows: { color: string; size: string; stock: number }[],
   }));
 }
 
+
+function excelEscape(value: any) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function excelDateKST() {
+  return todayKST();
+}
+
+export async function GET() {
+  try {
+    await ensureSheetExists(RESULT_SHEET, RESULT_HEADER);
+
+    const rows = await getSheetValues(RESULT_SHEET, "A:H");
+    const dataRows = rows.slice(1).filter((row) => {
+      return text(row[0]) && text(row[1]) && text(row[2]) && text(row[5]);
+    });
+
+    const downloadDate = excelDateKST();
+
+    if (rows.length > 1) {
+      const updatedDownloadDates = rows.slice(1).map((row) => [text(row[7]) || downloadDate]);
+      await updateValues(`'${RESULT_SHEET}'!H2:H${rows.length}`, updatedDownloadDates);
+    }
+
+    const exportHeader = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "지시수량", "승인날짜"];
+    const exportRows = dataRows.map((row) => [
+      row[0],
+      row[1],
+      row[2],
+      row[3],
+      row[4],
+      row[5],
+      row[6],
+    ]);
+
+    const tableRows = [exportHeader, ...exportRows]
+      .map((row) => `<tr>${row.map((cell) => `<td style="mso-number-format:'\\@';">${excelEscape(cell)}</td>`).join("")}</tr>`)
+      .join("\n");
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+</head>
+<body>
+<table border="1">
+${tableRows}
+</table>
+</body>
+</html>`;
+
+    const fileName = `RT_지시서_${downloadDate}.xls`;
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error?.message || "RT 지시서 다운로드 실패" }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

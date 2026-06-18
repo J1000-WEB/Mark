@@ -267,6 +267,12 @@ function RTSuggestionSection({
       tone="white"
       right={
         <div className="flex flex-wrap gap-2">
+          <a
+            href="/api/rt-result?download=1"
+            className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-3 text-xs font-black text-white transition hover:bg-emerald-700"
+          >
+            RT 지시서 다운로드
+          </a>
           {tabs.map(([key, label, count]) => (
             <button
               key={key}

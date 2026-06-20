@@ -850,7 +850,16 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         salesChangeRate: Number(to.salesChangeRate.toFixed(1)),
         isNewProduct: to.isNewProduct,
         priorityStore: to.priorityStore,
-        reason: `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} / ${to.storeName} 상품판매력 ${to.productPowerScore.toFixed(1)}점·재고부족도 ${to.shortageScore.toFixed(1)}점${to.isNewProduct ? "·신상품 가중" : ""}${to.priorityStore && to.stock <= 0 ? "·우수매장 결품" : ""} / ${from.storeName} 과재고 출고`,
+        reason: [
+          `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} 상품입니다.`,
+          `${to.storeName}은 금주 판매 ${Math.round(to.weekNet || 0).toLocaleString("ko-KR")}개, 금주매출 ${Math.round(to.weekAmount || 0).toLocaleString("ko-KR")}원 기준으로 상품판매력 ${to.productPowerScore.toFixed(1)}점입니다.`,
+          `현재 ${to.storeName} 재고는 ${Math.round(to.stock).toLocaleString("ko-KR")}개, 재고주수 ${to.stockWeeks >= 999 ? "판매없음" : `${to.stockWeeks.toFixed(1)}주`}로 목표재고 ${Math.round(to.targetStock).toLocaleString("ko-KR")}개 대비 부족하여 재고부족도 ${to.shortageScore.toFixed(1)}점으로 계산되었습니다.`,
+          `${from.storeName}은 현재 재고 ${Math.round(from.stock).toLocaleString("ko-KR")}개, 이동 후 예상 재고주수 ${fromAfterWeeks >= 999 ? "판매없음" : `${fromAfterWeeks.toFixed(1)}주`}로 최소 안전재고를 남긴 상태에서 출고 가능합니다.`,
+          `제안수량은 입고점 부족수량 ${Math.round(toNeed).toLocaleString("ko-KR")}개, 출고점 가능수량 ${Math.round(fromAllow).toLocaleString("ko-KR")}개, 입고점 2주 판매 상한 ${Math.round(twoWeekCap).toLocaleString("ko-KR")}개 중 최소값으로 산정했습니다.`,
+          to.isNewProduct ? "신상품 4주 이내 판매 발생 상품으로 판매력 가중치가 반영되었습니다." : "",
+          to.priorityStore && to.stock <= 0 ? "우수매장/플래그십 결품 상태라 판매기회 손실 방지를 위해 우선순위가 상승했습니다." : "",
+          `RT Score ${to.rtScore.toFixed(1)}점 = 상품판매력 70% + 재고부족도 20% + 점포매출력 10% 기준입니다.`,
+        ].filter(Boolean).join("\n"),
       });
     }
   }

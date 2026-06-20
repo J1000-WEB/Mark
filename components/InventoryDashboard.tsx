@@ -159,10 +159,12 @@ function RTCard({
         </div>
       </div>
 
-      <details className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
-        <summary className="cursor-pointer text-xs font-black text-slate-600">추천 사유 보기</summary>
-        <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{reason}</p>
-        <p className="mt-1 text-xs font-semibold text-slate-500">승인 시 RT_Result에 자동 저장됩니다. RT 판단은 스타일 단위, 출고는 칼라/사이즈 실재고 기준입니다.</p>
+      <details className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+        <summary className="cursor-pointer text-xs font-black text-slate-700">추천 사유 보기</summary>
+        <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl bg-white p-4 text-sm font-semibold leading-7 text-slate-700">
+          <pre className="whitespace-pre-wrap break-words font-sans">{reason}</pre>
+        </div>
+        <p className="mt-2 text-xs font-semibold text-slate-500">승인 시 RT_Result에 자동 저장됩니다. RT 판단은 스타일 단위, 출고는 칼라/사이즈 실재고 기준입니다.</p>
       </details>
     </div>
   );

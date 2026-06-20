@@ -35,6 +35,12 @@ export function getDbSheetId() {
   return id;
 }
 
+export function getHistorySheetId() {
+  const id = process.env.GOOGLE_SHEET_ID_HISTORY || process.env.GOOGLE_HISTORY_SHEET_ID;
+  if (!id) throw new Error("GOOGLE_SHEET_ID_HISTORY is not set");
+  return id;
+}
+
 export async function getSpreadsheetTitlesById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.get({ spreadsheetId });
@@ -51,6 +57,58 @@ export async function getSheetValuesById(spreadsheetId: string, sheetName: strin
     dateTimeRenderOption: "FORMATTED_STRING",
   });
   return (res.data.values || []) as any[][];
+}
+
+export async function appendValuesById(spreadsheetId: string, range: string, values: any[][]) {
+  const sheets = await getSheetsClient();
+  return sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range,
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values },
+  });
+}
+
+export async function updateValuesById(spreadsheetId: string, range: string, values: any[][]) {
+  const sheets = await getSheetsClient();
+  return sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values },
+  });
+}
+
+export async function ensureSheetExistsById(spreadsheetId: string, title: string, header?: any[]) {
+  const sheets = await getSheetsClient();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === title);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title } } }],
+      },
+    });
+  }
+
+  if (header?.length) {
+    const escaped = title.replace(/'/g, "''");
+    const values = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${escaped}'!A1:Z1`,
+    }).then((res) => res.data.values || []).catch(() => []);
+    if (!values?.[0]?.length) {
+      const endCol = String.fromCharCode(64 + Math.min(header.length, 26));
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${escaped}'!A1:${endCol}1`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [header] },
+      });
+    }
+  }
 }
 
 export async function getManySheetValuesById(spreadsheetId: string, sheetNames: string[], range = "A:AZ") {

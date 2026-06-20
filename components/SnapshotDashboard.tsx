@@ -20,13 +20,17 @@ function SnapshotCard({ title, schedule }: { title: string; schedule: string }) 
 
 export default function SnapshotDashboard() {
   const [rows, setRows] = useState<any[]>([]);
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function loadHistory() {
     const res = await fetch("/api/snapshots", { cache: "no-store" });
     const data = await res.json();
-    if (data.ok) setRows(data.rows || []);
+    if (data.ok) {
+      setRows(data.rows || []);
+      setHistoryRows(data.historyRows || []);
+    }
   }
 
   async function saveSnapshot(type = "manual") {
@@ -40,7 +44,7 @@ export default function SnapshotDashboard() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "저장 실패");
-      setStatus(`저장 완료: ${data.summary}${data.driveUrl ? ' / Drive 업로드 완료' : ' / Drive 업로드 실패 또는 미연결'}`);
+      setStatus(`저장 완료: ${data.summary}${data.history?.snapshotId ? ` / History ${data.history.snapshotId} 저장` : ''}${data.driveUrl ? ' / Drive 업로드 완료' : ' / Drive 업로드 실패 또는 미연결'}`);
       await loadHistory();
     } catch (e: any) {
       setStatus(e?.message || "저장 실패");
@@ -58,8 +62,8 @@ export default function SnapshotDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black">📸 Snapshot Center Mark4.7.2</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-500">현재 데이터 상태를 Snapshot_Master와 Google Drive에 압축 저장합니다.</p>
+            <h1 className="text-3xl font-black">📸 Snapshot Center MARK 4.77</h1>
+            <p className="mt-1 text-sm font-semibold text-slate-500">현재 데이터 상태를 Snapshot_Master와 MARK_HISTORY에 저장합니다.</p>
           </div>
           <NavTabs active="snapshot" />
         </header>
@@ -75,7 +79,7 @@ export default function SnapshotDashboard() {
             <div>
               <p className="text-sm font-bold text-slate-300">Snapshot Engine</p>
               <h2 className="mt-1 text-2xl font-black">수동 스냅샷 저장</h2>
-              <p className="mt-2 text-sm font-semibold text-slate-300">JSON 파일은 Google Drive에도 업로드됩니다. 스크린샷 저장은 다음 단계에서 연결 예정입니다.</p>
+              <p className="mt-2 text-sm font-semibold text-slate-300">Snapshot_Master에는 JSON을, MARK_HISTORY에는 상품/점포 히스토리를 적재합니다.</p>
             </div>
             <button
               type="button"
@@ -93,6 +97,23 @@ export default function SnapshotDashboard() {
             {status}
           </section>
         )}
+
+        <section className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-black">MARK_HISTORY 저장 이력</h2>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">Daily History</span>
+          </div>
+          <div className="max-h-[360px] space-y-2 overflow-y-auto pr-2">
+            {historyRows.length === 0 && <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">저장된 History 이력이 없습니다.</div>}
+            {historyRows.map((r, i) => (
+              <div key={i} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="text-xs font-semibold text-emerald-700">{r[0]} · {r[1]} · {r[2]}</p>
+                <p className="mt-1 font-black text-emerald-900">{r[3]}</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-700">{r[4]}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">

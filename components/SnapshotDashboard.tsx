@@ -44,7 +44,7 @@ export default function SnapshotDashboard() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "저장 실패");
-      setStatus(`저장 완료: ${data.summary}${data.history?.snapshotId ? ` / History ${data.history.snapshotId} 저장` : ''}${data.driveUrl ? ' / Drive 업로드 완료' : ' / Drive 업로드 실패 또는 미연결'}`);
+      setStatus(`저장 완료: ${data.summary}${data.history?.snapshotId ? ` / History ${data.history.snapshotId} 저장` : ''}${data.dailyHistory?.saveId ? ` / Daily ${data.dailyHistory.saveId} 저장` : ''}${data.driveUrl ? ' / Drive 업로드 완료' : ' / Drive 업로드 실패 또는 미연결'}`);
       await loadHistory();
     } catch (e: any) {
       setStatus(e?.message || "저장 실패");

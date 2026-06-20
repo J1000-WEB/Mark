@@ -31,27 +31,6 @@ export default function NavTabs({ active }: { active: "daily" | "weekly" | "mont
           {tab.label}
         </Link>
       ))}
-      <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:inline-block" />
-      <Link
-        href="/logic"
-        className={`rounded-xl px-3 py-2 text-xs font-black ${
-          active === "logic"
-            ? "bg-violet-900 text-white"
-            : "border border-violet-100 bg-violet-50 text-violet-700 hover:bg-violet-100"
-        }`}
-      >
-        Logic Center
-      </Link>
-      <Link
-        href="/snapshot"
-        className={`rounded-xl px-3 py-2 text-xs font-black ${
-          active === "snapshot"
-            ? "bg-slate-900 text-white"
-            : "border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
-        }`}
-      >
-        Snapshot
-      </Link>
       <button
         type="button"
         onClick={logout}

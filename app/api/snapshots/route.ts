@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendValues, ensureSheetExists, getSheetValues, uploadTextFileToDrive, getHistorySheetId, ensureSheetExistsById, appendValuesById, getSheetValuesById } from "@/lib/googleSheets";
 import { buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBuilder";
+import { readDailySalesFromMarkDb, saveDailySalesToHistory } from "@/lib/dailySales";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -326,7 +327,16 @@ export async function POST(req: Request) {
       history = { error: historyError?.message || "History save failed" };
     }
 
-    return NextResponse.json({ ok: true, createdAt, type, summary, snapshot, driveUrl, driveFileName, history }, { headers: { "Cache-Control": "no-store" } });
+    let dailyHistory: any = null;
+    try {
+      const daily = await readDailySalesFromMarkDb();
+      dailyHistory = await saveDailySalesToHistory(daily, "snapshot");
+    } catch (dailyError: any) {
+      console.error("Daily history save failed:", dailyError);
+      dailyHistory = { error: dailyError?.message || "Daily history save failed" };
+    }
+
+    return NextResponse.json({ ok: true, createdAt, type, summary, snapshot, driveUrl, driveFileName, history, dailyHistory }, { headers: { "Cache-Control": "no-store" } });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Snapshot save failed" }, { status: 500 });
   }

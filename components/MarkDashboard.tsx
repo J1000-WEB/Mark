@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
+import DailySalesPanel from "@/components/DailySalesPanel";
 import { Card, Empty, Kpi, ProductList, StoreMiniList } from "@/components/Shared";
 import {
   badMonthly,
@@ -400,6 +401,8 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           )}
         </section>
 
+        {active === "daily" && <DailySalesPanel />}
+
         {active === "weekly" && <Briefing lines={dashboardData.weekly?.aiBriefing || []} />}
 
         {active !== "monthly" && (
@@ -506,19 +509,22 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         </section>
 
 
-        {active === "weekly" && (
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[11px] font-black text-slate-400">ADMIN ONLY</p>
-                <p className="text-sm font-black text-slate-700">관리자 메뉴</p>
-              </div>
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[11px] font-black text-slate-400">ADMIN ONLY</p>
+              <p className="text-sm font-black text-slate-700">관리자 메뉴</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/snapshot" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
+                📸 Snapshot
+              </Link>
               <Link href="/logic" className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white">
                 🧠 Logic Center
               </Link>
             </div>
-          </section>
-        )}
+          </div>
+        </section>
 
       </div>
     </main>

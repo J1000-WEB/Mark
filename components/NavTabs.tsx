@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" }) {
+export default function NavTabs({ active }: { active: "schedule" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" }) {
   const tabs = [
+    { key: "schedule", label: "판매전체상", href: "/schedule" },
     { key: "weekly", label: "주간", href: "/weekly" },
     { key: "inventory", label: "재고CTRL", href: "/inventory" },
     { key: "trends", label: "상품동향", href: "/trends" },

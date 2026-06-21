@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDbSheetId, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
+import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -54,14 +54,16 @@ function parseRows(rows: any[][]) {
 
 export async function GET() {
   try {
-    const spreadsheetId = getDbSheetId();
+    // Schedule_Simple은 MARK_DB가 아니라 메인 스프레드시트
+    // 📊 매출 통합 대시보드 2026 (NEW), 즉 RT_Result가 있는 GOOGLE_SHEET_ID에서 읽습니다.
+    const spreadsheetId = getSheetId();
     const titles = await getSpreadsheetTitlesById(spreadsheetId);
     const sheetName = pickScheduleSheet(titles);
 
     if (!sheetName) {
       return NextResponse.json({
         ok: false,
-        error: "MARK_DB에서 Schedule_Simple 시트를 찾지 못했습니다.",
+        error: "메인 스프레드시트에서 Schedule_Simple 시트를 찾지 못했습니다.",
         sheetName: "",
         headers: [],
         rows: [],

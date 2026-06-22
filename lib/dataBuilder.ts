@@ -214,10 +214,47 @@ function findCol(row: any[], labels: string[], fallback = -1) {
   return fallback;
 }
 
+function normalizedHeader(v: any) {
+  return text(v).replace(/[\s_\-·.()]/g, "");
+}
+
+function findGroupStart(groupHeader: any[], labels: string[]) {
+  const normalized = (groupHeader || []).map(normalizedHeader);
+  for (const label of labels) {
+    const target = normalizedHeader(label);
+    const idx = normalized.findIndex((v) => v === target || v.includes(target));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function findGroupEnd(groupHeader: any[], start: number, maxLength: number) {
+  if (start < 0) return maxLength;
+  for (let i = start + 1; i < maxLength; i++) {
+    if (text(groupHeader[i])) return i;
+  }
+  return maxLength;
+}
+
+function findMetricInGroup(groupHeader: any[], header: any[], start: number, metricLabels: string[], fallback = -1) {
+  if (start < 0) return fallback;
+  const end = findGroupEnd(groupHeader, start, header.length);
+  const normalized = (header || []).map(normalizedHeader);
+
+  for (const label of metricLabels) {
+    const target = normalizedHeader(label);
+    for (let i = start; i < end; i++) {
+      if (normalized[i] === target || normalized[i].includes(target)) return i;
+    }
+  }
+
+  return fallback;
+}
+
 function parseProducts(rows: any[][]) {
   const headerRow = findHeaderRow(rows, ["채널명", "스타일"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : [];
-  const subHeader = headerRow >= 0 ? rows[headerRow + 1] || [] : [];
+  const groupHeader = headerRow > 0 ? rows[headerRow - 1] || [] : [];
 
   const storeCol = findCol(header, ["채널명"], 1);
   const styleCol = findCol(header, ["스타일"], 2);
@@ -225,21 +262,26 @@ function parseProducts(rows: any[][]) {
   const colorCol = findCol(header, ["칼라"], 4);
   const colorNameCol = findCol(header, ["칼라명"], 5);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = 8; // I열 재고 고정
-  const launchCol = findCol(header, ["최초출고일"], 29);
+  const stockCol = findCol(header, ["재고"], 7);
+  const launchCol = findCol(header, ["최초출고일"], 27);
 
+  const currentGroupCol = findGroupStart(groupHeader, ["금주", "기간판매1"]);
+  const previousGroupCol = findGroupStart(groupHeader, ["전주", "기간판매2"]);
   const period1Col = findCol(header, ["기간판매1"], -1);
   const period2Col = findCol(header, ["기간판매2"], -1);
 
-  // MARK 4.73: 신규 금주/전주 시트는 병합 헤더 아래가
-  // 판매 / 반품 / 합계 / 판매금액 순서입니다.
-  // 따라서 순판매수량은 +2(합계), 판매금액은 +3(판매금액)을 사용합니다.
-  const weekNetCol = period1Col >= 0 ? period1Col + 2 : 22;
-  const weekAmountCol = period1Col >= 0 ? period1Col + 3 : 23;
-  const prevNetCol = period2Col >= 0 ? period2Col + 2 : 26;
-  const prevAmountCol = period2Col >= 0 ? period2Col + 3 : 27;
+  // MARK 4.80.3:
+  // 금주/전주 원본은 열 위치가 자주 바뀌므로 I/H 같은 고정 열을 쓰지 않고
+  // 상단 그룹 헤더(금주/전주) + 세부 헤더(합계/판매금액)를 확인해서 매핑합니다.
+  // 현재 시트 구조 예:
+  // 2행: ... 금주 ... 전주 ...
+  // 3행: ... 판매/반품/합계/판매금액 ...
+  const weekNetCol = findMetricInGroup(groupHeader, header, currentGroupCol, ["합계"], period1Col >= 0 ? period1Col + 2 : 20);
+  const weekAmountCol = findMetricInGroup(groupHeader, header, currentGroupCol, ["판매금액", "금액"], period1Col >= 0 ? period1Col + 3 : 21);
+  const prevNetCol = findMetricInGroup(groupHeader, header, previousGroupCol, ["합계"], period2Col >= 0 ? period2Col + 2 : 24);
+  const prevAmountCol = findMetricInGroup(groupHeader, header, previousGroupCol, ["판매금액", "금액"], period2Col >= 0 ? period2Col + 3 : 25);
 
-  const startRow = headerRow >= 0 ? headerRow + 2 : 3;
+  const startRow = headerRow >= 0 ? headerRow + 1 : 3;
   const grouped = new Map<string, any>();
 
   for (let r = startRow; r < rows.length; r++) {

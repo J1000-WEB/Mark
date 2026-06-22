@@ -26,7 +26,7 @@ function BarList({ rows, field }: { rows: any[]; field: string }) {
   if (!rows.length) return <Empty />;
 
   return (
-    <div className="h-[760px] space-y-4 overflow-y-auto pr-3">
+    <div className="h-[980px] space-y-4 overflow-y-auto pr-3">
       {rows.map((r) => {
         const value = Number(r[field] || 0);
         const prev = field === "daySales" ? r.compareDaySales : r.compareWeekSales;
@@ -408,7 +408,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active !== "monthly" && (
           <section className="grid items-start gap-6 lg:grid-cols-2">
             <Card title="매출관리 필요매장">
-              <div className={active === "weekly" ? "h-[760px] overflow-y-auto pr-2" : ""}>
+              <div className={active === "weekly" ? "min-h-[980px] pr-2" : ""}>
                 {active === "weekly" ? (
                   <>
                     <div className="grid gap-4 md:grid-cols-2">

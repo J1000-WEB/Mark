@@ -189,7 +189,16 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
 
   const products = data.weekly?.storeTopProducts?.[storeName] || [];
   const goodProducts = [...products].sort((a, b) => Number(b.amountChangeRate || 0) - Number(a.amountChangeRate || 0)).slice(0, 2);
-  const badProducts = [...products].filter((p) => Number(p.prevAmount || 0) > 0).sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0)).slice(0, 2);
+  const badProductsWithPrev = [...products]
+    .filter((p) => Number(p.prevAmount || 0) > 0)
+    .sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0))
+    .slice(0, 2);
+  const badProducts = badProductsWithPrev.length
+    ? badProductsWithPrev
+    : [...products]
+        .filter((p) => Number(p.weekAmount || 0) > 0)
+        .sort((a, b) => Number(a.weekAmount || 0) - Number(b.weekAmount || 0))
+        .slice(0, 2);
 
   useEffect(() => {
     if (!storeName) return;

@@ -1157,7 +1157,10 @@ export async function buildDashboardDataFromGoogleSheet() {
     },
     weekly: {
       periodLabel: `분석기간: ${weeklyCurrent} / 비교기간: ${weeklyCompare}`,
-      current: weeklyCur,
+      // 주간 화면/스냅샷 모두 보정된 주간 매출값을 사용해야 합니다.
+      // weeklyCur는 원본 주실적 칸이 비어 있으면 weekSales가 0으로 들어오므로,
+      // mergeStoreRows에서 월누계 차감으로 보정된 mergedWeekly를 저장합니다.
+      current: mergedWeekly,
       compare: weeklyCmp,
       companyTopProducts,
       storeTopProducts,

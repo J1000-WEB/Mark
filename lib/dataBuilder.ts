@@ -365,20 +365,57 @@ function parseProducts(rows: any[][]) {
 
 function parseInventory(rows: any[][]) {
   const out: any[] = [];
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r] || [];
-    const season = text(row[0]) || "";
-    const styleCode = text(row[4]); // E
-    const productName = text(row[5]); // F
-    if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
-    const tagPrice = num(row[11]); // L
-    const currentPrice = num(row[12]); // M
-    const onlineStock = num(row[16]); // Q
-    const offlineStock = num(row[17]); // R
-    const totalStock = num(row[18]); // S
-    if (!onlineStock && !offlineStock && !totalStock && !tagPrice && !currentPrice) continue;
+  if (!rows.length) return out;
 
-    out.push({ season, styleCode, productName, tagPrice, currentPrice, onlineStock, offlineStock, totalStock });
+  const headerRow = findHeaderRow(rows, ["스타일", "가용(온)"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
+
+  const seasonCol = findCol(header, ["시즌"], 21);       // V
+  const styleCol = findCol(header, ["스타일"], 5);       // F
+  const productCol = findCol(header, ["스타일명"], 6);   // G
+  const tagPriceCol = findCol(header, ["Tag가", "TAG가"], 12);       // M
+  const currentPriceCol = findCol(header, ["실판매가"], 13);          // N
+
+  // 온오프재고현황 실제 구조:
+  // P 재고 / Q 할당 / R 가용(온) / S 가용(오프) / T 가용(합계)
+  // 열 삽입에 대비해 헤더명 우선 매핑하고, 실패 시 현재 구조의 인덱스로 fallback합니다.
+  const stockCol = findCol(header, ["재고"], 15);                 // P
+  const allocatedCol = findCol(header, ["할당"], 16);             // Q
+  const onlineStockCol = findCol(header, ["가용(온)", "가용온"], 17);   // R
+  const offlineStockCol = findCol(header, ["가용(오프)", "가용오프"], 18); // S
+  const totalStockCol = findCol(header, ["가용(합계)", "가용합계"], 19);  // T
+
+  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
+
+  for (let r = startRow; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const season = text(row[seasonCol]) || "";
+    const styleCode = text(row[styleCol]);
+    const productName = text(row[productCol]);
+    if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
+
+    const tagPrice = num(row[tagPriceCol]);
+    const currentPrice = num(row[currentPriceCol]);
+    const stock = num(row[stockCol]);
+    const allocatedStock = num(row[allocatedCol]);
+    const onlineStock = num(row[onlineStockCol]);
+    const offlineStock = num(row[offlineStockCol]);
+    const totalStock = num(row[totalStockCol]) || onlineStock + offlineStock;
+
+    if (!onlineStock && !offlineStock && !totalStock && !tagPrice && !currentPrice && !stock) continue;
+
+    out.push({
+      season,
+      styleCode,
+      productName,
+      tagPrice,
+      currentPrice,
+      stock,
+      allocatedStock,
+      onlineStock,
+      offlineStock,
+      totalStock,
+    });
   }
   return out;
 }
@@ -983,7 +1020,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   });
 
   return {
-    periodLabel: "재고CTRL 기준: 금주/전주 판매/점포재고 + 온오프재고현황 Q/R/S",
+    periodLabel: "재고CTRL 기준: 금주/전주 판매/점포재고 + 온오프재고현황 R 가용(온) / S 가용(오프) / T 가용(합계)",
     stockoutRisk: stockoutRisk.sort((a, b) => a.offlineWeeks - b.offlineWeeks).slice(0, 10),
     overstockRisk: overstockRisk.sort((a, b) => b.offlineWeeks - a.offlineWeeks).slice(0, 10),
     allocationSuggestions: allocationSuggestions.sort((a, b) => b.weekAmount - a.weekAmount).slice(0, 5),

@@ -406,9 +406,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active === "weekly" && <Briefing lines={dashboardData.weekly?.aiBriefing || []} />}
 
         {active !== "monthly" && (
-          <section className="grid items-start gap-6 lg:grid-cols-2">
+          <section className={`grid items-start gap-6 lg:grid-cols-2 ${active === "weekly" ? "lg:[&>section]:min-h-[1040px]" : ""}`}>
             <Card title="매출관리 필요매장">
-              <div className={active === "weekly" ? "min-h-[980px] pr-2" : ""}>
+              <div className={active === "weekly" ? "pr-2" : ""}>
                 {active === "weekly" ? (
                   <>
                     <div className="grid gap-4 md:grid-cols-2">

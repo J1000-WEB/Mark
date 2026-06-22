@@ -31,6 +31,7 @@ function channelTypeFromSheetName(sheetName: string, storeScope = "") {
   if (s.includes("로드샵")) return "로드샵";
   if (s.includes("아울렛")) return "아울렛";
   if (s.includes("몰")) return "쇼핑몰";
+  if (s.includes("통합")) return "통합";
   return "기타";
 }
 
@@ -38,6 +39,24 @@ function weekFromSheetName(sheetName: string) {
   const m = text(sheetName).match(/(\d+)월\s*(\d+)주차/);
   if (!m) return text(sheetName).split("(")[0] || "";
   return `${m[1]}월 ${m[2]}주차`;
+}
+
+function weekKeyFromSheetName(sheetName: string) {
+  const m = text(sheetName).match(/(\d+)월\s*(\d+)주차/);
+  if (!m) return 0;
+  return Number(m[1]) * 10 + Number(m[2]);
+}
+
+function pickLatestReportSheets(titles: string[]) {
+  const reportSheets = titles.filter((title) => {
+    const t = text(title);
+    return t.includes("상품레포트") || t.includes("상품 레포트");
+  });
+
+  const latestKey = Math.max(0, ...reportSheets.map(weekKeyFromSheetName));
+  if (!latestKey) return reportSheets;
+
+  return reportSheets.filter((title) => weekKeyFromSheetName(title) === latestKey);
 }
 
 function findHeaderIndex(rows: any[][]) {
@@ -211,10 +230,9 @@ export async function GET() {
     const spreadsheetId = getDbSheetId();
     const titles = await getSpreadsheetTitlesById(spreadsheetId);
 
-    const reportSheets = titles.filter((title) => {
-      const t = text(title);
-      return t.includes("상품레포트") || t.includes("상품 레포트");
-    });
+    // 상품레포트 시트는 자동 탐색하되, 여러 주차가 같이 남아 있으면 최신 주차만 읽습니다.
+    // 예: 6월2주차..., 6월3주차...가 함께 있으면 6월3주차 시트만 사용.
+    const reportSheets = pickLatestReportSheets(titles);
 
     const values = await getManySheetValuesById(spreadsheetId, reportSheets, "A:Z");
     const items = reportSheets.flatMap((sheetName) => parseReportSheet(sheetName, values[sheetName] || []));

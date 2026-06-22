@@ -114,18 +114,18 @@ function AiProductReviewCards({ agentResult, productSummary }: { agentResult: an
   if (!reviews.length) return null;
 
   return (
-    <div className="mt-5">
+    <div className="mt-5 rounded-3xl bg-white/10 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-black text-emerald-200">상품별 AI 리뷰 TOP {reviews.length}</h3>
         <p className="text-xs font-bold text-slate-400">언급량과 AI 분석 신호 기준</p>
       </div>
-      <div className="grid gap-3 xl:grid-cols-5 lg:grid-cols-3 md:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-5 lg:grid-cols-4 md:grid-cols-2">
         {reviews.map((item: any, idx: number) => (
-          <article key={`${item.productName}-${idx}`} className="rounded-2xl bg-white/10 p-4">
+          <article key={`${item.productName}-${idx}`} className="h-[168px] overflow-hidden rounded-2xl bg-white/10 p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[11px] font-black text-emerald-200">#{idx + 1}</p>
-                <h4 className="mt-1 line-clamp-2 text-sm font-black leading-5 text-white">{item.productName}</h4>
+                <h4 className="mt-1 max-h-10 overflow-hidden text-sm font-black leading-5 text-white">{item.productName}</h4>
               </div>
               {item.mentionCount ? (
                 <span className="shrink-0 rounded-full bg-white/15 px-2 py-1 text-[10px] font-black text-slate-200">{item.mentionCount}건</span>
@@ -133,22 +133,22 @@ function AiProductReviewCards({ agentResult, productSummary }: { agentResult: an
             </div>
 
             {item.channelTypes?.length ? (
-              <div className="mt-3 flex flex-wrap gap-1">
+              <div className="mt-2 flex flex-wrap gap-1">
                 {item.channelTypes.slice(0, 3).map((channel: string) => (
                   <span key={channel} className="rounded-full bg-slate-900/60 px-2 py-1 text-[10px] font-black text-slate-200">{channel}</span>
                 ))}
               </div>
             ) : null}
 
-            <div className="mt-3 space-y-2">
-              {(item.aiSignals || []).slice(0, 2).map((signal: any, sidx: number) => (
-                <p key={sidx} className="rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">
-                  <span className="font-black text-amber-200">{signal.label}</span> · {short(signal.text, 115)}
+            <div className="mt-2">
+              {(item.aiSignals || []).slice(0, 1).map((signal: any, sidx: number) => (
+                <p key={sidx} className="max-h-[62px] overflow-hidden rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">
+                  <span className="font-black text-amber-200">{signal.label}</span> · {short(signal.text, 125)}
                 </p>
               ))}
 
-              {!(item.aiSignals || []).length && (item.comments || []).slice(0, 2).map((comment: string, cidx: number) => (
-                <p key={cidx} className="rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">{comment}</p>
+              {!(item.aiSignals || []).length && (item.comments || []).slice(0, 1).map((comment: string, cidx: number) => (
+                <p key={cidx} className="max-h-[62px] overflow-hidden rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">{short(comment, 125)}</p>
               ))}
             </div>
           </article>
@@ -275,7 +275,7 @@ export default function TrendsDashboard() {
               {agentPendingRequestId ? <span className="rounded-full bg-amber-300 px-2.5 py-1 text-xs font-black text-slate-950">새 분석 대기: {agentPendingRequestId}</span> : null}
             </div>
             <h2 className="mt-4 text-3xl font-black tracking-tight">AI 상품동향 분석</h2>
-            <div className="mt-4 min-h-[520px] rounded-3xl bg-white/10 p-5">
+            <div className="mt-4 min-h-[330px] rounded-3xl bg-white/10 p-5">
               {agentResultLoading ? (
                 <p className="text-sm font-bold text-slate-300">AI 분석 결과 불러오는 중...</p>
               ) : agentResult?.executiveSummary || agentResult?.rawSummary ? (
@@ -321,8 +321,6 @@ export default function TrendsDashboard() {
                     ) : null}
                   </div>
 
-                  <AiProductReviewCards agentResult={agentResult} productSummary={data.productSummary || []} />
-
                   {!agentResult.executiveSummary && agentResult.rawSummary ? (
                     <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.rawSummary}</pre>
                   ) : null}
@@ -338,7 +336,7 @@ export default function TrendsDashboard() {
             </div>
           </div>
 
-          <div className="w-full rounded-3xl bg-white p-5 text-slate-900 lg:w-[360px]">
+          <div className="w-full rounded-3xl bg-white p-5 text-slate-900 lg:mt-[96px] lg:w-[360px]">
             <h3 className="text-sm font-black">Agent 분석 요청</h3>
             <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
               새 분석 요청만 등록합니다. 화면은 Trend_Summary에 저장된 최신 결과를 계속 표시합니다.
@@ -370,6 +368,10 @@ export default function TrendsDashboard() {
             ) : null}
           </div>
         </div>
+
+        {agentResult?.executiveSummary || agentResult?.rawSummary ? (
+          <AiProductReviewCards agentResult={agentResult} productSummary={data.productSummary || []} />
+        ) : null}
       </section>
 
       <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm">

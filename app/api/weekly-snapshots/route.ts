@@ -5,13 +5,24 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const SHEET_NAME = "Weekly_Snapshot";
+const CHUNK_SIZE = 45000;
+
 const HEADER = [
   "snapshot_id",
   "created_at",
   "snapshot_type",
   "period_label",
   "memo",
-  "payload_json",
+  "payload_json_1",
+  "payload_json_2",
+  "payload_json_3",
+  "payload_json_4",
+  "payload_json_5",
+  "payload_json_6",
+  "payload_json_7",
+  "payload_json_8",
+  "payload_json_9",
+  "payload_json_10",
 ];
 
 function text(v: any) {
@@ -39,12 +50,48 @@ function parseDateText(value: any) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+function chunkText(value: string, size = CHUNK_SIZE) {
+  const chunks: string[] = [];
+  for (let i = 0; i < value.length; i += size) {
+    chunks.push(value.slice(i, i + size));
+  }
+  return chunks.length ? chunks : [""];
+}
+
 function safeJsonParse(value: any) {
   try {
     return JSON.parse(text(value));
   } catch {
     return null;
   }
+}
+
+function joinPayloadChunks(row: any[]) {
+  return row.slice(5).map(text).join("");
+}
+
+function shrinkWeeklyPayload(payload: any) {
+  const weekly = payload?.weekly || {};
+
+  return {
+    savedAt: payload?.savedAt || new Date().toISOString(),
+    weekly: {
+      periodLabel: weekly.periodLabel || "",
+      current: weekly.current || [],
+      compare: weekly.compare || [],
+      companyTopProducts: weekly.companyTopProducts || [],
+      storeTopProducts: weekly.storeTopProducts || {},
+      top10Concentration: weekly.top10Concentration || 0,
+      newTop10Entrants: weekly.newTop10Entrants || [],
+      aiBriefing: weekly.aiBriefing || [],
+    },
+    inventory: {
+      rtSuggestions: payload?.inventory?.rtSuggestions || [],
+      allocationSuggestions: payload?.inventory?.allocationSuggestions || [],
+      stockoutRisk: payload?.inventory?.stockoutRisk || [],
+      overstockRisk: payload?.inventory?.overstockRisk || [],
+    },
+  };
 }
 
 async function ensureWeeklySnapshotSheet(spreadsheetId: string) {
@@ -59,7 +106,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const id = text(url.searchParams.get("id"));
 
-    const rows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:F").catch(() => []);
+    const rows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:AZ").catch(() => []);
     const records = rows.slice(1)
       .map((row: any[]) => ({
         snapshotId: text(row[0]),
@@ -67,7 +114,7 @@ export async function GET(req: Request) {
         snapshotType: text(row[2]),
         periodLabel: text(row[3]),
         memo: text(row[4]),
-        payloadJson: text(row[5]),
+        payloadJson: joinPayloadChunks(row),
       }))
       .filter((row: any) => row.snapshotId)
       .sort((a: any, b: any) => parseDateText(b.createdAt) - parseDateText(a.createdAt));
@@ -106,7 +153,8 @@ export async function POST(req: Request) {
     const createdAt = nowKST();
     const periodLabel = text(body.periodLabel) || text(body?.payload?.weekly?.periodLabel) || "주간 스냅샷";
     const memo = text(body.memo);
-    const payload = body.payload || {};
+
+    const payload = shrinkWeeklyPayload(body.payload || {});
 
     if (!payload?.weekly) {
       return NextResponse.json({
@@ -116,14 +164,15 @@ export async function POST(req: Request) {
     }
 
     const payloadJson = JSON.stringify(payload);
+    const chunks = chunkText(payloadJson);
 
-    await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:F`, [[
+    await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:AZ`, [[
       snapshotId,
       createdAt,
       "weekly",
       periodLabel,
       memo,
-      payloadJson,
+      ...chunks,
     ]]);
 
     return NextResponse.json({
@@ -131,6 +180,8 @@ export async function POST(req: Request) {
       snapshotId,
       createdAt,
       periodLabel,
+      chunkCount: chunks.length,
+      payloadLength: payloadJson.length,
       message: "Weekly Snapshot 저장 완료",
     }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {

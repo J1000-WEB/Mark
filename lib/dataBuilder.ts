@@ -42,6 +42,12 @@ function isShop(storeName: string) {
   return String(storeName || "").startsWith("오프라인_");
 }
 
+function isExcludedStore(storeName: string) {
+  const key = normalizeStoreKey(storeName);
+  // 포시즌 아울렛은 프로젝트성 매장이라 핵심 매장 호조/부진/랭킹/합산에서 제외합니다.
+  return key.includes("포시즌아울렛") || key.includes("포시즌");
+}
+
 function normalizeStoreKey(storeName: string) {
   const raw = String(storeName || "").trim();
   return raw
@@ -493,7 +499,7 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const map = new Map<string, any>();
 
-  for (const r of productRows.filter((x) => !isShop(x.storeName))) {
+  for (const r of productRows.filter((x) => !isShop(x.storeName) && !isExcludedStore(x.storeName))) {
     const season = r.season || "미지정";
     const key = `${season}__${r.styleCode}`;
     if (!map.has(key)) {
@@ -613,7 +619,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const map = new Map<string, any>();
 
-  for (const r of productRows.filter((x) => !isShop(x.storeName))) {
+  for (const r of productRows.filter((x) => !isShop(x.storeName) && !isExcludedStore(x.storeName))) {
     const key = r.styleCode;
     if (!key) continue;
     if (!map.has(key)) {
@@ -1020,16 +1026,18 @@ export async function buildDashboardDataFromGoogleSheet() {
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
-  const dailyCur = parseTargetSheet(dailyCurrent, values[dailyCurrent] || []).rows;
-  const dailyCmp = parseTargetSheet(dailyCompare, values[dailyCompare] || []).rows;
-  const weeklyCur = parseTargetSheet(weeklyCurrent, values[weeklyCurrent] || []).rows;
-  const weeklyCmp = parseTargetSheet(weeklyCompare, values[weeklyCompare] || []).rows;
+  const filterVisibleStores = (rows: any[]) => rows.filter((r) => !isExcludedStore(r.storeName));
+
+  const dailyCur = filterVisibleStores(parseTargetSheet(dailyCurrent, values[dailyCurrent] || []).rows);
+  const dailyCmp = filterVisibleStores(parseTargetSheet(dailyCompare, values[dailyCompare] || []).rows);
+  const weeklyCur = filterVisibleStores(parseTargetSheet(weeklyCurrent, values[weeklyCurrent] || []).rows);
+  const weeklyCmp = filterVisibleStores(parseTargetSheet(weeklyCompare, values[weeklyCompare] || []).rows);
   const monthCur = weeklyCur;
-  const monthCmp = parseTargetSheet(prevMonth, values[prevMonth] || []).rows;
-  const monthYear = parseTargetSheet(prevYear, values[prevYear] || []).rows;
+  const monthCmp = filterVisibleStores(parseTargetSheet(prevMonth, values[prevMonth] || []).rows);
+  const monthYear = filterVisibleStores(parseTargetSheet(prevYear, values[prevYear] || []).rows);
 
   const productRows = parseProducts(values[productSheet] || []);
-  const coreProductRows = productRows.filter((r) => !isShop(r.storeName));
+  const coreProductRows = productRows.filter((r) => !isShop(r.storeName) && !isExcludedStore(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
 
@@ -1038,7 +1046,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   for (const store of storeNames) storeTopProducts[store] = aggregateProducts(coreProductRows, store, 20);
   const companyTopProducts = aggregateProducts(coreProductRows, undefined, 20);
 
-  const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => !isShop(r.storeName));
+  const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => !isShop(r.storeName) && !isExcludedStore(r.storeName));
   const coreWeekSales = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
   const top10Amount = companyTopProducts.slice(0, 10).reduce((s, p) => s + Number(p.weekAmount || 0), 0);
   const top10Concentration = coreWeekSales ? (top10Amount / coreWeekSales) * 100 : 0;

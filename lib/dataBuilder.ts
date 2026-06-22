@@ -262,7 +262,11 @@ function parseProducts(rows: any[][]) {
   const colorCol = findCol(header, ["칼라"], 4);
   const colorNameCol = findCol(header, ["칼라명"], 5);
   const sizeCol = findCol(header, ["사이즈"], 6);
-  const stockCol = findCol(header, ["재고"], 7);
+  // 금주전주 시트는 헤더상 H="재고", I="수량"으로 보이지만 실제 점포 재고 수량은 I열(수량)에 들어옵니다.
+  // 이전처럼 "재고" 텍스트만 따라가면 성수 플래그십 같은 점포 재고가 0으로 표시됩니다.
+  const stockQtyCol = findCol(header, ["수량"], -1);
+  const stockHeaderCol = findCol(header, ["재고"], 7);
+  const stockCol = stockQtyCol >= 0 ? stockQtyCol : stockHeaderCol;
   const launchCol = findCol(header, ["최초출고일"], 27);
 
   const currentGroupCol = findGroupStart(groupHeader, ["금주", "기간판매1"]);
@@ -298,7 +302,7 @@ function parseProducts(rows: any[][]) {
     const color = text(row[colorCol]);
     const colorName = text(row[colorNameCol]);
     const size = text(row[sizeCol]);
-    const stock = num(row[stockCol]);
+    const stock = Math.max(0, num(row[stockCol]));
     const weekNet = num(row[weekNetCol]);
     const weekAmount = num(row[weekAmountCol]);
     const prevNet = num(row[prevNetCol]);

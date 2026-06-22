@@ -117,39 +117,45 @@ function AiProductReviewCards({ agentResult, productSummary }: { agentResult: an
     <div className="mt-5 rounded-3xl bg-white/10 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-black text-emerald-200">상품별 AI 리뷰 TOP {reviews.length}</h3>
-        <p className="text-xs font-bold text-slate-400">언급량과 AI 분석 신호 기준</p>
+        <p className="text-xs font-bold text-slate-400">1개 상품을 넓게 보고, 핵심 신호를 세로로 확인합니다.</p>
       </div>
-      <div className="grid gap-3 xl:grid-cols-5 lg:grid-cols-4 md:grid-cols-2">
+      <div className="space-y-3">
         {reviews.map((item: any, idx: number) => (
-          <article key={`${item.productName}-${idx}`} className="h-[168px] overflow-hidden rounded-2xl bg-white/10 p-4">
-            <div className="flex items-start justify-between gap-2">
+          <article key={`${item.productName}-${idx}`} className="rounded-2xl bg-white/10 p-4">
+            <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
               <div className="min-w-0">
-                <p className="text-[11px] font-black text-emerald-200">#{idx + 1}</p>
-                <h4 className="mt-1 max-h-10 overflow-hidden text-sm font-black leading-5 text-white">{item.productName}</h4>
-              </div>
-              {item.mentionCount ? (
-                <span className="shrink-0 rounded-full bg-white/15 px-2 py-1 text-[10px] font-black text-slate-200">{item.mentionCount}건</span>
-              ) : null}
-            </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-emerald-300 px-2.5 py-1 text-[11px] font-black text-slate-950">#{idx + 1}</span>
+                  {item.mentionCount ? (
+                    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black text-slate-200">언급 {item.mentionCount}건</span>
+                  ) : null}
+                </div>
+                <h4 className="mt-3 text-base font-black leading-6 text-white">{item.productName}</h4>
 
-            {item.channelTypes?.length ? (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {item.channelTypes.slice(0, 3).map((channel: string) => (
-                  <span key={channel} className="rounded-full bg-slate-900/60 px-2 py-1 text-[10px] font-black text-slate-200">{channel}</span>
+                {item.channelTypes?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {item.channelTypes.slice(0, 5).map((channel: string) => (
+                      <span key={channel} className="rounded-full bg-slate-900/60 px-2.5 py-1 text-[10px] font-black text-slate-200">{channel}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {(item.aiSignals || []).slice(0, 2).map((signal: any, sidx: number) => (
+                  <div key={sidx} className="rounded-xl bg-white/10 p-3">
+                    <p className="text-[11px] font-black text-amber-200">{signal.label}</p>
+                    <p className="mt-1 text-xs font-semibold leading-6 text-slate-100">{short(signal.text, 260)}</p>
+                  </div>
+                ))}
+
+                {!(item.aiSignals || []).length && (item.comments || []).slice(0, 2).map((comment: string, cidx: number) => (
+                  <div key={cidx} className="rounded-xl bg-white/10 p-3">
+                    <p className="text-[11px] font-black text-sky-200">현장 코멘트</p>
+                    <p className="mt-1 text-xs font-semibold leading-6 text-slate-100">{short(comment, 260)}</p>
+                  </div>
                 ))}
               </div>
-            ) : null}
-
-            <div className="mt-2">
-              {(item.aiSignals || []).slice(0, 1).map((signal: any, sidx: number) => (
-                <p key={sidx} className="max-h-[62px] overflow-hidden rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">
-                  <span className="font-black text-amber-200">{signal.label}</span> · {short(signal.text, 125)}
-                </p>
-              ))}
-
-              {!(item.aiSignals || []).length && (item.comments || []).slice(0, 1).map((comment: string, cidx: number) => (
-                <p key={cidx} className="max-h-[62px] overflow-hidden rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">{short(comment, 125)}</p>
-              ))}
             </div>
           </article>
         ))}

@@ -189,16 +189,7 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
 
   const products = data.weekly?.storeTopProducts?.[storeName] || [];
   const goodProducts = [...products].sort((a, b) => Number(b.amountChangeRate || 0) - Number(a.amountChangeRate || 0)).slice(0, 2);
-  const badProductsWithPrev = [...products]
-    .filter((p) => Number(p.prevAmount || 0) > 0)
-    .sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0))
-    .slice(0, 2);
-  const badProducts = badProductsWithPrev.length
-    ? badProductsWithPrev
-    : [...products]
-        .filter((p) => Number(p.weekAmount || 0) > 0)
-        .sort((a, b) => Number(a.weekAmount || 0) - Number(b.weekAmount || 0))
-        .slice(0, 2);
+  const badProducts = [...products].filter((p) => Number(p.prevAmount || 0) > 0).sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0)).slice(0, 2);
 
   useEffect(() => {
     if (!storeName) return;
@@ -370,11 +361,15 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">GENERAL IDEA 오프라인 대시보드 MARK 4.74</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {active === "daily" && "일간 매출대시보드"}
+              {active === "weekly" && "주간 매출대시보드"}
+              {active === "monthly" && "월간 매출대시보드"}
+            </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {active === "daily" && "일간 · 일_전일 vs 일_전주"}
-              {active === "weekly" && "주간 · 구글시트 연동 + 점포 메모"}
-              {active === "monthly" && "월간 · 호조/부진 매장 + 상품영역 준비중"}
+              {active === "daily" && "일별 매출 흐름과 전주 동요일 비교를 확인합니다."}
+              {active === "weekly" && "주간 매출, 점포별 흐름, 상품 반응을 확인합니다."}
+              {active === "monthly" && "월간 누적 매출과 전월/전년 흐름을 확인합니다."}
             </p>
             <p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
@@ -523,6 +518,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             <div>
               <p className="text-[11px] font-black text-slate-400">ADMIN ONLY</p>
               <p className="text-sm font-black text-slate-700">관리자 메뉴</p>
+              <p className="mt-1 text-xs font-bold text-slate-400">MARK 4.80.2 · GENERAL IDEA 오프라인 대시보드</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/snapshot" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">

@@ -364,8 +364,8 @@ function parseProducts(rows: any[][]) {
 }
 
 function parseInventory(rows: any[][]) {
-  const out: any[] = [];
-  if (!rows.length) return out;
+  const grouped = new Map<string, any>();
+  if (!rows.length) return [];
 
   const headerRow = findHeaderRow(rows, ["스타일", "가용(온)"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
@@ -378,7 +378,7 @@ function parseInventory(rows: any[][]) {
 
   // 온오프재고현황 실제 구조:
   // P 재고 / Q 할당 / R 가용(온) / S 가용(오프) / T 가용(합계)
-  // 열 삽입에 대비해 헤더명 우선 매핑하고, 실패 시 현재 구조의 인덱스로 fallback합니다.
+  // 이 시트는 컬러/사이즈별 행이므로 반드시 스타일 단위로 합산해야 합니다.
   const stockCol = findCol(header, ["재고"], 15);                 // P
   const allocatedCol = findCol(header, ["할당"], 16);             // Q
   const onlineStockCol = findCol(header, ["가용(온)", "가용온"], 17);   // R
@@ -404,20 +404,37 @@ function parseInventory(rows: any[][]) {
 
     if (!onlineStock && !offlineStock && !totalStock && !tagPrice && !currentPrice && !stock) continue;
 
-    out.push({
-      season,
-      styleCode,
-      productName,
-      tagPrice,
-      currentPrice,
-      stock,
-      allocatedStock,
-      onlineStock,
-      offlineStock,
-      totalStock,
-    });
+    if (!grouped.has(styleCode)) {
+      grouped.set(styleCode, {
+        season,
+        styleCode,
+        productName,
+        tagPrice,
+        currentPrice,
+        stock: 0,
+        allocatedStock: 0,
+        onlineStock: 0,
+        offlineStock: 0,
+        totalStock: 0,
+        skuRowCount: 0,
+      });
+    }
+
+    const item = grouped.get(styleCode);
+    if (!item.season && season) item.season = season;
+    if (!item.productName && productName) item.productName = productName;
+    if (!item.tagPrice && tagPrice) item.tagPrice = tagPrice;
+    if (!item.currentPrice && currentPrice) item.currentPrice = currentPrice;
+
+    item.stock += stock;
+    item.allocatedStock += allocatedStock;
+    item.onlineStock += onlineStock;
+    item.offlineStock += offlineStock;
+    item.totalStock += totalStock;
+    item.skuRowCount += 1;
   }
-  return out;
+
+  return Array.from(grouped.values());
 }
 
 function aggregateProducts(rows: any[], storeName?: string, top = 10) {

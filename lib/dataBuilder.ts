@@ -403,12 +403,23 @@ function aggregateProducts(rows: any[], storeName?: string, top = 10) {
   const all = [...map.values()];
   const total = all.reduce((s, x) => s + Number(x.weekAmount || 0), 0);
   return all
-    .map((x) => ({
-      ...x,
-      qtyChangeRate: rate(x.weekNet, x.prevNet),
-      amountChangeRate: rate(x.weekAmount, x.prevAmount),
-      contributionRate: total ? (x.weekAmount / total) * 100 : 0,
-    }))
+    .map((x) => {
+      // 상품 단위 증감률 보정:
+      // 전주 판매가 0인 상품을 +100%로 처리하면 신규/전주미판매 상품이
+      // 호조/부진상품 TOP에 잘못 노출됩니다.
+      // 전주값이 없으면 증감률은 0으로 두고, 실제 호조/부진 판단은
+      // 전주 데이터가 있는 상품 위주로 정렬되도록 합니다.
+      const hasPrevQty = Number(x.prevNet || 0) > 0;
+      const hasPrevAmount = Number(x.prevAmount || 0) > 0;
+
+      return {
+        ...x,
+        hasPrevProductSales: hasPrevAmount || hasPrevQty,
+        qtyChangeRate: hasPrevQty ? rate(x.weekNet, x.prevNet) : 0,
+        amountChangeRate: hasPrevAmount ? rate(x.weekAmount, x.prevAmount) : 0,
+        contributionRate: total ? (x.weekAmount / total) * 100 : 0,
+      };
+    })
     .sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0))
     .slice(0, top);
 }
@@ -524,8 +535,8 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
     const prevNet = Math.max(0, Number(item.prevNet || 0));
     const stockWeeks = weekNet > 0 ? totalStock / weekNet : totalStock > 0 ? 999 : 0;
     const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
-    const salesChangeRate = !prevNet ? (weekNet ? 100 : 0) : ((weekNet - prevNet) / prevNet) * 100;
-    const amountChangeRate = !item.prevAmount ? (item.weekAmount ? 100 : 0) : ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100;
+    const salesChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : 0;
+    const amountChangeRate = Number(item.prevAmount || 0) > 0 ? ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100 : 0;
 
     let score = 0;
     score += seasonBonus(item.season);
@@ -649,8 +660,8 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
     const prevNet = Math.max(0, Number(item.prevNet || 0));
     const stockWeeks = weekNet > 0 ? totalStock / weekNet : totalStock > 0 ? 999 : 0;
     const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
-    const salesChangeRate = !prevNet ? (weekNet ? 100 : 0) : ((weekNet - prevNet) / prevNet) * 100;
-    const amountChangeRate = !item.prevAmount ? (item.weekAmount ? 100 : 0) : ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100;
+    const salesChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : 0;
+    const amountChangeRate = Number(item.prevAmount || 0) > 0 ? ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100 : 0;
 
     let levelColor = "yellow";
     let promotionLevel = "정상/관찰";

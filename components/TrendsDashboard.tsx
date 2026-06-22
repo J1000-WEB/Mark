@@ -36,6 +36,128 @@ function MiniInsight({ title, items }: { title: string; items: any[] }) {
   );
 }
 
+function splitBullets(value: any) {
+  return text(value)
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-•*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function extractProductNameFromLine(line: string) {
+  const cleaned = line
+    .replace(/^상품명\s*[:：]\s*/i, "")
+    .replace(/^상품\s*[:：]\s*/i, "")
+    .replace(/^\d+[.)]\s*/, "")
+    .trim();
+
+  const colon = cleaned.split(/[:：]/)[0]?.trim();
+  const dash = cleaned.split(/\s[-–—]\s/)[0]?.trim();
+  const candidate = colon || dash || cleaned;
+  return candidate.length > 2 ? candidate.slice(0, 42) : "";
+}
+
+function buildAiProductReviews(agentResult: any, productSummary: any[]) {
+  const map = new Map<string, any>();
+
+  const upsert = (name: string, patch: any) => {
+    const key = name.replace(/\s/g, "").toLowerCase();
+    if (!key) return;
+    const prev = map.get(key) || { productName: name, comments: [] };
+    map.set(key, { ...prev, ...patch, comments: [...(prev.comments || []), ...(patch.comments || [])] });
+  };
+
+  for (const item of productSummary || []) {
+    const comments = Array.isArray(item.comments) ? item.comments : [];
+    upsert(text(item.productName), {
+      productName: text(item.productName),
+      mentionCount: item.mentionCount || 0,
+      channelTypes: item.channelTypes || [],
+      issueCount: item.issueCount || 0,
+      comments: comments.slice(0, 3).map((c: any) => short(`${c.salesReaction || ""} ${c.targetReaction || ""} ${c.actionPlan || ""}`, 170)).filter(Boolean),
+    });
+  }
+
+  const sections = [
+    { key: "keyProducts", label: "핵심 상품" },
+    { key: "risks", label: "리스크" },
+    { key: "recommendedActions", label: "추천 액션" },
+    { key: "rtCandidates", label: "RT 후보" },
+  ];
+
+  for (const section of sections) {
+    for (const line of splitBullets(agentResult?.[section.key])) {
+      const name = extractProductNameFromLine(line);
+      if (!name) continue;
+      upsert(name, {
+        productName: name,
+        aiSignals: [{ label: section.label, text: line }],
+      });
+    }
+  }
+
+  return Array.from(map.values())
+    .map((item: any) => ({
+      ...item,
+      signalCount: (item.aiSignals || []).length,
+      commentScore: (item.comments || []).length,
+    }))
+    .sort((a: any, b: any) =>
+      Number(b.signalCount || 0) - Number(a.signalCount || 0) ||
+      Number(b.mentionCount || 0) - Number(a.mentionCount || 0) ||
+      Number(b.commentScore || 0) - Number(a.commentScore || 0)
+    )
+    .slice(0, 5);
+}
+
+function AiProductReviewCards({ agentResult, productSummary }: { agentResult: any; productSummary: any[] }) {
+  const reviews = buildAiProductReviews(agentResult, productSummary);
+  if (!reviews.length) return null;
+
+  return (
+    <div className="mt-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-black text-emerald-200">상품별 AI 리뷰 TOP {reviews.length}</h3>
+        <p className="text-xs font-bold text-slate-400">언급량과 AI 분석 신호 기준</p>
+      </div>
+      <div className="grid gap-3 xl:grid-cols-5 lg:grid-cols-3 md:grid-cols-2">
+        {reviews.map((item: any, idx: number) => (
+          <article key={`${item.productName}-${idx}`} className="rounded-2xl bg-white/10 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-black text-emerald-200">#{idx + 1}</p>
+                <h4 className="mt-1 line-clamp-2 text-sm font-black leading-5 text-white">{item.productName}</h4>
+              </div>
+              {item.mentionCount ? (
+                <span className="shrink-0 rounded-full bg-white/15 px-2 py-1 text-[10px] font-black text-slate-200">{item.mentionCount}건</span>
+              ) : null}
+            </div>
+
+            {item.channelTypes?.length ? (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {item.channelTypes.slice(0, 3).map((channel: string) => (
+                  <span key={channel} className="rounded-full bg-slate-900/60 px-2 py-1 text-[10px] font-black text-slate-200">{channel}</span>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-3 space-y-2">
+              {(item.aiSignals || []).slice(0, 2).map((signal: any, sidx: number) => (
+                <p key={sidx} className="rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">
+                  <span className="font-black text-amber-200">{signal.label}</span> · {short(signal.text, 115)}
+                </p>
+              ))}
+
+              {!(item.aiSignals || []).length && (item.comments || []).slice(0, 2).map((comment: string, cidx: number) => (
+                <p key={cidx} className="rounded-xl bg-white/10 p-2 text-[11px] font-semibold leading-5 text-slate-100">{comment}</p>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TrendsDashboard() {
   const [data, setData] = useState<any>(null);
   const [channel, setChannel] = useState("전체");
@@ -153,7 +275,7 @@ export default function TrendsDashboard() {
               {agentPendingRequestId ? <span className="rounded-full bg-amber-300 px-2.5 py-1 text-xs font-black text-slate-950">새 분석 대기: {agentPendingRequestId}</span> : null}
             </div>
             <h2 className="mt-4 text-3xl font-black tracking-tight">AI 상품동향 분석</h2>
-            <div className="mt-4 min-h-[180px] rounded-3xl bg-white/10 p-5">
+            <div className="mt-4 min-h-[520px] rounded-3xl bg-white/10 p-5">
               {agentResultLoading ? (
                 <p className="text-sm font-bold text-slate-300">AI 분석 결과 불러오는 중...</p>
               ) : agentResult?.executiveSummary || agentResult?.rawSummary ? (
@@ -198,6 +320,8 @@ export default function TrendsDashboard() {
                       </div>
                     ) : null}
                   </div>
+
+                  <AiProductReviewCards agentResult={agentResult} productSummary={data.productSummary || []} />
 
                   {!agentResult.executiveSummary && agentResult.rawSummary ? (
                     <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-100">{agentResult.rawSummary}</pre>

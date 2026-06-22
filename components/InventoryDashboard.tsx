@@ -526,6 +526,94 @@ function ProductAnalysisSection({ data }: { data: any }) {
 }
 
 
+
+function AllocationLookupSection({ data }: { data: any }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<any>(null);
+
+  const products = data.productAnalysisList || [];
+
+  function search() {
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+    const found = products.find((p: any) => String(p.styleCode || "").toLowerCase() === q)
+      || products.find((p: any) => String(p.styleCode || "").toLowerCase().includes(q))
+      || products.find((p: any) => String(p.productName || "").toLowerCase().includes(q));
+    setSelected(found || null);
+  }
+
+  const onlineStock = Number(selected?.onlineStock || 0);
+  const offlineStock = Number(selected?.offlineStock || 0);
+  const totalStock = Number(selected?.totalStock || 0);
+  const weekNet = Number(selected?.weekNet || 0);
+  const offlineWeeks = weekNet > 0 ? offlineStock / weekNet : offlineStock > 0 ? 999 : 0;
+  const targetStock = weekNet > 0 ? Math.ceil(weekNet * 3) : 0;
+  const needQty = selected ? Math.max(0, targetStock - offlineStock) : 0;
+  const suggestQty = selected ? Math.max(0, Math.min(needQty, onlineStock)) : 0;
+
+  return (
+    <Card title="온라인재고 이관 요청" tone="purple">
+      <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
+        <input
+          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-slate-900"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") search(); }}
+          placeholder="품번 또는 상품명을 입력하세요. 예: GF2LKP531"
+        />
+        <button type="button" onClick={search} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white">
+          이관 검토
+        </button>
+      </div>
+
+      {!selected ? (
+        <div className="mt-4 rounded-2xl bg-white/70 p-5 text-sm font-semibold leading-6 text-slate-600">
+          품번을 입력하면 온오프재고현황의 스타일별 합산 재고를 기준으로 온라인 → 오프라인 이관 가능 수량을 검토합니다.
+          <br />
+          기준 재고: R열 가용(온) / S열 가용(오프) / T열 가용(합계)
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4">
+          <div className="rounded-3xl bg-white p-5">
+            <p className="text-sm text-slate-500">{selected.season || "-"} · {selected.styleCode}</p>
+            <h3 className="mt-1 text-2xl font-black">{selected.productName}</h3>
+            <p className="mt-2 text-sm font-semibold text-slate-600">
+              스타일 단위 합산 기준 · 금주 판매 {fmtNum(weekNet)}개 · 금주매출 {won(selected.weekAmount)}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <Stat label="온라인 가용" value={`${fmtNum(onlineStock)}개`} colorClass="text-blue-600" />
+            <Stat label="오프라인 가용" value={`${fmtNum(offlineStock)}개`} colorClass="text-emerald-600" />
+            <Stat label="총 가용" value={`${fmtNum(totalStock)}개`} />
+            <Stat label="오프라인 재고주수" value={stockWeekText(offlineWeeks)} colorClass={stockWeekClass(offlineWeeks)} />
+            <Stat label="이관 제안" value={`${fmtNum(suggestQty)}개`} colorClass={suggestQty > 0 ? "text-red-600" : "text-slate-500"} />
+          </div>
+
+          <ReasonBox title="이관 판단">
+            {suggestQty > 0 ? (
+              <>
+                <p>
+                  오프라인 목표재고를 최근 주간판매의 3주분으로 보면 목표 {fmtNum(targetStock)}개,
+                  현재 오프라인 가용 {fmtNum(offlineStock)}개로 부족분은 {fmtNum(needQty)}개입니다.
+                </p>
+                <p className="mt-1">
+                  온라인 가용 {fmtNum(onlineStock)}개 중 최대 {fmtNum(suggestQty)}개를 오프라인 이관 요청 후보로 볼 수 있습니다.
+                </p>
+              </>
+            ) : (
+              <p>
+                현재 기준으로는 온라인 가용 부족 또는 오프라인 재고주수 충분으로 자동 이관 제안 수량이 없습니다.
+              </p>
+            )}
+          </ReasonBox>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+
 function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over" }) {
   if (!items?.length) return <Empty />;
   return (
@@ -635,6 +723,7 @@ export default function InventoryDashboard() {
         </section>
 
         <section className="grid gap-6">
+          <AllocationLookupSection data={data} />
           <Card title="물류 추가 할당 제안 TOP5">
             <ItemList items={data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
           </Card>

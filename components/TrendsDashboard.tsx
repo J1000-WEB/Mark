@@ -43,6 +43,7 @@ export default function TrendsDashboard() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentMessage, setAgentMessage] = useState("");
+  const [agentPendingRequestId, setAgentPendingRequestId] = useState("");
   const [agentNote, setAgentNote] = useState("");
   const [agentResult, setAgentResult] = useState<any>(null);
   const [agentResultLoading, setAgentResultLoading] = useState(false);
@@ -59,9 +60,16 @@ export default function TrendsDashboard() {
     try {
       const res = await fetch("/api/trends-agent", { cache: "no-store" });
       const json = await res.json();
-      setAgentResult(json?.latest || null);
+      const latest = json?.latest || null;
+      setAgentResult(latest);
+      if (agentPendingRequestId && latest?.requestId === agentPendingRequestId) {
+        setAgentPendingRequestId("");
+        setAgentMessage(`새 AI 분석 결과 반영 완료: ${latest.requestId}`);
+      }
+      return latest;
     } catch {
       setAgentResult(null);
+      return null;
     } finally {
       setAgentResultLoading(false);
     }
@@ -100,9 +108,11 @@ export default function TrendsDashboard() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Agent 요청 실패");
-      setAgentMessage(`Agent 분석 요청 완료: ${json.requestId}`);
+      setAgentPendingRequestId(json.requestId || "");
+      setAgentMessage(`Agent 분석 요청 등록 완료: ${json.requestId}. 새 결과가 저장되기 전까지는 기존 최신 분석이 계속 표시됩니다.`);
       setAgentNote("");
-      await loadAgentResult();
+      // Agent 실행과 Trend_Summary 저장은 비동기로 진행되므로 기존 결과를 유지합니다.
+      // 저장 완료 후 'AI 결과 새로고침'을 누르면 최신 Trend_Summary가 반영됩니다.
     } catch (err: any) {
       setAgentMessage(`Agent 분석 요청 실패: ${err?.message || String(err)}`);
     } finally {
@@ -139,6 +149,8 @@ export default function TrendsDashboard() {
               <span className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-black text-slate-950">AI INSIGHT</span>
               {agentResult?.createdAt ? <span className="text-xs font-bold text-slate-400">최근 분석: {agentResult.createdAt}</span> : null}
               {agentResult?.requestId ? <span className="text-xs font-bold text-slate-400">요청ID: {agentResult.requestId}</span> : null}
+              {agentResult ? <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-black text-slate-300">저장된 최신 분석 표시 중</span> : null}
+              {agentPendingRequestId ? <span className="rounded-full bg-amber-300 px-2.5 py-1 text-xs font-black text-slate-950">새 분석 대기: {agentPendingRequestId}</span> : null}
             </div>
             <h2 className="mt-4 text-3xl font-black tracking-tight">AI 상품동향 분석</h2>
             <div className="mt-4 min-h-[180px] rounded-3xl bg-white/10 p-5">
@@ -195,7 +207,7 @@ export default function TrendsDashboard() {
                 <div className="space-y-3">
                   <p className="text-lg font-black text-slate-100">아직 표시할 AI 상품동향 요약이 없습니다.</p>
                   <p className="text-sm font-semibold leading-6 text-slate-300">
-                    아래 버튼으로 상품동향 분석 요청을 등록한 뒤, CMD에서 Research Agent를 실행하면 Trend_Summary 결과가 이 영역에 표시됩니다.
+                    아래 버튼으로 상품동향 분석 요청을 등록하면 Trend_Summary에 저장된 최신 결과가 이 영역에 표시됩니다. 새 결과가 나오기 전까지는 기존 분석 화면이 유지됩니다.
                   </p>
                 </div>
               )}
@@ -205,7 +217,7 @@ export default function TrendsDashboard() {
           <div className="w-full rounded-3xl bg-white p-5 text-slate-900 lg:w-[360px]">
             <h3 className="text-sm font-black">Agent 분석 요청</h3>
             <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-              현재 상품동향 요약을 Research_Request에 등록합니다.
+              새 분석 요청만 등록합니다. 화면은 Trend_Summary에 저장된 최신 결과를 계속 표시합니다.
             </p>
             <textarea
               value={agentNote}

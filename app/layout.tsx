@@ -3,8 +3,8 @@ import AuthGate from "@/components/AuthGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GENERAL IDEA 오프라인 대시보드 MARK 4.74",
-  description: "GENERAL IDEA offline dashboard MARK 4.74",
+  title: "GENERAL IDEA 오프라인 대시보드",
+  description: "GENERAL IDEA offline dashboard",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

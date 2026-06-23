@@ -59,11 +59,22 @@ function findHeaderIndex(rows: any[][]) {
 }
 
 function inferCategory(largeCategory: string, group: string, content: string) {
+  const large = normalize(largeCategory);
   const combined = `${largeCategory} ${group} ${content}`;
+
+  // 대분류가 명확하면 대분류를 우선합니다.
+  // 휴무/연차가 "프로모션" 행으로 들어가는 문제를 방지하기 위해 스케줄을 먼저 고정합니다.
+  if (large.includes("스케줄") || large.includes("근무") || large.includes("인원")) return "schedule";
+  if (large.includes("프로모션")) return "promotion";
+  if (large.includes("vmd")) return "vmd";
+  if (large.includes("마케팅")) return "marketing";
+  if (large.includes("상품") || large.includes("입고")) return "product";
+  if (large.includes("실적") || large.includes("날씨")) return "performance";
+
+  if (/휴무|근무|라운딩|스케줄|교육|미팅|출장|연차/i.test(combined)) return "schedule";
   if (/프로모션|할인|쿠폰|사은품|증정|더블쇼|세일|upto|행사|페이백|마일리지|오픈|팝업/i.test(combined)) return "promotion";
   if (/vm|vmd|진열|연출|마네킹|매장구성|윈도우|집중화/i.test(combined)) return "vmd";
   if (/마케팅|인플루언서|인스타|촬영|피드|홍보|imc|obt/i.test(combined)) return "marketing";
-  if (/휴무|근무|라운딩|스케줄|교육|미팅|출장|연차/i.test(combined)) return "schedule";
   if (/실적|목표|달성|신장|기온|날씨|매출/i.test(combined)) return "performance";
   if (/신상품|리오더|입고|라인업/i.test(combined)) return "product";
   return "general";
@@ -121,18 +132,25 @@ function parseRows(rows: any[][]) {
     const startDate = parseDate(get(["시작일", "시작"], 0));
     const endDate = parseDate(get(["종료일", "종료"], 1)) || startDate;
     const largeCategory = get(["대분류"], 2);
-    const group = get(["구분"], 3);
-    const content = get(["내용", "상세", "일정"], 4);
+    const person = get(["성명", "이름", "담당자"], 3);
+    const group = get(["구분"], 4);
+    const content = get(["내용", "상세", "일정"], 5);
     const category = inferCategory(largeCategory, group, content);
+    const title = category === "schedule"
+      ? [person, group || content].filter(Boolean).join(" ")
+      : (content || group || largeCategory || "일정");
 
     return {
       id: `SCH-${idx + 1}`,
       startDate,
       endDate,
       largeCategory,
+      person,
       group,
       content,
-      title: content || group || largeCategory || "일정",
+      title,
+      displayTitle: category === "schedule" ? (group || content || "스케줄") : title,
+      rowKey: category === "schedule" && person ? `staff:${person}` : category,
       category,
       categoryLabel: categoryLabel(category),
       order: categoryOrder(category),

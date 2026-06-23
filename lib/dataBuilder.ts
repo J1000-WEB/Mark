@@ -1162,11 +1162,21 @@ function parsePerformanceRows(rows: any[][]) {
 }
 
 function normalizeDateKey(value: any) {
+  const s = text(value);
+  if (!s) return "";
+
+  // Google Sheets에서 "2026. 6. 22"처럼 들어오는 값을 Date 생성보다 먼저 직접 정규화합니다.
+  // 기존 parseDate가 slice(0, 10)을 먼저 적용하면서 "2026. 6. 22"를 "2026- 6- 2"로 잘라
+  // 2026-06-02로 오인하는 문제가 있었습니다.
+  const m = s.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+
+  const korean = s.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?/);
+  if (korean) return `${korean[1]}-${String(korean[2]).padStart(2, "0")}-${String(korean[3]).padStart(2, "0")}`;
+
   const d = parseDate(value);
   if (d) return d.toISOString().slice(0, 10);
-  const s = text(value);
-  const m = s.match(/(\d{4})[-./]\s*(\d{1,2})[-./]\s*(\d{1,2})/);
-  if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+
   return s;
 }
 

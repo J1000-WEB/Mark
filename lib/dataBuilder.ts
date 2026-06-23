@@ -320,7 +320,7 @@ function parseProducts(rows: any[][]) {
     const key = `${storeKey || normalizeStoreKey(storeName)}__${styleCode}`;
     if (!grouped.has(key)) {
       grouped.set(key, {
-        season: text(row[0]) || "미지정",
+        season: normalizeSeasonValue(text(row[0]) || "미지정"),
         storeName,
         storeKey: storeKey || normalizeStoreKey(storeName),
         styleCode,
@@ -370,7 +370,11 @@ function parseInventory(rows: any[][]) {
   const headerRow = findHeaderRow(rows, ["스타일", "가용(온)"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
 
-  const seasonCol = findCol(header, ["시즌"], 21);       // V
+  // 온오프재고현황 시즌은 V열입니다.
+  // "시즌" 유사 문자열이 다른 행/열에 잡히면 21030 같은 점포/그룹 코드가 시즌으로 들어가므로
+  // 헤더가 정확히 "시즌"인 경우만 우선하고, 실패 시 V열(0-base 21)로 고정합니다.
+  const exactSeasonCol = (header || []).map(text).findIndex((v) => v.replace(/\s/g, "") === "시즌");
+  const seasonCol = exactSeasonCol >= 0 ? exactSeasonCol : 21;       // V
   const styleCol = findCol(header, ["스타일"], 5);       // F
   const productCol = findCol(header, ["스타일명"], 6);   // G
   const tagPriceCol = findCol(header, ["Tag가", "TAG가"], 12);       // M
@@ -523,6 +527,32 @@ function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] 
   });
 }
 
+
+
+function normalizeSeasonValue(value: any) {
+  const s = text(value);
+  if (!s || s === "#N/A") return "미지정";
+  const compact = s.replace(/\s/g, "");
+
+  // 점포코드/그룹코드처럼 숫자만 있는 값은 시즌이 아닙니다. 예: 21030
+  if (/^\d+$/.test(compact)) return "미지정";
+
+  // 정상 시즌 키워드만 통과
+  if (
+    compact.includes("봄") ||
+    compact.includes("여름") ||
+    compact.includes("가을") ||
+    compact.includes("겨울") ||
+    compact.toUpperCase().includes("SS") ||
+    compact.toUpperCase().includes("FW") ||
+    compact.toUpperCase().includes("SP") ||
+    compact.toUpperCase().includes("SU")
+  ) {
+    return s;
+  }
+
+  return "미지정";
+}
 
 function seasonBonus(season: string) {
   if (season.includes("여름")) return 35;
@@ -678,8 +708,8 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
 
   const seasons = [...new Set(
     suggestions
-      .map((x: any) => text(x.season))
-      .filter((x: string) => x && x !== "#N/A" && x !== "미지정" && !x.includes("시즌"))
+      .map((x: any) => normalizeSeasonValue(x.season))
+      .filter((x: string) => x && x !== "미지정")
   )].sort();
   return {
     promotionSeasons: ["전체", ...seasons],
@@ -697,7 +727,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
     if (!key) continue;
     if (!map.has(key)) {
       map.set(key, {
-        season: r.season || "미지정",
+        season: normalizeSeasonValue(r.season || "미지정"),
         styleCode: r.styleCode,
         productName: r.productName,
         launchDate: r.launchDate || "",

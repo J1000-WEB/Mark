@@ -355,7 +355,7 @@ function PromotionCard({ it, index }: { it: any; index: number }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label="합산재고" value={`${fmtNum(it.totalStock)}개`} colorClass="text-blue-600" />
+        <Stat label="오프운영재고" value={`${fmtNum(it.totalStock)}개`} colorClass="text-blue-600" />
         <Stat label="재고주수" value={stockWeekText(it.stockWeeks)} colorClass={stockWeekClass(it.stockWeeks)} />
         <Stat label="전주비" value={`${Number(it.salesChangeRate || 0) >= 0 ? "+" : ""}${Number(it.salesChangeRate || 0).toFixed(1)}%`} colorClass={Number(it.salesChangeRate || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
         <Stat label="할인율" value={`${Number(it.discountRate || 0)}%`} colorClass={Number(it.discountRate || 0) > 0 ? "text-red-600" : "text-slate-900"} />
@@ -426,8 +426,23 @@ function PromotionSection({ data }: { data: any }) {
         </div>
       </div>
       <p className="mb-3 text-xs font-semibold text-slate-600">
-        시즌, 최초 출고일, 온/오프 합산 재고, 재고주수, 전주비, 가격을 기준으로 후보를 제안합니다.
+        시즌, 최초 출고일, 오프라인 운영재고, 오프라인 판매추이, 재고주수, 가격을 기준으로 후보를 제안합니다. TOP상품/판매상승 상품은 정가 판매 보호로 제외합니다.
       </p>
+      {(data.suppressedPromotionCandidates?.length || data.rtSuppressedPromotionCandidates?.length) ? (
+        <div className="mb-3 grid gap-2 md:grid-cols-2">
+          <div className="rounded-2xl bg-blue-50 p-3">
+            <p className="text-xs font-black text-blue-700">정가 판매 보호 제외</p>
+            <p className="mt-1 text-lg font-black text-blue-900">{fmtNum(data.suppressedPromotionCandidates?.length || 0)}개</p>
+            <p className="mt-1 text-xs font-semibold text-blue-700">TOP50 또는 전주비 +20% 이상 상품</p>
+          </div>
+          <div className="rounded-2xl bg-orange-50 p-3">
+            <p className="text-xs font-black text-orange-700">RT 억제 → 프로모션 전환</p>
+            <p className="mt-1 text-lg font-black text-orange-900">{fmtNum(data.rtSuppressedPromotionCandidates?.length || 0)}개</p>
+            <p className="mt-1 text-xs font-semibold text-orange-700">판매 하락으로 RT보다 프로모션 검토가 필요한 상품</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="max-h-[760px] space-y-2 overflow-y-auto pr-2">
         {items.length === 0 && <Empty />}
         {items.map((it: any, i: number) => <PromotionCard key={`${it.styleCode}-${i}`} it={it} index={i} />)}
@@ -748,10 +763,10 @@ function PerformanceTrackingSection({ data }: { data: any }) {
         <div className="overflow-hidden rounded-2xl bg-white">
           <div className="border-b border-slate-100 bg-slate-900 px-4 py-3 text-white">
             <p className="text-sm font-black">
-              ■ 기간 판매현황 ({selectedDate || "-"} 시작 · {categoryFilter === "RT" ? "RT" : "프로모션"})
+              ■ 실행 성과 분석 ({selectedDate || "-"} 시작 · {categoryFilter === "RT" ? "RT" : "프로모션"})
             </p>
             <p className="mt-1 text-xs font-semibold text-slate-300">
-              행사전 실적과 행사중 실적을 같은 구조로 비교합니다. 수량/금액/비중/증감 기준입니다.
+              실행 전 실적과 실행 후 실적을 같은 구조로 비교합니다. 수량/금액/비중/증감 기준입니다.
             </p>
           </div>
 
@@ -763,9 +778,9 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                   <th className="border border-slate-200 px-3 py-2 text-left">품번</th>
                   <th className="border border-slate-200 px-3 py-2 text-left">모델명</th>
                   <th className="border border-slate-200 px-3 py-2 text-right">판매가</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>행사중</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>행사전</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>신장</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>실행 후</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>실행 전</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>성과</th>
                 </tr>
                 <tr className="bg-slate-50 text-xs font-black text-slate-600">
                   <th className="border border-slate-200 px-3 py-2" />
@@ -928,8 +943,8 @@ export default function InventoryDashboard() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">재고CTRL MARK 4.74</h1>
-            <p className="mt-1 text-sm text-slate-500">목표 재고주수 기반 RT + 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
+            <h1 className="text-3xl font-bold tracking-tight">재고 컨트롤</h1>
+            <p className="mt-1 text-sm text-slate-500">RT 제안, 프로모션 제안, 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
         </header>

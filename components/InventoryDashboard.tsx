@@ -619,12 +619,13 @@ function PerformanceTrackingSection({ data }: { data: any }) {
   const performance = data.performance || {};
   const dates = performance.dates || [];
   const [selectedDate, setSelectedDate] = useState(performance.latestDate || "");
+  const [categoryFilter, setCategoryFilter] = useState<"ALL" | "RT" | "PROMOTION">("ALL");
 
   useEffect(() => {
     if (!selectedDate && performance.latestDate) setSelectedDate(performance.latestDate);
   }, [performance.latestDate, selectedDate]);
 
-  const selected = performance.byDate?.[selectedDate] || {
+  const rawSelected = performance.byDate?.[selectedDate] || {
     count: 0,
     addedQty: 0,
     beforeAmount: 0,
@@ -635,19 +636,60 @@ function PerformanceTrackingSection({ data }: { data: any }) {
     rows: [],
   };
 
+  const visibleRows = categoryFilter === "ALL"
+    ? (rawSelected.rows || [])
+    : (rawSelected.rows || []).filter((r: any) => r.category === categoryFilter);
+
+  const visibleBuckets = categoryFilter === "ALL"
+    ? (rawSelected.byCategory || [])
+    : (rawSelected.byCategory || []).filter((b: any) => b.category === categoryFilter);
+
+  const successCount = visibleRows.filter((r: any) => Number(r.addedAmount || 0) > 0).length;
+  const selected = {
+    ...rawSelected,
+    rows: visibleRows,
+    byCategory: visibleBuckets,
+    count: visibleRows.length,
+    addedQty: visibleRows.reduce((s: number, r: any) => s + Number(r.addedQty || 0), 0),
+    beforeAmount: visibleRows.reduce((s: number, r: any) => s + Number(r.beforeAmount || 0), 0),
+    duringAmount: visibleRows.reduce((s: number, r: any) => s + Number(r.duringAmount || 0), 0),
+    addedAmount: visibleRows.reduce((s: number, r: any) => s + Number(r.addedAmount || 0), 0),
+    successRate: visibleRows.length ? (successCount / visibleRows.length) * 100 : 0,
+  };
+
+  const filterTabs: ["ALL" | "RT" | "PROMOTION", string][] = [
+    ["ALL", "전체"],
+    ["RT", "RT"],
+    ["PROMOTION", "프로모션"],
+  ];
+
   return (
     <Card
       title="RT / 프로모션 성과 확인"
       tone="purple"
       right={
-        <select
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700"
-        >
-          {!dates.length && <option value="">시작일 없음</option>}
-          {dates.map((date: string) => <option key={date} value={date}>{date} 시작</option>)}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl bg-white p-1">
+            {filterTabs.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCategoryFilter(key)}
+                className={`h-8 rounded-lg px-3 text-xs font-black transition ${categoryFilter === key ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700"
+          >
+            {!dates.length && <option value="">시작일 없음</option>}
+            {dates.map((date: string) => <option key={date} value={date}>{date} 시작</option>)}
+          </select>
+        </div>
       }
     >
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -687,7 +729,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
       </div>
 
       <details className="mt-4 rounded-2xl border border-slate-100 bg-white/75 p-4">
-        <summary className="cursor-pointer text-sm font-black text-slate-700">시작일 {selectedDate || "-"} 전체 상세 보기</summary>
+        <summary className="cursor-pointer text-sm font-black text-slate-700">시작일 {selectedDate || "-"} {categoryFilter === "ALL" ? "전체" : categoryFilter === "RT" ? "RT" : "프로모션"} 상세 보기</summary>
         <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-2">
           {(selected.rows || []).map((item: any, idx: number) => (
             <div key={`${item.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">

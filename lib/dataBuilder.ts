@@ -589,30 +589,41 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
     const inv: any = invMap.get(item.styleCode) || {};
     if (inv.season && (!item.season || item.season === "미지정" || item.season === "#N/A")) item.season = inv.season;
     const onlineStock = Number(inv.onlineStock || 0);
-    const offlineStock = Number(inv.offlineStock || 0);
-    const totalStock = Number(inv.totalStock || 0) || item.storeStock + onlineStock;
+    const warehouseOfflineStock = Number(inv.offlineStock || 0);
+    const storeStock = Number(item.storeStock || 0);
+    const offlineStock = storeStock + warehouseOfflineStock;
+    const totalStock = Number(inv.totalStock || 0) || warehouseOfflineStock + onlineStock + storeStock;
+
+    // 프로모션은 온라인 포함 합산재고가 아니라 오프라인 운영재고와 오프라인 판매추이 기준으로 판단합니다.
+    // 오프라인 운영재고 = 매장총재고(금주/전주 시트) + 창고 오프라인 가용재고(온오프재고현황 S열)
+    // item.weekNet/weekAmount는 금주/전주 시트의 오프라인 점포 판매를 집계한 값입니다.
     const weekNet = Math.max(0, Number(item.weekNet || 0));
     const prevNet = Math.max(0, Number(item.prevNet || 0));
-    const stockWeeks = weekNet > 0 ? totalStock / weekNet : totalStock > 0 ? 999 : 0;
+    const stockWeeks = weekNet > 0 ? offlineStock / weekNet : offlineStock > 0 ? 999 : 0;
     const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
-    const salesChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : 0;
-    const amountChangeRate = Number(item.prevAmount || 0) > 0 ? ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100 : 0;
+    const salesChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : weekNet > 0 ? 100 : 0;
+    const amountChangeRate = Number(item.prevAmount || 0) > 0 ? ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100 : Number(item.weekAmount || 0) > 0 ? 100 : 0;
 
     let score = 0;
     score += seasonBonus(item.season);
     score += Math.min(45, Math.max(0, weeksSinceLaunch - 2) * 3);
     score += Math.min(70, stockWeeks >= 999 ? 70 : stockWeeks * 3);
-    if (totalStock >= 50) score += 8;
-    if (totalStock >= 100) score += 8;
-    if (totalStock >= 300) score += 10;
-    if (totalStock >= 500) score += 12;
+
+    // 오프라인 운영재고 기준 가중치
+    if (offlineStock >= 30) score += 8;
+    if (offlineStock >= 80) score += 8;
+    if (offlineStock >= 150) score += 10;
+    if (offlineStock >= 300) score += 12;
+
+    // 오프라인 판매 둔화 기준 가중치
     if (salesChangeRate <= 0) score += 10;
     if (salesChangeRate <= -10) score += 10;
     if (salesChangeRate <= -20) score += 10;
-    if (weekNet <= 2 && totalStock >= 100) score += 12;
+    if (weekNet <= 2 && offlineStock >= 50) score += 12;
 
-    if (totalStock < 30) continue;
-    if (!(stockWeeks >= 5 || totalStock >= 100 || salesChangeRate <= 0)) continue;
+    // 오프라인 재고가 적으면 프로모션 후보에서 제외합니다.
+    if (offlineStock < 20) continue;
+    if (!(stockWeeks >= 5 || offlineStock >= 80 || salesChangeRate <= 0)) continue;
 
     let action = "노출/진열 강화";
     let promotionLevel = "관찰";
@@ -637,8 +648,12 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
     suggestions.push({
       ...item,
       onlineStock,
+      warehouseOfflineStock,
+      storeStock,
       offlineStock,
       totalStock,
+      promotionStockBasis: "store+warehouse_offline",
+      promotionSalesBasis: "offline",
       tagPrice: priceSuggestion.tagPrice,
       currentPrice: priceSuggestion.currentPrice,
       promotionPrice: priceSuggestion.promotionPrice,
@@ -653,15 +668,19 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
       action,
       reasons: [
         `최초 출고 후 ${weeksSinceLaunch.toFixed(1)}주 경과`,
-        `온/오프 합산 재고 ${Math.round(totalStock).toLocaleString("ko-KR")}개`,
-        stockWeeks >= 999 ? "주간 판매 없음" : `재고주수 ${stockWeeks.toFixed(1)}주`,
+        `오프라인 운영재고 ${Math.round(offlineStock).toLocaleString("ko-KR")}개 = 매장 ${Math.round(storeStock).toLocaleString("ko-KR")}개 + 창고오프 ${Math.round(warehouseOfflineStock).toLocaleString("ko-KR")}개`,
+        stockWeeks >= 999 ? "오프라인 주간 판매 없음" : `오프라인 운영재고주수 ${stockWeeks.toFixed(1)}주`,
         `전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%`,
         `시즌 ${item.season}`,
       ],
     });
   }
 
-  const seasons = [...new Set([...map.values()].map((x: any) => x.season).filter((x: string) => x && x !== "#N/A"))].sort();
+  const seasons = [...new Set(
+    suggestions
+      .map((x: any) => text(x.season))
+      .filter((x: string) => x && x !== "#N/A" && x !== "미지정" && !x.includes("시즌"))
+  )].sort();
   return {
     promotionSeasons: ["전체", ...seasons],
     promotionSuggestions: suggestions.sort((a, b) => Number(b.promotionScore || 0) - Number(a.promotionScore || 0)),
@@ -765,7 +784,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
       action,
       topStores,
       riskyStores,
-      aiReview: `${item.productName}은 출고 후 ${weeksSinceLaunch.toFixed(1)}주 경과, 전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%, 온/오프 합산 재고 ${Math.round(totalStock).toLocaleString("ko-KR")}개, 재고주수 ${stockWeeks >= 999 ? "판매없음" : `${stockWeeks.toFixed(1)}주`}입니다. ${action}가 적절합니다.`,
+      aiReview: `${item.productName}은 출고 후 ${weeksSinceLaunch.toFixed(1)}주 경과, 전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%, 오프라인 재고 ${Math.round(totalStock).toLocaleString("ko-KR")}개, 재고주수 ${stockWeeks >= 999 ? "판매없음" : `${stockWeeks.toFixed(1)}주`}입니다. ${action}가 적절합니다.`,
     };
   });
 }
@@ -1180,6 +1199,133 @@ function normalizeDateKey(value: any) {
   return s;
 }
 
+
+function dateAddDays(dateKey: string, days: number) {
+  const d = parseDate(dateKey);
+  if (!d) return "";
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function dateRange(startKey: string, endKey: string) {
+  const start = parseDate(startKey);
+  const end = parseDate(endKey);
+  if (!start || !end) return [];
+  const out: string[] = [];
+  const cur = new Date(start.getTime());
+  while (cur.getTime() <= end.getTime()) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function performancePeriods(row: any) {
+  const startDate = row.startDate;
+  if (!startDate) return { beforeDates: [] as string[], duringDates: [] as string[], basis: "" };
+
+  const isRt = row.category === "RT";
+
+  // PROMOTION:
+  // 금요일 시작 프로모션은 월요일에 전주 금토일 성과를 보게 되므로,
+  // 시작일~시작일+2일(금토일)을 행사중 기간으로 보고, 그 전주 동일 요일을 행사전 기간으로 비교합니다.
+  //
+  // RT:
+  // 월요일 지시 → 목요일 입고 → 금토일 판매를 보는 운영 루틴이므로,
+  // 지시일+4일~지시일+6일을 RT 후 기간으로 보고, 그 전주 동일 요일을 RT 전 기간으로 비교합니다.
+  const duringStart = isRt ? dateAddDays(startDate, 4) : startDate;
+  const duringEnd = row.endDate || (isRt ? dateAddDays(startDate, 6) : dateAddDays(startDate, 2));
+
+  const beforeStart = dateAddDays(duringStart, -7);
+  const beforeEnd = dateAddDays(duringEnd, -7);
+
+  return {
+    beforeDates: dateRange(beforeStart, beforeEnd),
+    duringDates: dateRange(duringStart, duringEnd),
+    basis: isRt
+      ? `RT 지시일 기준: ${duringStart}~${duringEnd} vs ${beforeStart}~${beforeEnd}`
+      : `프로모션 시작일 기준: ${duringStart}~${duringEnd} vs ${beforeStart}~${beforeEnd}`,
+  };
+}
+
+function parseDailyHistoryRows(rows: any[][]) {
+  const headerRow = findHeaderRow(rows, ["스타일"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
+  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
+
+  const dateCol = findCol(header, ["일자", "날짜", "기준일", "판매일", "snapshot_date", "date"], 0);
+  const storeCol = findCol(header, ["점포", "점포명", "채널명", "매장", "받는점포", "storeName"], 1);
+  const styleCol = findCol(header, ["스타일", "품번", "styleCode"], 2);
+  const productCol = findCol(header, ["스타일명", "상품명", "productName"], 3);
+  const qtyCol = findCol(header, ["판매수량", "수량", "판매", "weekNet", "dayNet", "qty"], 4);
+  const amountCol = findCol(header, ["판매금액", "매출", "금액", "daySales", "amount"], 5);
+
+  return rows.slice(startRow)
+    .map((row) => ({
+      date: normalizeDateKey(row[dateCol]),
+      storeName: displayStoreName(text(row[storeCol])),
+      storeKey: normalizeStoreKey(text(row[storeCol])),
+      styleCode: text(row[styleCol]),
+      productName: text(row[productCol]),
+      qty: num(row[qtyCol]),
+      amount: num(row[amountCol]),
+    }))
+    .filter((r) => r.date && r.styleCode);
+}
+
+function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
+  const dateSet = new Set(dates);
+  const targetStore = normalizeStoreKey(row.toStore || row.channel || "");
+  const hasStoreFilter = Boolean(targetStore);
+  const styleCode = text(row.styleCode);
+
+  return dailyRows
+    .filter((r) => dateSet.has(r.date))
+    .filter((r) => !styleCode || r.styleCode === styleCode)
+    .filter((r) => !hasStoreFilter || r.storeKey === targetStore || normalizeStoreKey(r.storeName).includes(targetStore) || targetStore.includes(r.storeKey))
+    .reduce((acc, r) => {
+      acc.qty += Number(r.qty || 0);
+      acc.amount += Number(r.amount || 0);
+      return acc;
+    }, { qty: 0, amount: 0 });
+}
+
+function applyDailyPerformance(rows: any[], dailyRows: any[]) {
+  if (!dailyRows.length) return rows;
+
+  return rows.map((row: any) => {
+    const periods = performancePeriods(row);
+    const before = sumDailyPerformance(dailyRows, row, periods.beforeDates);
+    const during = sumDailyPerformance(dailyRows, row, periods.duringDates);
+
+    // 시트에 값을 직접 입력한 경우에는 수동값을 우선합니다.
+    // 비어있거나 0이면 Daily_Sales_History 기준 자동 계산값을 사용합니다.
+    const beforeQty = Number(row.beforeQty || 0) || before.qty;
+    const duringQty = Number(row.duringQty || 0) || during.qty;
+    const beforeAmount = Number(row.beforeAmount || 0) || before.amount;
+    const duringAmount = Number(row.duringAmount || 0) || during.amount;
+    const addedQty = duringQty - beforeQty;
+    const addedAmount = duringAmount - beforeAmount;
+
+    return {
+      ...row,
+      beforeQty,
+      duringQty,
+      addedQty,
+      beforeAmount,
+      duringAmount,
+      addedAmount,
+      changeRate: beforeAmount ? ((duringAmount - beforeAmount) / beforeAmount) * 100 : duringAmount ? 100 : 0,
+      result: addedAmount > 0 ? "성공" : addedAmount < 0 ? "부진" : "관찰",
+      compareBasis: periods.basis,
+      beforeDates: periods.beforeDates,
+      duringDates: periods.duringDates,
+      performanceSource: before.amount || during.amount || before.qty || during.qty ? "Daily_Sales_History" : "Manual/Empty",
+    };
+  });
+}
+
+
 function buildPerformanceSummary(rows: any[]) {
   const dates = [...new Set(rows.map((r: any) => r.startDate).filter(Boolean))].sort().reverse();
   const byDate: Record<string, any> = {};
@@ -1237,10 +1383,21 @@ async function loadPromotionPerformance() {
   try {
     const dbId = getDbSheetId();
     const titles = await getSpreadsheetTitlesById(dbId);
-    const sheetName = pickNormalizedTitle(titles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
-    if (!sheetName || !titles.includes(sheetName)) return buildPerformanceSummary([]);
-    const values = await getManySheetValuesById(dbId, [sheetName], "A:T");
-    const rows = parsePerformanceRows(values[sheetName] || []);
+    const performanceSheetName = pickNormalizedTitle(titles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
+    const dailySheetName = pickNormalizedTitle(titles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
+
+    if (!performanceSheetName || !titles.includes(performanceSheetName)) return buildPerformanceSummary([]);
+
+    const sheetNames = [performanceSheetName];
+    if (dailySheetName && titles.includes(dailySheetName)) sheetNames.push(dailySheetName);
+
+    const values = await getManySheetValuesById(dbId, sheetNames, "A:AZ");
+    const performanceRows = parsePerformanceRows(values[performanceSheetName] || []);
+    const dailyRows = dailySheetName && titles.includes(dailySheetName)
+      ? parseDailyHistoryRows(values[dailySheetName] || [])
+      : [];
+
+    const rows = applyDailyPerformance(performanceRows, dailyRows);
     return buildPerformanceSummary(rows);
   } catch {
     return buildPerformanceSummary([]);

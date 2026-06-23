@@ -216,22 +216,67 @@ export async function readDailySalesFromMarkDb() {
 
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 const DAILY_HISTORY_HEADER = [
-  "SaveID",
-  "SavedAt",
-  "SnapshotDate",
-  "기준일자",
-  "채널명",
+  "일자",
+  "점포",
   "스타일",
   "스타일명",
-  "칼라",
-  "칼라명",
-  "일간판매",
-  "주간판매",
-  "누적판매",
-  "재고",
-  "판매가",
-  "일간판매금액",
+  "판매수량",
+  "판매금액",
+  "저장시각",
+  "source_sheet",
+  "skuRowCount",
 ];
+
+function aggregateDailySalesOnly(daily: any) {
+  const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+  const date = toDateText(daily?.sourceDate || ymdKST());
+  const sourceSheet = daily?.sheetName || "daily-sales-api";
+  const grouped = new Map<string, any>();
+
+  for (const item of daily.items || []) {
+    const qty = num(item.dailySales);
+    const amount = num(item.dailyAmount);
+
+    // 핵심: 일간 판매가 발생한 상품만 저장합니다.
+    // 주간판매/누적판매/재고만 있는 행은 용량만 차지하므로 저장하지 않습니다.
+    if (!qty && !amount) continue;
+
+    const storeName = text(item.channelName);
+    const styleCode = text(item.styleCode);
+    const productName = text(item.productName);
+    if (!storeName || !styleCode || !productName) continue;
+
+    const key = `${date}__${storeName}__${styleCode}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        date,
+        storeName,
+        styleCode,
+        productName,
+        qty: 0,
+        amount: 0,
+        skuRowCount: 0,
+      });
+    }
+
+    const row = grouped.get(key);
+    row.qty += qty;
+    row.amount += amount;
+    row.skuRowCount += 1;
+  }
+
+  return Array.from(grouped.values()).map((row) => [
+    row.date,
+    row.storeName,
+    row.styleCode,
+    row.productName,
+    row.qty,
+    row.amount,
+    savedAt,
+    sourceSheet,
+    row.skuRowCount,
+  ]);
+}
 
 export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const daily = data || await readDailySalesFromMarkDb();
@@ -241,27 +286,21 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const saveId = makeDailySnapshotId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
   const snapshotDate = ymdKST();
+  const rows = aggregateDailySalesOnly(daily);
 
-  const rows = (daily.items || []).map((item: any) => [
-    saveId,
-    savedAt,
-    snapshotDate,
-    item.sourceDate || daily.sourceDate || "",
-    item.channelName || "",
-    item.styleCode || "",
-    item.productName || "",
-    item.colorCode || "",
-    item.colorName || "",
-    num(item.dailySales),
-    num(item.weeklySales),
-    num(item.cumulativeSales),
-    num(item.stock),
-    num(item.price),
-    num(item.dailyAmount),
-  ]);
+  // 중복 방지: 같은 일자/점포/스타일은 다시 저장하지 않습니다.
+  const existing = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:C").catch(() => []);
+  const existingKeys = new Set(
+    existing.slice(1).map((row) => `${text(row?.[0])}__${text(row?.[1])}__${text(row?.[2])}`)
+  );
 
-  if (rows.length) {
-    await appendValuesById(spreadsheetId, `'${DAILY_HISTORY_SHEET}'!A:O`, rows);
+  const rowsToAppend = rows.filter((row) => {
+    const key = `${text(row[0])}__${text(row[1])}__${text(row[2])}`;
+    return !existingKeys.has(key);
+  });
+
+  if (rowsToAppend.length) {
+    await appendValuesById(spreadsheetId, `'${DAILY_HISTORY_SHEET}'!A:I`, rowsToAppend);
   }
 
   return {
@@ -269,7 +308,10 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
     savedAt,
     snapshotDate,
     source,
-    rows: rows.length,
+    mode: "sales-only-store-style-aggregated",
+    parsedRows: rows.length,
+    rows: rowsToAppend.length,
+    skippedRows: rows.length - rowsToAppend.length,
     totalDailySales: daily.totalDailySales || 0,
     totalDailyAmount: daily.totalDailyAmount || 0,
   };

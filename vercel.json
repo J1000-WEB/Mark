@@ -4,8 +4,12 @@
   "installCommand": "npm install",
   "crons": [
     {
+      "path": "/api/auto-daily-sales-snapshot",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/auto-weekly-snapshot",
-      "schedule": "10 3 * * 1"
+      "schedule": "0 4 * * 1"
     }
   ]
 }

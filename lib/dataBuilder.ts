@@ -579,8 +579,13 @@ function buildPriceSuggestion(tagPrice: number, currentPrice: number, levelColor
   };
 }
 
-function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
+function buildPromotionSuggestions(productRows: any[], inventoryRows: any[], companyTopProducts: any[] = []) {
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
+  const topProductRankMap = new Map<string, number>();
+  companyTopProducts.forEach((p: any, idx: number) => {
+    if (p?.styleCode) topProductRankMap.set(p.styleCode, idx + 1);
+  });
+
   const map = new Map<string, any>();
 
   for (const r of productRows.filter((x) => !isShop(x.storeName) && !isExcludedStore(x.storeName))) {
@@ -614,6 +619,8 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
 
   const now = new Date();
   const suggestions: any[] = [];
+  const suppressedPromotionCandidates: any[] = [];
+  const rtSuppressedPromotionCandidates: any[] = [];
 
   for (const item of map.values()) {
     const inv: any = invMap.get(item.styleCode) || {};
@@ -633,6 +640,32 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
     const weeksSinceLaunch = item.launchTime ? (now.getTime() - Number(item.launchTime)) / (1000 * 60 * 60 * 24 * 7) : 0;
     const salesChangeRate = prevNet > 0 ? ((weekNet - prevNet) / prevNet) * 100 : weekNet > 0 ? 100 : 0;
     const amountChangeRate = Number(item.prevAmount || 0) > 0 ? ((item.weekAmount - item.prevAmount) / item.prevAmount) * 100 : Number(item.weekAmount || 0) > 0 ? 100 : 0;
+    const companyRank = topProductRankMap.get(item.styleCode) || 9999;
+
+    // 프로모션 보호 필터 V2
+    // 잘 팔리는 상품은 프로모션 제안에서 제외하고 정가 판매를 우선합니다.
+    const protectReasons = [
+      companyRank <= 50 ? `전사 판매 TOP${companyRank}` : "",
+      salesChangeRate >= 20 ? `전주 대비 판매 +${salesChangeRate.toFixed(1)}%` : "",
+    ].filter(Boolean);
+
+    if (protectReasons.length) {
+      suppressedPromotionCandidates.push({
+        ...item,
+        onlineStock,
+        warehouseOfflineStock,
+        storeStock,
+        offlineStock,
+        totalStock,
+        companyRank,
+        stockWeeks,
+        salesChangeRate,
+        amountChangeRate,
+        suppressedReason: protectReasons.join(" / "),
+        action: "정가 판매 유지",
+      });
+      continue;
+    }
 
     let score = 0;
     score += seasonBonus(item.season);
@@ -655,11 +688,17 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
     if (offlineStock < 20) continue;
     if (!(stockWeeks >= 5 || offlineStock >= 80 || salesChangeRate <= 0)) continue;
 
+    const rtSuppressedPromo = salesChangeRate <= -25 && offlineStock >= 200;
+
     let action = "노출/진열 강화";
     let promotionLevel = "관찰";
     let levelColor = "yellow";
 
-    if (stockWeeks >= 20) {
+    if (rtSuppressedPromo) {
+      action = salesChangeRate <= -40 ? "직접 가격 할인 검토" : "번들/채널 이벤트 검토";
+      promotionLevel = "RT 억제 → 프로모션 검토";
+      levelColor = salesChangeRate <= -40 ? "red" : "orange";
+    } else if (stockWeeks >= 20) {
       action = "세트/쿠폰 프로모션 검토";
       promotionLevel = "즉시 프로모션 검토";
       levelColor = "red";
@@ -692,6 +731,8 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
       stockWeeks,
       salesChangeRate,
       amountChangeRate,
+      companyRank,
+      rtSuppressedPromo,
       promotionScore: score,
       promotionLevel,
       levelColor,
@@ -702,8 +743,21 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
         stockWeeks >= 999 ? "오프라인 주간 판매 없음" : `오프라인 운영재고주수 ${stockWeeks.toFixed(1)}주`,
         `전주 대비 판매수량 ${salesChangeRate >= 0 ? "+" : ""}${salesChangeRate.toFixed(1)}%`,
         `시즌 ${item.season}`,
-      ],
+        rtSuppressedPromo ? `RT 억제 전환 후보: 전주 대비 ${salesChangeRate.toFixed(1)}%, 오프라인 운영재고 ${Math.round(offlineStock).toLocaleString("ko-KR")}개` : "",
+      ].filter(Boolean),
     });
+
+    if (rtSuppressedPromo) {
+      rtSuppressedPromotionCandidates.push({
+        ...item,
+        companyRank,
+        offlineStock,
+        stockWeeks,
+        salesChangeRate,
+        action,
+        promotionLevel,
+      });
+    }
   }
 
   const seasons = [...new Set(
@@ -714,6 +768,8 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[]) {
   return {
     promotionSeasons: ["전체", ...seasons],
     promotionSuggestions: suggestions.sort((a, b) => Number(b.promotionScore || 0) - Number(a.promotionScore || 0)),
+    suppressedPromotionCandidates: suppressedPromotionCandidates.sort((a, b) => (a.companyRank || 9999) - (b.companyRank || 9999)).slice(0, 20),
+    rtSuppressedPromotionCandidates: rtSuppressedPromotionCandidates.sort((a, b) => Number(a.salesChangeRate || 0) - Number(b.salesChangeRate || 0)).slice(0, 20),
   };
 }
 
@@ -820,7 +876,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
 }
 
 function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
-  const promotion = buildPromotionSuggestions(productRows, inventoryRows);
+  const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => !isShop(r.storeName));
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
@@ -1100,7 +1156,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       `RT 이동 우선 검토 대상은 ${rtSuggestions.length}건입니다.`,
       `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
-      `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, 시즌별로 선택해 확인할 수 있습니다.`,
+      `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, TOP상품/판매상승 보호 제외 ${promotion.suppressedPromotionCandidates?.length || 0}개, RT 억제 전환 후보 ${promotion.rtSuppressedPromotionCandidates?.length || 0}개입니다.`,
       "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정하며, 출고점 안전재고를 남기고 다중 점포로 분산 보충합니다.",
     ],
   };

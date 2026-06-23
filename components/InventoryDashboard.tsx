@@ -663,6 +663,22 @@ function PerformanceTrackingSection({ data }: { data: any }) {
     ["PROMOTION", "프로모션"],
   ];
 
+  const singleMode = categoryFilter !== "ALL";
+
+  function amountShare(item: any, basis: "before" | "during") {
+    const base = basis === "before" ? selected.beforeAmount : selected.duringAmount;
+    const value = basis === "before" ? Number(item.beforeAmount || 0) : Number(item.duringAmount || 0);
+    return base ? (value / base) * 100 : 0;
+  }
+
+  function qtyShare(item: any, basis: "before" | "during") {
+    const base = basis === "before"
+      ? selected.rows.reduce((s: number, r: any) => s + Number(r.beforeQty || 0), 0)
+      : selected.rows.reduce((s: number, r: any) => s + Number(r.duringQty || 0), 0);
+    const value = basis === "before" ? Number(item.beforeQty || 0) : Number(item.duringQty || 0);
+    return base ? (value / base) * 100 : 0;
+  }
+
   return (
     <Card
       title="RT / 프로모션 성과 확인"
@@ -699,34 +715,121 @@ function PerformanceTrackingSection({ data }: { data: any }) {
         <Stat label="성공률" value={`${Number(selected.successRate || 0).toFixed(1)}%`} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {(selected.byCategory || []).map((bucket: any) => (
-          <div key={bucket.category} className="rounded-2xl bg-white/80 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-black">{bucket.category === "RT" ? "RT 성과" : "프로모션 성과"}</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{fmtNum(bucket.count)}건 · 성공률 {Number(bucket.successRate || 0).toFixed(1)}%</p>
-              </div>
-              <div className="text-right">
-                <p className={`text-lg font-black ${Number(bucket.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(bucket.addedAmount)}</p>
-                <p className="text-xs font-semibold text-slate-500">추가매출</p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {(bucket.topItems || []).slice(0, 3).map((item: any, idx: number) => (
-                <div key={`${bucket.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {item.toStore || item.channel || "-"}</p>
-                  <p className="mt-1 truncate text-sm font-black">{item.productName}</p>
-                  <p className={`mt-1 text-xs font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                    추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}
-                  </p>
+      {!singleMode ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {(selected.byCategory || []).map((bucket: any) => (
+            <div key={bucket.category} className="rounded-2xl bg-white/80 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black">{bucket.category === "RT" ? "RT 성과" : "프로모션 성과"}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{fmtNum(bucket.count)}건 · 성공률 {Number(bucket.successRate || 0).toFixed(1)}%</p>
                 </div>
-              ))}
-              {!bucket.topItems?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-400">표시할 성과가 없습니다.</p>}
+                <div className="text-right">
+                  <p className={`text-lg font-black ${Number(bucket.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(bucket.addedAmount)}</p>
+                  <p className="text-xs font-semibold text-slate-500">추가매출</p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(bucket.topItems || []).slice(0, 3).map((item: any, idx: number) => (
+                  <div key={`${bucket.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {item.toStore || item.channel || "-"}</p>
+                    <p className="mt-1 truncate text-sm font-black">{item.productName}</p>
+                    <p className={`mt-1 text-xs font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                      추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}
+                    </p>
+                  </div>
+                ))}
+                {!bucket.topItems?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-400">표시할 성과가 없습니다.</p>}
+              </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl bg-white">
+          <div className="border-b border-slate-100 bg-slate-900 px-4 py-3 text-white">
+            <p className="text-sm font-black">
+              ■ 기간 판매현황 ({selectedDate || "-"} 시작 · {categoryFilter === "RT" ? "RT" : "프로모션"})
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-300">
+              행사전 실적과 행사중 실적을 같은 구조로 비교합니다. 수량/금액/비중/증감 기준입니다.
+            </p>
           </div>
-        ))}
-      </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-[1080px] w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-xs font-black text-slate-600">
+                  <th className="border border-slate-200 px-3 py-2 text-left">구분</th>
+                  <th className="border border-slate-200 px-3 py-2 text-left">품번</th>
+                  <th className="border border-slate-200 px-3 py-2 text-left">모델명</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">판매가</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>행사중</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>행사전</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>신장</th>
+                </tr>
+                <tr className="bg-slate-50 text-xs font-black text-slate-600">
+                  <th className="border border-slate-200 px-3 py-2" />
+                  <th className="border border-slate-200 px-3 py-2" />
+                  <th className="border border-slate-200 px-3 py-2" />
+                  <th className="border border-slate-200 px-3 py-2" />
+                  <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">비중</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">비중</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">증감률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(selected.rows || []).map((item: any, idx: number) => {
+                  const growthRate = Number(item.beforeAmount || 0)
+                    ? ((Number(item.duringAmount || 0) - Number(item.beforeAmount || 0)) / Number(item.beforeAmount || 0)) * 100
+                    : Number(item.duringAmount || 0) ? 100 : 0;
+                  const groupLabel = item.saleType || item.channel || item.toStore || item.fromStore || item.category;
+                  return (
+                    <tr key={`${item.category}-${item.styleCode}-${idx}`} className="hover:bg-slate-50">
+                      <td className="border border-slate-200 px-3 py-2 font-black text-slate-700">{groupLabel || "-"}</td>
+                      <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-600">{item.styleCode}</td>
+                      <td className="border border-slate-200 px-3 py-2 font-black">{item.productName}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-semibold">{item.salePrice ? won(item.salePrice) : "-"}</td>
+
+                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{fmtNum(item.duringQty)}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{won(item.duringAmount)}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-semibold">{Number(amountShare(item, "during")).toFixed(0)}%</td>
+
+                      <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(item.beforeQty)}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right">{won(item.beforeAmount)}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right">{Number(amountShare(item, "before")).toFixed(0)}%</td>
+
+                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{fmtNum(item.addedQty)}</td>
+                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(item.addedAmount)}</td>
+                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${growthRate >= 0 ? "text-blue-600" : "text-red-600"}`}>{growthRate >= 0 ? "+" : ""}{growthRate.toFixed(0)}%</td>
+                    </tr>
+                  );
+                })}
+
+                <tr className="bg-slate-100 font-black">
+                  <td className="border border-slate-200 px-3 py-2" colSpan={4}>합계</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.duringQty || 0), 0))}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{won(selected.duringAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">100%</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.beforeQty || 0), 0))}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{won(selected.beforeAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">100%</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.addedQty)}</td>
+                  <td className={`border border-slate-200 px-3 py-2 text-right ${Number(selected.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(selected.addedAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{Number(selected.successRate || 0).toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {!selected.rows?.length && <div className="p-6"><Empty /></div>}
+        </div>
+      )}
 
       <details className="mt-4 rounded-2xl border border-slate-100 bg-white/75 p-4">
         <summary className="cursor-pointer text-sm font-black text-slate-700">시작일 {selectedDate || "-"} {categoryFilter === "ALL" ? "전체" : categoryFilter === "RT" ? "RT" : "프로모션"} 상세 보기</summary>
@@ -737,6 +840,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                 <div>
                   <p className="text-xs font-bold text-slate-500">{item.category} · {item.styleCode} · {item.fromStore || item.channel || "-"} → {item.toStore || "-"}</p>
                   <p className="mt-1 font-black">{item.productName}</p>
+                  {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">{item.compareBasis}</p> : null}
                   {item.note ? <p className="mt-1 text-xs font-semibold text-slate-500">{item.note}</p> : null}
                 </div>
                 <div className="text-right">
@@ -752,6 +856,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
     </Card>
   );
 }
+
 
 
 function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over" }) {

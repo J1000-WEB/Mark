@@ -1,11 +1,34 @@
 import { NextResponse } from "next/server";
-import { appendValues, ensureSheetExists, getManySheetValues, getSheetValues, getSpreadsheetTitles, updateValues } from "@/lib/googleSheets";
+import { appendValues, appendValuesById, ensureSheetExists, ensureSheetExistsById, getDbSheetId, getManySheetValues, getSheetValues, getSpreadsheetTitles, updateValues } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const RESULT_SHEET = "RT_Result";
 const RESULT_HEADER = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "수량", "제안날짜", "다운로드날짜"];
+const PERFORMANCE_SHEET = "Promotion_Performance";
+const PERFORMANCE_HEADER = [
+  "구분",
+  "스타일",
+  "스타일명",
+  "칼라",
+  "칼라명",
+  "소비자가",
+  "판매단가",
+  "판매유형",
+  "할인율",
+  "마진율",
+  "유통몰채널",
+  "상세비고",
+  "시작일",
+  "종료일",
+  "보낸점포",
+  "받는점포",
+  "행사전판매",
+  "행사중판매",
+  "행사전매출",
+  "행사중매출",
+];
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -242,6 +265,48 @@ ${tableRows}
   }
 }
 
+
+async function appendRtToPerformance(item: any, proposedAt: string) {
+  try {
+    const dbId = getDbSheetId();
+    await ensureSheetExistsById(dbId, PERFORMANCE_SHEET, PERFORMANCE_HEADER);
+
+    const styleCode = text(item.styleCode);
+    const productName = text(item.productName);
+    const fromStore = text(item.fromStore);
+    const toStore = text(item.toStore);
+    const suggestQty = num(item.suggestQty);
+    const reason = text(item.reason);
+
+    await appendValuesById(dbId, `'${PERFORMANCE_SHEET}'!A:T`, [[
+      "RT",
+      styleCode,
+      productName,
+      "",
+      "",
+      "",
+      "",
+      "RT",
+      "",
+      "",
+      "",
+      `RT수량 ${suggestQty.toLocaleString("ko-KR")}개${reason ? ` / ${reason.slice(0, 500)}` : ""}`,
+      proposedAt,
+      "",
+      fromStore,
+      toStore,
+      "",
+      "",
+      "",
+      "",
+    ]]);
+  } catch (error) {
+    // RT_Result 저장 자체는 막지 않습니다. 성과 시트 자동 기록 실패는 응답에만 표시합니다.
+    console.error("Promotion_Performance RT append failed:", error);
+    throw error;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -289,7 +354,16 @@ export async function POST(req: Request) {
 
     await appendValues(`'${RESULT_SHEET}'!A:H`, rows);
 
-    return NextResponse.json({ ok: true, savedRows: rows.length, proposedAt });
+    let performanceSaved = true;
+    let performanceError = "";
+    try {
+      await appendRtToPerformance(item, proposedAt);
+    } catch (error: any) {
+      performanceSaved = false;
+      performanceError = error?.message || "Promotion_Performance 자동 기록 실패";
+    }
+
+    return NextResponse.json({ ok: true, savedRows: rows.length, proposedAt, performanceSaved, performanceError });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "RT_Result 저장 실패" }, { status: 500 });
   }

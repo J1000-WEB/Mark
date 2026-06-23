@@ -144,8 +144,11 @@ export default function SnapshotDashboard() {
   const [selectedId, setSelectedId] = useState("");
   const [selectedSnapshot, setSelectedSnapshot] = useState<any>(null);
   const [memo, setMemo] = useState("");
+  const [dailyDate, setDailyDate] = useState("");
+  const [dailyStatus, setDailyStatus] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dailyLoading, setDailyLoading] = useState(false);
 
   async function loadCurrentData() {
     setDataStatus("구글시트 데이터 불러오는 중");
@@ -226,9 +229,43 @@ export default function SnapshotDashboard() {
     }
   }
 
+
+  async function saveDailySalesSnapshot() {
+    if (!dailyDate) {
+      setDailyStatus("저장할 일자를 선택해주세요.");
+      return;
+    }
+
+    setDailyLoading(true);
+    setDailyStatus(`${dailyDate} 일간 스냅샷 저장 중...`);
+
+    try {
+      const res = await fetch("/api/auto-daily-sales-snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ date: dailyDate }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "일간 스냅샷 저장 실패");
+      setDailyStatus(`저장 완료: ${json.snapshotDate} / 신규 ${json.savedRows}행 / 중복 ${json.skippedRows}행`);
+    } catch (error: any) {
+      setDailyStatus(error?.message || "일간 스냅샷 저장 실패");
+    } finally {
+      setDailyLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadCurrentData();
     loadSnapshots();
+
+    const now = new Date();
+    const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const y = kst.getFullYear();
+    const m = String(kst.getMonth() + 1).padStart(2, "0");
+    const d = String(kst.getDate()).padStart(2, "0");
+    setDailyDate(`${y}-${m}-${d}`);
   }, []);
 
   const previewPayload = selectedSnapshot?.payload || null;
@@ -249,9 +286,41 @@ export default function SnapshotDashboard() {
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">
-          <SnapshotCard title="일간 스냅샷" schedule="매일 12:00 저장 예정" />
-          <SnapshotCard title="주간 스냅샷" schedule="월요일 12:10 저장 / 수동 저장 가능" />
-          <SnapshotCard title="RT 성과" schedule="주간 스냅샷과 함께 연동 예정" />
+          <SnapshotCard title="일간 스냅샷" schedule="매일 12:30 자동 저장 / 수동 저장 가능" />
+          <SnapshotCard title="주간 스냅샷" schedule="월요일 13:00 저장 / 수동 저장 가능" />
+          <SnapshotCard title="RT 성과" schedule="Promotion_Performance와 Daily_Sales_History 기준" />
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-500">Daily Sales History</p>
+              <h2 className="mt-1 text-2xl font-black">일간 스냅샷 수동 저장</h2>
+              <p className="mt-2 text-sm font-semibold text-slate-500">
+                MARK_DB의 스타일별 채널별 입고/판매/재고현황을 읽어 Daily_Sales_History에 저장합니다.
+                과거 데이터를 하나씩 불러온 뒤 해당 날짜로 저장할 때 사용합니다.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="date"
+                value={dailyDate}
+                onChange={(e) => setDailyDate(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700"
+              />
+              <button
+                type="button"
+                onClick={saveDailySalesSnapshot}
+                disabled={dailyLoading}
+                className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white disabled:opacity-50"
+              >
+                {dailyLoading ? "저장 중..." : "일간 스냅샷 저장"}
+              </button>
+            </div>
+          </div>
+          {dailyStatus ? (
+            <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-black text-blue-700">{dailyStatus}</div>
+          ) : null}
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_420px]">

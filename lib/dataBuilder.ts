@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getManySheetValues, getSpreadsheetTitles } from "./googleSheets";
+import { getDbSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById } from "./googleSheets";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -1089,6 +1089,155 @@ function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
   };
 }
 
+
+function parsePerformanceRows(rows: any[][]) {
+  const headerRow = findHeaderRow(rows, ["구분", "스타일", "시작일"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : [];
+  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
+
+  const typeCol = findCol(header, ["구분"], 0);
+  const styleCol = findCol(header, ["스타일"], 1);
+  const productCol = findCol(header, ["스타일명"], 2);
+  const colorCol = findCol(header, ["칼라"], 3);
+  const colorNameCol = findCol(header, ["칼라명"], 4);
+  const tagPriceCol = findCol(header, ["소비자가"], 5);
+  const salePriceCol = findCol(header, ["판매단가"], 6);
+  const saleTypeCol = findCol(header, ["판매유형"], 7);
+  const discountRateCol = findCol(header, ["할인율"], 8);
+  const marginRateCol = findCol(header, ["마진율"], 9);
+  const channelCol = findCol(header, ["유통몰채널"], 10);
+  const noteCol = findCol(header, ["상세비고"], 11);
+  const startDateCol = findCol(header, ["시작일"], 12);
+  const endDateCol = findCol(header, ["종료일"], 13);
+  const fromStoreCol = findCol(header, ["보낸점포"], 14);
+  const toStoreCol = findCol(header, ["받는점포"], 15);
+  const beforeQtyCol = findCol(header, ["행사전판매"], 16);
+  const duringQtyCol = findCol(header, ["행사중판매"], 17);
+  const beforeAmountCol = findCol(header, ["행사전매출"], 18);
+  const duringAmountCol = findCol(header, ["행사중매출"], 19);
+
+  return rows.slice(startRow)
+    .map((row) => {
+      const category = text(row[typeCol]).toUpperCase();
+      const styleCode = text(row[styleCol]);
+      const productName = text(row[productCol]);
+      const startDate = normalizeDateKey(row[startDateCol]);
+      if (!category && !styleCode && !productName) return null;
+
+      const beforeQty = num(row[beforeQtyCol]);
+      const duringQty = num(row[duringQtyCol]);
+      const beforeAmount = num(row[beforeAmountCol]);
+      const duringAmount = num(row[duringAmountCol]);
+      const addedQty = duringQty - beforeQty;
+      const addedAmount = duringAmount - beforeAmount;
+
+      return {
+        category: category || "PROMOTION",
+        styleCode,
+        productName,
+        color: text(row[colorCol]),
+        colorName: text(row[colorNameCol]),
+        tagPrice: num(row[tagPriceCol]),
+        salePrice: num(row[salePriceCol]),
+        saleType: text(row[saleTypeCol]),
+        discountRate: num(row[discountRateCol]),
+        marginRate: num(row[marginRateCol]),
+        channel: text(row[channelCol]),
+        note: text(row[noteCol]),
+        startDate,
+        endDate: normalizeDateKey(row[endDateCol]),
+        fromStore: text(row[fromStoreCol]),
+        toStore: text(row[toStoreCol]),
+        beforeQty,
+        duringQty,
+        addedQty,
+        beforeAmount,
+        duringAmount,
+        addedAmount,
+        changeRate: beforeAmount ? ((duringAmount - beforeAmount) / beforeAmount) * 100 : duringAmount ? 100 : 0,
+        result: addedAmount > 0 ? "성공" : addedAmount < 0 ? "부진" : "관찰",
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeDateKey(value: any) {
+  const d = parseDate(value);
+  if (d) return d.toISOString().slice(0, 10);
+  const s = text(value);
+  const m = s.match(/(\d{4})[-./]\s*(\d{1,2})[-./]\s*(\d{1,2})/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+  return s;
+}
+
+function buildPerformanceSummary(rows: any[]) {
+  const dates = [...new Set(rows.map((r: any) => r.startDate).filter(Boolean))].sort().reverse();
+  const byDate: Record<string, any> = {};
+
+  for (const date of dates) {
+    const dateRows = rows.filter((r: any) => r.startDate === date);
+    const totalAddedAmount = dateRows.reduce((s: number, r: any) => s + Number(r.addedAmount || 0), 0);
+    const totalBeforeAmount = dateRows.reduce((s: number, r: any) => s + Number(r.beforeAmount || 0), 0);
+    const totalDuringAmount = dateRows.reduce((s: number, r: any) => s + Number(r.duringAmount || 0), 0);
+    const totalAddedQty = dateRows.reduce((s: number, r: any) => s + Number(r.addedQty || 0), 0);
+    const successCount = dateRows.filter((r: any) => Number(r.addedAmount || 0) > 0).length;
+
+    const byCategory = ["RT", "PROMOTION"].map((category) => {
+      const items = dateRows.filter((r: any) => r.category === category);
+      const addedAmount = items.reduce((s: number, r: any) => s + Number(r.addedAmount || 0), 0);
+      const beforeAmount = items.reduce((s: number, r: any) => s + Number(r.beforeAmount || 0), 0);
+      const duringAmount = items.reduce((s: number, r: any) => s + Number(r.duringAmount || 0), 0);
+      const addedQty = items.reduce((s: number, r: any) => s + Number(r.addedQty || 0), 0);
+      const success = items.filter((r: any) => Number(r.addedAmount || 0) > 0).length;
+
+      return {
+        category,
+        count: items.length,
+        beforeAmount,
+        duringAmount,
+        addedAmount,
+        addedQty,
+        successRate: items.length ? (success / items.length) * 100 : 0,
+        topItems: [...items].sort((a: any, b: any) => Number(b.addedAmount || 0) - Number(a.addedAmount || 0)).slice(0, 5),
+      };
+    });
+
+    byDate[date] = {
+      startDate: date,
+      count: dateRows.length,
+      beforeAmount: totalBeforeAmount,
+      duringAmount: totalDuringAmount,
+      addedAmount: totalAddedAmount,
+      addedQty: totalAddedQty,
+      successRate: dateRows.length ? (successCount / dateRows.length) * 100 : 0,
+      byCategory,
+      rows: [...dateRows].sort((a: any, b: any) => Number(b.addedAmount || 0) - Number(a.addedAmount || 0)),
+    };
+  }
+
+  return {
+    dates,
+    latestDate: dates[0] || "",
+    byDate,
+    rows,
+  };
+}
+
+async function loadPromotionPerformance() {
+  try {
+    const dbId = getDbSheetId();
+    const titles = await getSpreadsheetTitlesById(dbId);
+    const sheetName = pickNormalizedTitle(titles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
+    if (!sheetName || !titles.includes(sheetName)) return buildPerformanceSummary([]);
+    const values = await getManySheetValuesById(dbId, [sheetName], "A:T");
+    const rows = parsePerformanceRows(values[sheetName] || []);
+    return buildPerformanceSummary(rows);
+  } catch {
+    return buildPerformanceSummary([]);
+  }
+}
+
+
 export async function buildDashboardDataFromGoogleSheet() {
   const titles = await getSpreadsheetTitles();
 
@@ -1120,6 +1269,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const productRows = parseProducts(values[productSheet] || []);
   const coreProductRows = productRows.filter((r) => !isShop(r.storeName) && !isExcludedStore(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
+  const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
 
   const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
@@ -1144,7 +1294,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
   const topProduct = companyTopProducts[0];
 
-  const inventory = buildInventory(productRows, inventoryRows, companyTopProducts);
+  const inventory = { ...buildInventory(productRows, inventoryRows, companyTopProducts), performance };
 
   return {
     ...(fallback as any),
@@ -1157,10 +1307,7 @@ export async function buildDashboardDataFromGoogleSheet() {
     },
     weekly: {
       periodLabel: `분석기간: ${weeklyCurrent} / 비교기간: ${weeklyCompare}`,
-      // 주간 화면/스냅샷 모두 보정된 주간 매출값을 사용해야 합니다.
-      // weeklyCur는 원본 주실적 칸이 비어 있으면 weekSales가 0으로 들어오므로,
-      // mergeStoreRows에서 월누계 차감으로 보정된 mergedWeekly를 저장합니다.
-      current: mergedWeekly,
+      current: weeklyCur,
       compare: weeklyCmp,
       companyTopProducts,
       storeTopProducts,

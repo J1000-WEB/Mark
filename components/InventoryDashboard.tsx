@@ -614,6 +614,104 @@ function AllocationLookupSection({ data }: { data: any }) {
 }
 
 
+
+function PerformanceTrackingSection({ data }: { data: any }) {
+  const performance = data.performance || {};
+  const dates = performance.dates || [];
+  const [selectedDate, setSelectedDate] = useState(performance.latestDate || "");
+
+  useEffect(() => {
+    if (!selectedDate && performance.latestDate) setSelectedDate(performance.latestDate);
+  }, [performance.latestDate, selectedDate]);
+
+  const selected = performance.byDate?.[selectedDate] || {
+    count: 0,
+    addedQty: 0,
+    beforeAmount: 0,
+    duringAmount: 0,
+    addedAmount: 0,
+    successRate: 0,
+    byCategory: [],
+    rows: [],
+  };
+
+  return (
+    <Card
+      title="RT / 프로모션 성과 확인"
+      tone="purple"
+      right={
+        <select
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700"
+        >
+          {!dates.length && <option value="">시작일 없음</option>}
+          {dates.map((date: string) => <option key={date} value={date}>{date} 시작</option>)}
+        </select>
+      }
+    >
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="실행건수" value={`${fmtNum(selected.count)}건`} />
+        <Stat label="추가판매" value={`${fmtNum(selected.addedQty)}개`} colorClass={Number(selected.addedQty || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
+        <Stat label="추가매출" value={won(selected.addedAmount)} colorClass={Number(selected.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"} />
+        <Stat label="성공률" value={`${Number(selected.successRate || 0).toFixed(1)}%`} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {(selected.byCategory || []).map((bucket: any) => (
+          <div key={bucket.category} className="rounded-2xl bg-white/80 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black">{bucket.category === "RT" ? "RT 성과" : "프로모션 성과"}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">{fmtNum(bucket.count)}건 · 성공률 {Number(bucket.successRate || 0).toFixed(1)}%</p>
+              </div>
+              <div className="text-right">
+                <p className={`text-lg font-black ${Number(bucket.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(bucket.addedAmount)}</p>
+                <p className="text-xs font-semibold text-slate-500">추가매출</p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              {(bucket.topItems || []).slice(0, 3).map((item: any, idx: number) => (
+                <div key={`${bucket.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {item.toStore || item.channel || "-"}</p>
+                  <p className="mt-1 truncate text-sm font-black">{item.productName}</p>
+                  <p className={`mt-1 text-xs font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                    추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}
+                  </p>
+                </div>
+              ))}
+              {!bucket.topItems?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-400">표시할 성과가 없습니다.</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <details className="mt-4 rounded-2xl border border-slate-100 bg-white/75 p-4">
+        <summary className="cursor-pointer text-sm font-black text-slate-700">시작일 {selectedDate || "-"} 전체 상세 보기</summary>
+        <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-2">
+          {(selected.rows || []).map((item: any, idx: number) => (
+            <div key={`${item.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-500">{item.category} · {item.styleCode} · {item.fromStore || item.channel || "-"} → {item.toStore || "-"}</p>
+                  <p className="mt-1 font-black">{item.productName}</p>
+                  {item.note ? <p className="mt-1 text-xs font-semibold text-slate-500">{item.note}</p> : null}
+                </div>
+                <div className="text-right">
+                  <p className={`font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(item.addedAmount)}</p>
+                  <p className="text-xs font-semibold text-slate-500">{item.result}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {!selected.rows?.length && <Empty />}
+        </div>
+      </details>
+    </Card>
+  );
+}
+
+
 function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over" }) {
   if (!items?.length) return <Empty />;
   return (
@@ -701,6 +799,8 @@ export default function InventoryDashboard() {
           onFilter={setRtFilter}
           onStatus={updateRtStatus}
         />
+
+        <PerformanceTrackingSection data={data} />
 
         <section className="grid gap-4 md:grid-cols-4">
           <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="blue" />

@@ -52,7 +52,6 @@ function isOnlineChannel(storeName: string) {
   const s = String(storeName || "").trim().toLowerCase();
   return (
     s.startsWith("온라인") ||
-    s.includes("무신사") ||
     s.includes("29cm") ||
     s.includes("ssf") ||
     s.includes("네이버") ||
@@ -64,10 +63,28 @@ function isOnlineChannel(storeName: string) {
   );
 }
 
+function isConsignmentChannel(storeName: string) {
+  const raw = String(storeName || "").trim();
+  const s = raw.toLowerCase();
+  return (
+    raw.startsWith("오프라인_") ||
+    s.includes("위탁") ||
+    s.includes("면세") ||
+    s.includes("한컬렉션") ||
+    s.includes("han collection") ||
+    s.includes("hancollection") ||
+    s.includes("무신사")
+  );
+}
+
 function isOfflineSalesStore(storeName: string) {
   const s = String(storeName || "").trim();
   if (!s || s === "합계" || s === "채널명") return false;
   return !isOnlineChannel(s) && !isExcludedStore(s);
+}
+
+function isCoreOfflineSalesStore(storeName: string) {
+  return isOfflineSalesStore(storeName) && !isConsignmentChannel(storeName);
 }
 
 function normalizeStoreKey(storeName: string) {
@@ -959,8 +976,9 @@ function buildOnlineTransferSuggestions(offlineRows: any[], onlineRows: any[], i
 function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
-  const coreProducts = productRows.filter((r) => isOfflineSalesStore(r.storeName));
+  const coreProducts = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
   const onlineProducts = productRows.filter((r) => isOnlineChannel(r.storeName));
+  const consignmentProducts = productRows.filter((r) => isOfflineSalesStore(r.storeName) && isConsignmentChannel(r.storeName));
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const allProducts = aggregateProducts(coreProducts, undefined, 9999);
 
@@ -1213,14 +1231,17 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       return { ...v, avgWeeks: weeks.length ? weeks.reduce((s: number, w: number) => s + w, 0) / weeks.length : 0 };
     });
 
-  const consignmentRecommendations = companyTopProducts.slice(0, 5).map((p) => {
+  const consignmentTopProducts = aggregateProducts(consignmentProducts, undefined, 10);
+  const consignmentRecommendations = (consignmentTopProducts.length ? consignmentTopProducts : companyTopProducts).slice(0, 5).map((p) => {
     const inv: any = invMap.get(p.styleCode) || {};
     return {
       ...p,
       onlineStock: inv.onlineStock || 0,
       offlineStock: inv.offlineStock || 0,
       totalStock: inv.totalStock || 0,
-      reason: "전사 매출 상위 상품 기준 위탁 채널 투입 후보",
+      reason: consignmentTopProducts.length
+        ? "위탁 채널 판매 기준 효율 점검 상품"
+        : "핵심 오프라인 TOP 상품 기준 위탁 채널 투입 후보",
     };
   });
 
@@ -1604,7 +1625,9 @@ export async function buildDashboardDataFromGoogleSheet() {
   const monthYear = filterVisibleStores(parseTargetSheet(prevYear, values[prevYear] || []).rows);
 
   const productRows = parseProducts(values[productSheet] || []);
-  const coreProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName));
+  const offlineProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName));
+  const coreProductRows = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
+  const consignmentProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName) && isConsignmentChannel(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
@@ -1615,7 +1638,9 @@ export async function buildDashboardDataFromGoogleSheet() {
   const companyTopProducts = aggregateProducts(coreProductRows, undefined, 20);
 
   const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => isOfflineSalesStore(r.storeName));
-  const coreWeekSales = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
+  const coreMergedWeekly = mergedWeekly.filter((r) => isCoreOfflineSalesStore(r.storeName));
+  const totalOfflineWeekSales = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
+  const coreWeekSales = coreMergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
   const top10Amount = companyTopProducts.slice(0, 10).reduce((s, p) => s + Number(p.weekAmount || 0), 0);
   const top10Concentration = coreWeekSales ? (top10Amount / coreWeekSales) * 100 : 0;
 
@@ -1624,8 +1649,8 @@ export async function buildDashboardDataFromGoogleSheet() {
     .filter((p) => !p.prevAmount || Number(p.amountChangeRate || 0) >= 50)
     .slice(0, 5);
 
-  const good = [...mergedWeekly].filter((r) => r.weekSales > 0).sort((a, b) => b.weekChangeRate - a.weekChangeRate).slice(0, 3);
-  const bad = [...mergedWeekly].filter((r) => r.weekSales > 0).sort((a, b) => a.weekChangeRate - b.weekChangeRate).slice(0, 3);
+  const good = [...coreMergedWeekly].filter((r) => r.weekSales > 0).sort((a, b) => b.weekChangeRate - a.weekChangeRate).slice(0, 3);
+  const bad = [...coreMergedWeekly].filter((r) => r.weekSales > 0).sort((a, b) => a.weekChangeRate - b.weekChangeRate).slice(0, 3);
   const weeklyTotal = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
   const weeklyPrev = mergedWeekly.reduce((s, r) => s + Number(r.compareWeekSales || 0), 0);
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
@@ -1652,7 +1677,7 @@ export async function buildDashboardDataFromGoogleSheet() {
       top10Concentration,
       newTop10Entrants: entrants,
       aiBriefing: [
-        `핵심 매장 기준 주간 매출은 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
+        `위탁 포함 오프라인 주간 매출은 ${Math.round(totalOfflineWeekSales).toLocaleString("ko-KR")}원이며 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
         `호조 매장은 ${good.map((r) => r.storeName).join(", ") || "데이터 없음"} 중심으로 확인됩니다.`,
         `부진 매장은 ${bad.map((r) => r.storeName).join(", ") || "데이터 없음"}이며 상품 구성과 재고 보강 점검이 필요합니다.`,
         `전사 TOP 상품은 ${topProduct?.productName || "데이터 없음"}이며 TOP10 상품 매출 비중은 ${top10Concentration.toFixed(1)}%입니다.`,

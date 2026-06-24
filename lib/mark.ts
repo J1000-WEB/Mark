@@ -6,7 +6,6 @@ export function isOnlineChannel(storeName: string) {
   const s = String(storeName || "").trim().toLowerCase();
   return (
     s.startsWith("온라인") ||
-    s.includes("무신사") ||
     s.includes("29cm") ||
     s.includes("ssf") ||
     s.includes("네이버") ||
@@ -18,16 +17,33 @@ export function isOnlineChannel(storeName: string) {
   );
 }
 
+export function isConsignmentChannel(storeName: string) {
+  const raw = String(storeName || "").trim();
+  const s = raw.toLowerCase();
+  return (
+    raw.startsWith("오프라인_") ||
+    s.includes("위탁") ||
+    s.includes("면세") ||
+    s.includes("한컬렉션") ||
+    s.includes("han collection") ||
+    s.includes("hancollection") ||
+    s.includes("무신사")
+  );
+}
+
 export function isShopInShop(storeName: string) {
-  // MARK 4.90: 매출대시보드는 오프라인 운영 기준입니다.
-  // 온라인 채널은 매출/매장 순위에서 제외하고, 재고CTRL의 온라인 이관 판단에서만 사용합니다.
-  return isOnlineChannel(storeName);
+  // MARK 4.90.1: 위탁샵은 총매출에는 포함하되, 핵심매장 호조/부진/상품 TOP에서는 제외합니다.
+  return isConsignmentChannel(storeName);
 }
 
 export function isOfflineDashboardStore(storeName: string) {
   const s = String(storeName || "").trim();
   if (!s || s === "합계" || s === "채널명") return false;
   return !isOnlineChannel(s);
+}
+
+export function isCoreOfflineStore(storeName: string) {
+  return isOfflineDashboardStore(storeName) && !isConsignmentChannel(storeName);
 }
 
 export function won(value: number) {
@@ -88,8 +104,8 @@ export function mergeRows(currentRows: any[] = [], compareRows: any[] = [], year
 
 export function splitStores(rows: any[]) {
   return {
-    core: rows.filter((r) => isOfflineDashboardStore(r.storeName)),
-    shop: rows.filter((r) => !isOfflineDashboardStore(r.storeName)),
+    core: rows.filter((r) => isCoreOfflineStore(r.storeName)),
+    shop: rows.filter((r) => isOfflineDashboardStore(r.storeName) && isConsignmentChannel(r.storeName)),
   };
 }
 

@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById } from "./googleSheets";
+import { getDbSheetId, getHistorySheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -1617,24 +1617,48 @@ function buildPerformanceSummary(rows: any[]) {
 async function loadPromotionPerformance() {
   try {
     const dbId = getDbSheetId();
-    const titles = await getSpreadsheetTitlesById(dbId);
-    const performanceSheetName = pickNormalizedTitle(titles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
-    const dailySheetName = pickNormalizedTitle(titles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
+    const historyId = getHistorySheetId();
 
-    if (!performanceSheetName || !titles.includes(performanceSheetName)) return buildPerformanceSummary([]);
+    // Promotion_Performance는 MARK_DB에서 읽고,
+    // Daily_Sales_History는 MARK_HISTORY에서 읽습니다.
+    // 기존에는 Daily_Sales_History를 MARK_DB에서 찾아서 성과가 0으로 표시될 수 있었습니다.
+    const dbTitles = await getSpreadsheetTitlesById(dbId);
+    const historyTitles = await getSpreadsheetTitlesById(historyId).catch(() => []);
 
-    const sheetNames = [performanceSheetName];
-    if (dailySheetName && titles.includes(dailySheetName)) sheetNames.push(dailySheetName);
+    const performanceSheetName = pickNormalizedTitle(dbTitles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
+    if (!performanceSheetName || !dbTitles.includes(performanceSheetName)) return buildPerformanceSummary([]);
 
-    const values = await getManySheetValuesById(dbId, sheetNames, "A:AZ");
-    const performanceRows = parsePerformanceRows(values[performanceSheetName] || []);
-    const dailyRows = dailySheetName && titles.includes(dailySheetName)
-      ? parseDailyHistoryRows(values[dailySheetName] || [])
-      : [];
+    const performanceValues = await getSheetValuesById(dbId, performanceSheetName, "A:AZ");
+    const performanceRows = parsePerformanceRows(performanceValues || []);
 
+    let dailyValues: any[][] = [];
+    let dailySource = "NOT_FOUND";
+    const dailySheetName = pickNormalizedTitle(historyTitles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
+
+    if (dailySheetName && historyTitles.includes(dailySheetName)) {
+      dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);
+      dailySource = "MARK_HISTORY";
+    } else if (dbTitles.includes("Daily_Sales_History")) {
+      dailyValues = await getSheetValuesById(dbId, "Daily_Sales_History", "A:AZ").catch(() => []);
+      dailySource = "MARK_DB_FALLBACK";
+    }
+
+    const dailyRows = parseDailyHistoryRows(dailyValues || []);
     const rows = applyDailyPerformance(performanceRows, dailyRows);
-    return buildPerformanceSummary(rows);
-  } catch {
+    const summary = buildPerformanceSummary(rows);
+
+    return {
+      ...summary,
+      debug: {
+        performanceSheetName,
+        dailySheetName: dailySheetName || "",
+        performanceRows: performanceRows.length,
+        dailyRows: dailyRows.length,
+        dailySource,
+      },
+    };
+  } catch (error: any) {
+    console.error("loadPromotionPerformance failed:", error);
     return buildPerformanceSummary([]);
   }
 }

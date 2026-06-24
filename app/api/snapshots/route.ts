@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendValues, ensureSheetExists, getSheetValues, uploadTextFileToDrive, getHistorySheetId, ensureSheetExistsById, appendValuesById, getSheetValuesById } from "@/lib/googleSheets";
+import { appendValues, updateValues, ensureSheetExists, getSheetValues, uploadTextFileToDrive, getHistorySheetId, ensureSheetExistsById, appendValuesById, getSheetValuesById } from "@/lib/googleSheets";
 import { buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBuilder";
 import { readDailySalesFromMarkDb, saveDailySalesToHistory } from "@/lib/dailySales";
 
@@ -206,6 +206,14 @@ async function saveToHistory(data: any, summary: string, type: string) {
   await ensureSheetExistsById(spreadsheetId, HISTORY_SHEETS.store, HISTORY_HEADERS.store);
   await ensureSheetExistsById(spreadsheetId, HISTORY_SHEETS.rtPerformance, HISTORY_HEADERS.rtPerformance);
 
+  const existingLog = await getSheetValuesById(spreadsheetId, HISTORY_SHEETS.log, "A:E").catch(() => []);
+  const duplicateLog = (existingLog || []).find((row: any[], idx: number) =>
+    idx > 0 && String(row?.[2] || "") === type && String(row?.[4] || "").startsWith(summary.split(" / ")[0])
+  );
+  if (duplicateLog) {
+    return { snapshotId: String(duplicateLog?.[0] || ""), snapshotDate, productRows: 0, storeRows: 0, skipped: true };
+  }
+
   const { productRows, storeRows } = buildHistoryRows(data, snapshotId, snapshotDate);
 
   if (productRows.length) {
@@ -234,6 +242,19 @@ async function loadHistoryLog() {
   return (rows || []).slice(1).reverse().slice(0, 20);
 }
 
+
+function makeSnapshotKey(data: any, type: string) {
+  const label = String(data.weekly?.periodLabel || data.monthly?.periodLabel || "").trim();
+  if (type.includes("weekly") || type === "manual") {
+    const m = label.match(/차주\(([^)]+)\)|분석기간:\s*([^/]+)/);
+    return `WEEKLY-${(m?.[1] || m?.[2] || todayKSTDate()).replace(/\s/g, "")}`;
+  }
+  if (type.includes("monthly")) {
+    const m = label.match(/분석월:\s*([^/]+)/);
+    return `MONTHLY-${(m?.[1] || todayKSTDate().slice(0, 7)).replace(/\s/g, "")}`;
+  }
+  return `${type}-${todayKSTDate()}`;
+}
 
 function makeSnapshot(data: any, type: string) {
   const weeklyRows = data.weekly?.current || [];
@@ -268,8 +289,9 @@ function makeSnapshot(data: any, type: string) {
   };
 
   const dataJson = safeJson(snapshot);
-  const summary = `${type} snapshot / 주간매출 ${Math.round(weeklySales).toLocaleString("ko-KR")}원 / RT ${snapshot.inventory.rtSuggestions.length}건 / 프로모션 ${snapshot.inventory.promotionSuggestions.length}건 / JSON ${dataJson.length.toLocaleString("ko-KR")}자`;
-  return { snapshot, summary, dataJson };
+  const snapshotKey = makeSnapshotKey(data, type);
+  const summary = `${snapshotKey} / ${type} snapshot / 주간매출 ${Math.round(weeklySales).toLocaleString("ko-KR")}원 / RT ${snapshot.inventory.rtSuggestions.length}건 / 온라인이관 ${snapshot.inventory.allocationSuggestions.length}건 / 프로모션 ${snapshot.inventory.promotionSuggestions.length}건 / JSON ${dataJson.length.toLocaleString("ko-KR")}자`;
+  return { snapshot, summary, dataJson, snapshotKey };
 }
 
 export async function GET() {
@@ -303,7 +325,7 @@ export async function POST(req: Request) {
       data = getFallbackData();
     }
 
-    const { snapshot, summary, dataJson } = makeSnapshot(data, type);
+    const { snapshot, summary, dataJson, snapshotKey } = makeSnapshot(data, type);
     await ensureSheetExists(SHEET, HEADER);
 
     let driveUrl = "";
@@ -317,7 +339,16 @@ export async function POST(req: Request) {
     }
 
     const createdAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-    await appendValues(`'${SHEET}'!A:E`, [[createdAt, type, summary, dataJson, driveUrl]]);
+    const existingMasterRows = await getSheetValues(SHEET, "A:E").catch(() => []);
+    const existingMasterIndex = (existingMasterRows || []).findIndex((row: any[], idx: number) =>
+      idx > 0 && String(row?.[1] || "") === type && String(row?.[2] || "").startsWith(snapshotKey)
+    );
+
+    if (existingMasterIndex > 0) {
+      await updateValues(`'${SHEET}'!A${existingMasterIndex + 1}:E${existingMasterIndex + 1}`, [[createdAt, type, summary, dataJson, driveUrl]]);
+    } else {
+      await appendValues(`'${SHEET}'!A:E`, [[createdAt, type, summary, dataJson, driveUrl]]);
+    }
 
     let history: any = null;
     try {

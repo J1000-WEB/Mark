@@ -770,7 +770,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
             </p>
             {selected.rows?.[0]?.beforePeriodLabel || selected.rows?.[0]?.duringPeriodLabel ? (
               <p className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white">
-                비교기간 · 실행 전 {selected.rows?.[0]?.beforePeriodLabel || "-"} / 실행 후 {selected.rows?.[0]?.duringPeriodLabel || "-"}
+                비교기간 · {categoryFilter === "RT" ? "RT_Result H열 지시일 기준" : "핵심 오프라인 매장 기준"} · 실행 전 {selected.rows?.[0]?.beforePeriodLabel || "-"} / 실행 후 {selected.rows?.[0]?.duringPeriodLabel || "-"}
               </p>
             ) : null}
           </div>
@@ -860,7 +860,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                 <div>
                   <p className="text-xs font-bold text-slate-500">{item.category} · {item.styleCode} · {item.fromStore || item.channel || "-"} → {item.toStore || "-"}</p>
                   <p className="mt-1 font-black">{item.productName}</p>
-                  {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">비교기간: {item.compareBasis}</p> : null}
+                  {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">{item.compareBasis}</p> : null}
                   {item.category === "RT" && item.rtQty ? <p className="mt-1 text-xs font-black text-emerald-600">출고 {item.fromStore || "-"} → 입고 {item.toStore || "-"} · RT수량 {fmtNum(item.rtQty)}개 · 소진율 {Number(item.depletionRate || 0).toFixed(1)}% · 등급 {item.rtGrade || "-"}</p> : null}
                   {item.note ? <p className="mt-1 text-xs font-semibold text-slate-500">{item.note}</p> : null}
                 </div>

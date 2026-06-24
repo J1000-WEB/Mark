@@ -344,7 +344,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       : mergeRows(pageData.current || [], pageData.compare || []);
 
   const { core, shop } = splitStores(merged);
-  const coreTotals = totals(core);
+  // 총매출은 위탁샵까지 포함하고, 호조/부진/순위/TOP상품은 핵심 오프라인 매장만 봅니다.
+  const salesBaseRows = [...core, ...shop];
+  const coreTotals = totals(salesBaseRows);
   const shopRows = shopSummary(shop);
 
   const field = active === "daily" ? "daySales" : active === "monthly" ? "monthSales" : "weekSales";
@@ -471,7 +473,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               </Card>
               <Card title="월간 AI 리뷰" tone="purple">
                 <ul className="space-y-3 text-sm leading-6 text-slate-700">
-                  <li>• 위탁/샵인샵 제외 핵심 매장의 월 누적 매출은 {won(coreTotals.monthSales)}이며 월 목표 대비 {pct(coreTotals.monthRate)}입니다.</li>
+                  <li>• 위탁 포함 오프라인 매출의 월 누적 매출은 {won(coreTotals.monthSales)}이며 월 목표 대비 {pct(coreTotals.monthRate)}입니다.</li>
                   <li>• 전월 대비 {pct(coreTotals.monthChange)}, 전년동월 대비 {pct(coreTotals.yearMonthChange)} 흐름입니다.</li>
                   <li>• 월간 상품 판매 데이터가 연결되면 상품별 성장/부진 요인을 함께 분석합니다.</li>
                 </ul>

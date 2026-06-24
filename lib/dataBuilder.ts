@@ -1585,21 +1585,20 @@ function performancePeriods(row: any) {
     return {
       beforeDates: beforeWeek.dates,
       duringDates: duringWeek.dates,
-      basis: `RT 비교: H열 지시일 기준 / 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
+      basis: `RT 비교: RT_Result H열 지시일 기준 / 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
       beforeLabel: `${beforeWeek.start}~${beforeWeek.end}`,
       duringLabel: `${duringWeek.start}~${duringWeek.end}`,
     };
   }
 
-  // MARK 4.91.2:
-  // 프로모션 종료일이 비어있으면 무조건 시작일 포함 3일만 계산합니다.
-  // 예: 2026-06-19 시작 → 실행 후 2026-06-19~2026-06-21
-  // 실행 전은 동일 기간을 정확히 -7일 이동합니다.
+  // MARK 4.91.5:
+  // 프로모션은 종료일이 있어도 성과분석 KPI는 시작일 포함 3일만 봅니다.
+  // 장기 행사 종료일까지 잡으면 실행 전/후 기간이 겹치므로 성과판단용으로 부적합합니다.
   const duringStart = startDate;
-  const duringEnd = row.endDate || dateAddDays(startDate, 2);
+  const duringEnd = dateAddDays(startDate, 2);
 
-  const beforeStart = dateAddDays(duringStart, -7);
-  const beforeEnd = dateAddDays(duringEnd, -7);
+  const beforeStart = dateAddDays(startDate, -7);
+  const beforeEnd = dateAddDays(startDate, -5);
 
   return {
     beforeDates: dateRange(beforeStart, beforeEnd),
@@ -1619,19 +1618,24 @@ function parseDailyHistoryRows(rows: any[][]) {
   const storeCol = findCol(header, ["점포", "점포명", "채널명", "매장", "받는점포", "storeName"], 1);
   const styleCol = findCol(header, ["스타일", "품번", "styleCode"], 2);
   const productCol = findCol(header, ["스타일명", "상품명", "productName"], 3);
-  const qtyCol = findCol(header, ["판매수량", "수량", "판매", "weekNet", "dayNet", "qty"], 4);
-  const amountCol = findCol(header, ["판매금액", "매출", "금액", "daySales", "amount"], 5);
+  const qtyCol = findCol(header, ["판매수량", "수량", "판매", "weekNet", "dayNet", "qty"], 7);
+  const amountCol = findCol(header, ["판매금액", "매출", "금액", "daySales", "amount"], 8);
 
   return rows.slice(startRow)
-    .map((row) => ({
-      date: normalizeDateKey(row[dateCol]),
-      storeName: displayStoreName(text(row[storeCol])),
-      storeKey: normalizeStoreKey(text(row[storeCol])),
-      styleCode: text(row[styleCol]),
-      productName: text(row[productCol]),
-      qty: num(row[qtyCol]),
-      amount: num(row[amountCol]),
-    }))
+    .map((row) => {
+      const qty = num(row[qtyCol]);
+      const amount = num(row[amountCol]);
+      return {
+        date: normalizeDateKey(row[dateCol]),
+        storeName: displayStoreName(text(row[storeCol])),
+        storeKey: normalizeStoreKey(text(row[storeCol])),
+        styleCode: text(row[styleCol]),
+        productName: text(row[productCol]),
+        qty,
+        amount,
+        unitPrice: qty ? amount / qty : 0,
+      };
+    })
     .filter((r) => r.date && r.styleCode);
 }
 
@@ -1791,6 +1795,15 @@ async function loadPromotionPerformance() {
       dailySource = "MARK_DB_FALLBACK";
     }
 
+    const dailyRows = parseDailyHistoryRows(dailyValues || []);
+
+    // Daily_Sales_History 기준으로 RT_Result 품번의 상품명 보강
+    for (const row of dailyRows as any[]) {
+      const style = text(row.styleCode);
+      const productName = text(row.productName);
+      if (style && productName && !productNameMap.has(style)) productNameMap.set(style, productName);
+    }
+
     const rtSheetName = mainTitles.includes("RT_Result") ? "RT_Result" : "";
     const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
     const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
@@ -1799,7 +1812,10 @@ async function loadPromotionPerformance() {
     const rtRows = parseRtResultRows(rtValues || [], codeNameMap, productNameMap);
 
     const performanceRows = mergeRtRows(basePerformanceRows, rtRows);
-    const dailyRows = parseDailyHistoryRows(dailyValues || []);
+    for (const row of performanceRows as any[]) {
+      if (!row.productName && productNameMap.has(row.styleCode)) row.productName = productNameMap.get(row.styleCode) || "";
+    }
+
     const rows = applyDailyPerformance(performanceRows, dailyRows);
     const summary = buildPerformanceSummary(rows);
 

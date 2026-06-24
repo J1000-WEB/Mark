@@ -1301,7 +1301,7 @@ function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
 
 
 
-function buildChannelCodeNameMap(rows: any[][]) {
+function buildChannelCodeNameMap(rows: any[][]): Map<string, string> {
   const map = new Map<string, string>();
   for (const row of rows.slice(1)) {
     // 객_전주 기준: C=채널코드, D=점포명인 경우가 많습니다.
@@ -1772,7 +1772,12 @@ async function loadPromotionPerformance() {
       : [];
 
     const basePerformanceRows = parsePerformanceRows(performanceValues || []);
-    const productNameMap = new Map(basePerformanceRows.map((row: any) => [row.styleCode, row.productName]).filter(([style]) => Boolean(style)) as any);
+    const productNameMap = new Map<string, string>();
+    for (const row of basePerformanceRows as any[]) {
+      const style = text(row.styleCode);
+      const productName = text(row.productName);
+      if (style && productName) productNameMap.set(style, productName);
+    }
 
     let dailyValues: any[][] = [];
     let dailySource = "NOT_FOUND";

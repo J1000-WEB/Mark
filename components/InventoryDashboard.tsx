@@ -179,7 +179,7 @@ function AllocationCard({ it, index }: { it: any; index: number }) {
           <p className="mt-1 text-lg font-black">{it.productName}</p>
         </div>
         <div className="rounded-2xl bg-slate-900 px-4 py-3 text-right text-white">
-          <p className="text-xs text-slate-300">물류 추가 할당</p>
+          <p className="text-xs text-slate-300">온라인 이관 제안</p>
           <p className="text-xl font-black">{fmtNum(it.suggestQty)}장</p>
         </div>
       </div>
@@ -193,7 +193,7 @@ function AllocationCard({ it, index }: { it: any; index: number }) {
 
       <ReasonBox title="추천 근거">
         <p>{it.reason}</p>
-        <p className="mt-1">판매속도 대비 점포 재고가 낮아 추가 할당 검토가 필요합니다.</p>
+        <p className="mt-1">온라인 재고를 오프라인 판매 가능 채널로 이관 검토합니다.</p>
       </ReasonBox>
     </div>
   );
@@ -944,7 +944,7 @@ export default function InventoryDashboard() {
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">재고 컨트롤</h1>
-            <p className="mt-1 text-sm text-slate-500">RT 제안, 프로모션 제안, 재고 위험 점포 분석</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
+            <p className="mt-1 text-sm text-slate-500">RT 제안, 온라인 이관 제안, 프로모션 제안</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
           </div>
           <NavTabs active="inventory" />
         </header>
@@ -966,7 +966,7 @@ export default function InventoryDashboard() {
 
         <section className="grid gap-4 md:grid-cols-4">
           <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="blue" />
-          <Kpi title="물류 추가 할당" value={`${data.allocationSuggestions?.length || 0}건`} tone="green" />
+          <Kpi title="온라인 이관 제안" value={`${data.onlineTransferSuggestions?.length || data.allocationSuggestions?.length || 0}건`} tone="green" />
           <Kpi title="품절 위험" value={`${data.stockoutRisk?.length || 0}품번`} tone="orange" />
           <Kpi title="과재고 위험" value={`${data.overstockRisk?.length || 0}품번`} tone="purple" />
         </section>
@@ -986,8 +986,8 @@ export default function InventoryDashboard() {
 
         <section className="grid gap-6">
           <AllocationLookupSection data={data} />
-          <Card title="물류 추가 할당 제안 TOP5">
-            <ItemList items={data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
+          <Card title="온라인 이관 제안 TOP5">
+            <ItemList items={data.onlineTransferSuggestions || data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
           </Card>
         </section>
 
@@ -1007,7 +1007,7 @@ export default function InventoryDashboard() {
           <Card title="운영 프로세스 제안" tone="yellow">
             <ul className="space-y-3 text-sm leading-6 text-slate-700">
               <li>• 1차: 점포간 RT로 부족 매장을 보완합니다.</li>
-              <li>• 2차: RT로 해결이 어려운 품번은 물류 추가 할당을 요청합니다.</li>
+              <li>• 2차: RT로 해결이 어려운 품번은 온라인 이관 제안을 요청합니다.</li>
               <li>• 3차: 위탁채널은 전사 TOP 상품과 가용재고를 함께 보고 투입 후보를 정합니다.</li>
               <li>• 4차: 장기 미소진 상품은 프로모션/가격조정을 검토합니다.</li>
             </ul>

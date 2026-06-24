@@ -1354,6 +1354,7 @@ function parsePerformanceRows(rows: any[][]) {
         marginRate: num(row[marginRateCol]),
         channel: text(row[channelCol]),
         note: text(row[noteCol]),
+        rtQty: category === "RT" ? extractRtQty({ note: text(row[noteCol]) }) : 0,
         startDate,
         endDate: normalizeDateKey(row[endDateCol]),
         fromStore: text(row[fromStoreCol]),
@@ -1411,21 +1412,58 @@ function dateRange(startKey: string, endKey: string) {
   return out;
 }
 
+function weekWindow(dateKey: string, offsetWeeks = 0) {
+  const d = parseDate(dateKey);
+  if (!d) return { start: "", end: "", dates: [] as string[] };
+
+  // 시작일이 월요일 지시일이라는 운영 기준을 우선합니다.
+  // 월요일이 아니더라도 해당 날짜가 포함된 주의 월~일로 보정합니다.
+  const day = d.getDay(); // 0 Sun, 1 Mon
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday + offsetWeeks * 7);
+
+  const start = d.toISOString().slice(0, 10);
+  const endDate = new Date(d.getTime());
+  endDate.setDate(endDate.getDate() + 6);
+  const end = endDate.toISOString().slice(0, 10);
+  return { start, end, dates: dateRange(start, end) };
+}
+
+function extractRtQty(row: any) {
+  const direct = num(row.rtQty || row.suggestQty || row.transferQty);
+  if (direct) return direct;
+  const joined = `${row.note || ""} ${row.saleType || ""} ${row.detail || ""}`;
+  const m = joined.match(/RT\s*수량\s*([0-9,]+)/i) || joined.match(/([0-9,]+)\s*개/);
+  return m ? num(m[1]) : 0;
+}
+
+function rtGrade(rateValue: number) {
+  if (rateValue >= 80) return "S";
+  if (rateValue >= 60) return "A";
+  if (rateValue >= 30) return "B";
+  return "C";
+}
+
 function performancePeriods(row: any) {
   const startDate = row.startDate;
   if (!startDate) return { beforeDates: [] as string[], duringDates: [] as string[], basis: "" };
 
   const isRt = row.category === "RT";
 
+  if (isRt) {
+    const beforeWeek = weekWindow(startDate, -1);
+    const duringWeek = weekWindow(startDate, 0);
+    return {
+      beforeDates: beforeWeek.dates,
+      duringDates: duringWeek.dates,
+      basis: `RT 비교: 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
+    };
+  }
+
   // PROMOTION:
-  // 금요일 시작 프로모션은 월요일에 전주 금토일 성과를 보게 되므로,
-  // 시작일~시작일+2일(금토일)을 행사중 기간으로 보고, 그 전주 동일 요일을 행사전 기간으로 비교합니다.
-  //
-  // RT:
-  // 월요일 지시 → 목요일 입고 → 금토일 판매를 보는 운영 루틴이므로,
-  // 지시일+4일~지시일+6일을 RT 후 기간으로 보고, 그 전주 동일 요일을 RT 전 기간으로 비교합니다.
-  const duringStart = isRt ? dateAddDays(startDate, 4) : startDate;
-  const duringEnd = row.endDate || (isRt ? dateAddDays(startDate, 6) : dateAddDays(startDate, 2));
+  // 시작일~종료일을 실행 후 기간으로 보고, 그 전주 동일 요일을 실행 전 기간으로 비교합니다.
+  const duringStart = startDate;
+  const duringEnd = row.endDate || dateAddDays(startDate, 2);
 
   const beforeStart = dateAddDays(duringStart, -7);
   const beforeEnd = dateAddDays(duringEnd, -7);
@@ -1433,9 +1471,7 @@ function performancePeriods(row: any) {
   return {
     beforeDates: dateRange(beforeStart, beforeEnd),
     duringDates: dateRange(duringStart, duringEnd),
-    basis: isRt
-      ? `RT 지시일 기준: ${duringStart}~${duringEnd} vs ${beforeStart}~${beforeEnd}`
-      : `프로모션 시작일 기준: ${duringStart}~${duringEnd} vs ${beforeStart}~${beforeEnd}`,
+    basis: `프로모션 비교: 실행 전 ${beforeStart}~${beforeEnd} ↔ 실행 후 ${duringStart}~${duringEnd}`,
   };
 }
 
@@ -1498,8 +1534,14 @@ function applyDailyPerformance(rows: any[], dailyRows: any[]) {
     const addedQty = duringQty - beforeQty;
     const addedAmount = duringAmount - beforeAmount;
 
+    const rtQty = row.category === "RT" ? extractRtQty(row) : 0;
+    const depletionRate = row.category === "RT" && rtQty ? (duringQty / rtQty) * 100 : 0;
+
     return {
       ...row,
+      rtQty,
+      depletionRate,
+      rtGrade: row.category === "RT" && rtQty ? rtGrade(depletionRate) : "",
       beforeQty,
       duringQty,
       addedQty,
@@ -1544,6 +1586,8 @@ function buildPerformanceSummary(rows: any[]) {
         duringAmount,
         addedAmount,
         addedQty,
+        rtQty: items.reduce((s: number, r: any) => s + Number(r.rtQty || 0), 0),
+        avgDepletionRate: category === "RT" && items.length ? items.reduce((s: number, r: any) => s + Number(r.depletionRate || 0), 0) / items.length : 0,
         successRate: items.length ? (success / items.length) * 100 : 0,
         topItems: [...items].sort((a: any, b: any) => Number(b.addedAmount || 0) - Number(a.addedAmount || 0)).slice(0, 5),
       };

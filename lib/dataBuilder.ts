@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getHistorySheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -1300,6 +1300,122 @@ function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
 }
 
 
+
+function buildChannelCodeNameMap(rows: any[][]) {
+  const map = new Map<string, string>();
+  for (const row of rows.slice(1)) {
+    // 객_전주 기준: C=채널코드, D=점포명인 경우가 많습니다.
+    const codeCandidates = [text(row[2]), text(row[0]), text(row[1])].filter(Boolean);
+    const nameCandidates = [text(row[3]), text(row[4]), text(row[1])].filter(Boolean);
+    const name = nameCandidates.find((x) => x && !/^\d+$/.test(x)) || nameCandidates[0] || "";
+    if (!name) continue;
+    for (const code of codeCandidates) {
+      if (code) map.set(code, displayStoreName(name));
+    }
+    map.set(normalizeStoreKey(name), displayStoreName(name));
+  }
+  return map;
+}
+
+function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(), productNameMap = new Map<string, string>()) {
+  const headerRow = findHeaderRow(rows, ["스타일", "수량"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
+  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
+
+  const fromCol = findCol(header, ["보낼채널코드", "보내채널", "출고점", "보낸점포"], 0);
+  const toCol = findCol(header, ["받을채널코드", "받는채널", "입고점", "받는점포"], 1);
+  const styleCol = findCol(header, ["스타일", "품번"], 2);
+  const colorCol = findCol(header, ["칼라", "컬러"], 3);
+  const sizeCol = findCol(header, ["사이즈"], 4);
+  const qtyCol = findCol(header, ["지시수량", "수량"], 5);
+  const dateCol = findCol(header, ["승인날짜", "제안날짜", "지시일", "승인일"], 6);
+
+  const grouped = new Map<string, any>();
+
+  for (const row of rows.slice(startRow)) {
+    const styleCode = text(row[styleCol]);
+    const startDate = normalizeDateKey(row[dateCol]);
+    const qty = num(row[qtyCol]);
+    if (!styleCode || !startDate || !qty) continue;
+
+    const rawFrom = text(row[fromCol]);
+    const rawTo = text(row[toCol]);
+    const fromStore = codeNameMap.get(rawFrom) || displayStoreName(rawFrom);
+    const toStore = codeNameMap.get(rawTo) || displayStoreName(rawTo);
+    const color = text(row[colorCol]);
+    const size = text(row[sizeCol]);
+    const key = `${startDate}__${rawFrom}__${rawTo}__${styleCode}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        category: "RT",
+        styleCode,
+        productName: productNameMap.get(styleCode) || "",
+        color: "",
+        colorName: "",
+        tagPrice: 0,
+        salePrice: 0,
+        saleType: "RT",
+        discountRate: 0,
+        marginRate: 0,
+        channel: "",
+        note: "",
+        rtQty: 0,
+        startDate,
+        endDate: "",
+        fromStore,
+        toStore,
+        beforeQty: 0,
+        duringQty: 0,
+        addedQty: 0,
+        beforeAmount: 0,
+        duringAmount: 0,
+        addedAmount: 0,
+        colorSizeSummary: [] as string[],
+        source: "RT_Result",
+      });
+    }
+
+    const item = grouped.get(key);
+    item.rtQty += qty;
+    if (color || size) item.colorSizeSummary.push(`${color || "-"} / ${size || "-"} ${qty.toLocaleString("ko-KR")}개`);
+  }
+
+  return Array.from(grouped.values()).map((item: any) => ({
+    ...item,
+    note: item.colorSizeSummary.length ? `RT_Result 기준: ${item.colorSizeSummary.slice(0, 8).join(", ")}${item.colorSizeSummary.length > 8 ? " ..." : ""}` : "RT_Result 기준",
+  }));
+}
+
+function mergeRtRows(performanceRows: any[], rtRows: any[]) {
+  const keyOf = (row: any) => `${row.startDate}__${normalizeStoreKey(row.fromStore)}__${normalizeStoreKey(row.toStore)}__${row.styleCode}`;
+  const map = new Map<string, any>();
+
+  for (const row of performanceRows) {
+    map.set(keyOf(row), row);
+  }
+
+  for (const rt of rtRows) {
+    const key = keyOf(rt);
+    if (map.has(key)) {
+      const existing = map.get(key);
+      map.set(key, {
+        ...rt,
+        ...existing,
+        rtQty: Number(existing.rtQty || 0) || Number(rt.rtQty || 0),
+        fromStore: existing.fromStore || rt.fromStore,
+        toStore: existing.toStore || rt.toStore,
+        note: existing.note || rt.note,
+        source: `${existing.source || "Promotion_Performance"}+RT_Result`,
+      });
+    } else {
+      map.set(key, rt);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 function parsePerformanceRows(rows: any[][]) {
   const headerRow = findHeaderRow(rows, ["구분", "스타일", "시작일"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : [];
@@ -1396,7 +1512,7 @@ function dateAddDays(dateKey: string, days: number) {
   const d = parseDate(dateKey);
   if (!d) return "";
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function dateRange(startKey: string, endKey: string) {
@@ -1416,16 +1532,15 @@ function weekWindow(dateKey: string, offsetWeeks = 0) {
   const d = parseDate(dateKey);
   if (!d) return { start: "", end: "", dates: [] as string[] };
 
-  // 시작일이 월요일 지시일이라는 운영 기준을 우선합니다.
-  // 월요일이 아니더라도 해당 날짜가 포함된 주의 월~일로 보정합니다.
+  // 시작일이 포함된 주의 월~일 기준
   const day = d.getDay(); // 0 Sun, 1 Mon
   const diffToMonday = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diffToMonday + offsetWeeks * 7);
 
-  const start = d.toISOString().slice(0, 10);
+  const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const endDate = new Date(d.getTime());
   endDate.setDate(endDate.getDate() + 6);
-  const end = endDate.toISOString().slice(0, 10);
+  const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
   return { start, end, dates: dateRange(start, end) };
 }
 
@@ -1446,7 +1561,15 @@ function rtGrade(rateValue: number) {
 
 function performancePeriods(row: any) {
   const startDate = row.startDate;
-  if (!startDate) return { beforeDates: [] as string[], duringDates: [] as string[], basis: "" };
+  if (!startDate) {
+    return {
+      beforeDates: [] as string[],
+      duringDates: [] as string[],
+      basis: "",
+      beforeLabel: "",
+      duringLabel: "",
+    };
+  }
 
   const isRt = row.category === "RT";
 
@@ -1457,11 +1580,15 @@ function performancePeriods(row: any) {
       beforeDates: beforeWeek.dates,
       duringDates: duringWeek.dates,
       basis: `RT 비교: 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
+      beforeLabel: `${beforeWeek.start}~${beforeWeek.end}`,
+      duringLabel: `${duringWeek.start}~${duringWeek.end}`,
     };
   }
 
-  // PROMOTION:
-  // 시작일~종료일을 실행 후 기간으로 보고, 그 전주 동일 요일을 실행 전 기간으로 비교합니다.
+  // MARK 4.91.2:
+  // 프로모션 종료일이 비어있으면 무조건 시작일 포함 3일만 계산합니다.
+  // 예: 2026-06-19 시작 → 실행 후 2026-06-19~2026-06-21
+  // 실행 전은 동일 기간을 정확히 -7일 이동합니다.
   const duringStart = startDate;
   const duringEnd = row.endDate || dateAddDays(startDate, 2);
 
@@ -1472,6 +1599,8 @@ function performancePeriods(row: any) {
     beforeDates: dateRange(beforeStart, beforeEnd),
     duringDates: dateRange(duringStart, duringEnd),
     basis: `프로모션 비교: 실행 전 ${beforeStart}~${beforeEnd} ↔ 실행 후 ${duringStart}~${duringEnd}`,
+    beforeLabel: `${beforeStart}~${beforeEnd}`,
+    duringLabel: `${duringStart}~${duringEnd}`,
   };
 }
 
@@ -1551,6 +1680,8 @@ function applyDailyPerformance(rows: any[], dailyRows: any[]) {
       changeRate: beforeAmount ? ((duringAmount - beforeAmount) / beforeAmount) * 100 : duringAmount ? 100 : 0,
       result: addedAmount > 0 ? "성공" : addedAmount < 0 ? "부진" : "관찰",
       compareBasis: periods.basis,
+      beforePeriodLabel: periods.beforeLabel || "",
+      duringPeriodLabel: periods.duringLabel || "",
       beforeDates: periods.beforeDates,
       duringDates: periods.duringDates,
       performanceSource: before.amount || during.amount || before.qty || during.qty ? "Daily_Sales_History" : "Manual/Empty",
@@ -1618,18 +1749,20 @@ async function loadPromotionPerformance() {
   try {
     const dbId = getDbSheetId();
     const historyId = getHistorySheetId();
+    const mainId = getSheetId();
 
-    // Promotion_Performance는 MARK_DB에서 읽고,
-    // Daily_Sales_History는 MARK_HISTORY에서 읽습니다.
-    // 기존에는 Daily_Sales_History를 MARK_DB에서 찾아서 성과가 0으로 표시될 수 있었습니다.
+    // Promotion_Performance는 MARK_DB, Daily_Sales_History는 MARK_HISTORY, RT_Result는 메인 스프레드시트에서 읽습니다.
     const dbTitles = await getSpreadsheetTitlesById(dbId);
     const historyTitles = await getSpreadsheetTitlesById(historyId).catch(() => []);
+    const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
 
     const performanceSheetName = pickNormalizedTitle(dbTitles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
-    if (!performanceSheetName || !dbTitles.includes(performanceSheetName)) return buildPerformanceSummary([]);
+    const performanceValues = performanceSheetName && dbTitles.includes(performanceSheetName)
+      ? await getSheetValuesById(dbId, performanceSheetName, "A:AZ")
+      : [];
 
-    const performanceValues = await getSheetValuesById(dbId, performanceSheetName, "A:AZ");
-    const performanceRows = parsePerformanceRows(performanceValues || []);
+    const basePerformanceRows = parsePerformanceRows(performanceValues || []);
+    const productNameMap = new Map(basePerformanceRows.map((row: any) => [row.styleCode, row.productName]).filter(([style]) => Boolean(style)) as any);
 
     let dailyValues: any[][] = [];
     let dailySource = "NOT_FOUND";
@@ -1643,6 +1776,14 @@ async function loadPromotionPerformance() {
       dailySource = "MARK_DB_FALLBACK";
     }
 
+    const rtSheetName = mainTitles.includes("RT_Result") ? "RT_Result" : "";
+    const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
+    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
+    const codeNameMap = buildChannelCodeNameMap(channelValues || []);
+    const rtValues = rtSheetName ? await getSheetValuesById(mainId, rtSheetName, "A:AZ").catch(() => []) : [];
+    const rtRows = parseRtResultRows(rtValues || [], codeNameMap, productNameMap);
+
+    const performanceRows = mergeRtRows(basePerformanceRows, rtRows);
     const dailyRows = parseDailyHistoryRows(dailyValues || []);
     const rows = applyDailyPerformance(performanceRows, dailyRows);
     const summary = buildPerformanceSummary(rows);
@@ -1652,7 +1793,10 @@ async function loadPromotionPerformance() {
       debug: {
         performanceSheetName,
         dailySheetName: dailySheetName || "",
-        performanceRows: performanceRows.length,
+        rtSheetName,
+        performanceRows: basePerformanceRows.length,
+        rtRows: rtRows.length,
+        mergedRows: performanceRows.length,
         dailyRows: dailyRows.length,
         dailySource,
       },

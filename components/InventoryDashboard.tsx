@@ -747,7 +747,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
               <div className="mt-3 space-y-2">
                 {(bucket.topItems || []).slice(0, 3).map((item: any, idx: number) => (
                   <div key={`${bucket.category}-${item.styleCode}-${idx}`} className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {item.toStore || item.channel || "-"}</p>
+                    <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {bucket.category === "RT" ? `${item.fromStore || "-"} → ${item.toStore || "-"}` : (item.toStore || item.channel || "-")}</p>
                     <p className="mt-1 truncate text-sm font-black">{item.productName}</p>
                     <p className={`mt-1 text-xs font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>
                       추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}{bucket.category === "RT" && item.rtQty ? ` · 소진율 ${Number(item.depletionRate || 0).toFixed(1)}%` : ""}
@@ -768,6 +768,11 @@ function PerformanceTrackingSection({ data }: { data: any }) {
             <p className="mt-1 text-xs font-semibold text-slate-300">
               실행 전 실적과 실행 후 실적을 같은 구조로 비교합니다. 수량/금액/비중/증감 기준입니다.
             </p>
+            {selected.rows?.[0]?.beforePeriodLabel || selected.rows?.[0]?.duringPeriodLabel ? (
+              <p className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white">
+                비교기간 · 실행 전 {selected.rows?.[0]?.beforePeriodLabel || "-"} / 실행 후 {selected.rows?.[0]?.duringPeriodLabel || "-"}
+              </p>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
@@ -855,8 +860,8 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                 <div>
                   <p className="text-xs font-bold text-slate-500">{item.category} · {item.styleCode} · {item.fromStore || item.channel || "-"} → {item.toStore || "-"}</p>
                   <p className="mt-1 font-black">{item.productName}</p>
-                  {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">{item.compareBasis}</p> : null}
-                  {item.category === "RT" && item.rtQty ? <p className="mt-1 text-xs font-black text-emerald-600">RT수량 {fmtNum(item.rtQty)}개 · 소진율 {Number(item.depletionRate || 0).toFixed(1)}% · 등급 {item.rtGrade || "-"}</p> : null}
+                  {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">비교기간: {item.compareBasis}</p> : null}
+                  {item.category === "RT" && item.rtQty ? <p className="mt-1 text-xs font-black text-emerald-600">출고 {item.fromStore || "-"} → 입고 {item.toStore || "-"} · RT수량 {fmtNum(item.rtQty)}개 · 소진율 {Number(item.depletionRate || 0).toFixed(1)}% · 등급 {item.rtGrade || "-"}</p> : null}
                   {item.note ? <p className="mt-1 text-xs font-semibold text-slate-500">{item.note}</p> : null}
                 </div>
                 <div className="text-right">

@@ -64,19 +64,15 @@ function inferCategory(largeCategory: string, group: string, content: string) {
 
   // 대분류가 명확하면 대분류를 우선합니다.
   // 휴무/연차가 "프로모션" 행으로 들어가는 문제를 방지하기 위해 스케줄을 먼저 고정합니다.
-  if (large.includes("스케줄") || large.includes("근무") || large.includes("인원")) return "schedule";
+  if (large.includes("스케줄") || large.includes("근무") || large.includes("인원") || large.includes("일정")) return "schedule";
+  if (large.includes("회의") || large.includes("미팅")) return "meeting";
   if (large.includes("프로모션")) return "promotion";
   if (large.includes("vmd")) return "vmd";
-  if (large.includes("마케팅")) return "marketing";
-  if (large.includes("상품") || large.includes("입고")) return "product";
-  if (large.includes("실적") || large.includes("날씨")) return "performance";
 
-  if (/휴무|근무|라운딩|스케줄|교육|미팅|출장|연차/i.test(combined)) return "schedule";
+  if (/휴무|근무|라운딩|스케줄|교육|출장|연차/i.test(combined)) return "schedule";
+  if (/회의|미팅|meeting/i.test(combined)) return "meeting";
   if (/프로모션|할인|쿠폰|사은품|증정|더블쇼|세일|upto|행사|페이백|마일리지|오픈|팝업/i.test(combined)) return "promotion";
   if (/vm|vmd|진열|연출|마네킹|매장구성|윈도우|집중화/i.test(combined)) return "vmd";
-  if (/마케팅|인플루언서|인스타|촬영|피드|홍보|imc|obt/i.test(combined)) return "marketing";
-  if (/실적|목표|달성|신장|기온|날씨|매출/i.test(combined)) return "performance";
-  if (/신상품|리오더|입고|라인업/i.test(combined)) return "product";
   return "general";
 }
 

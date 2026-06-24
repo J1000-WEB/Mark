@@ -65,6 +65,22 @@ function toDateText(value: any) {
   return s || ymdKST();
 }
 
+function isOnlineChannel(channelName: string) {
+  const s = text(channelName).toLowerCase();
+  return (
+    s.startsWith("온라인") ||
+    s.includes("무신사") ||
+    s.includes("29cm") ||
+    s.includes("ssf") ||
+    s.includes("네이버") ||
+    s.includes("지그재그") ||
+    s.includes("w컨셉") ||
+    s.includes("wconcept") ||
+    s.includes("eql") ||
+    s.includes("한섬")
+  );
+}
+
 function isSummaryChannel(channelName: string) {
   const s = text(channelName);
   return !s || s === "합계" || s === "채널" || s.endsWith("팀") || s === "팀합계" || s === "기타";
@@ -168,13 +184,15 @@ export async function readDailySalesFromMarkDb() {
     }
   }
 
-  const totalDailySales = items.reduce((sum, item) => sum + num(item.dailySales), 0);
-  const totalDailyAmount = items.reduce((sum, item) => sum + num(item.dailyAmount), 0);
-  const activeChannels = new Set(items.filter((x) => num(x.dailySales) > 0).map((x) => x.channelName)).size;
-  const activeProducts = new Set(items.filter((x) => num(x.dailySales) > 0).map((x) => x.styleCode)).size;
+  const offlineItems = items.filter((item) => !isOnlineChannel(item.channelName));
+
+  const totalDailySales = offlineItems.reduce((sum, item) => sum + num(item.dailySales), 0);
+  const totalDailyAmount = offlineItems.reduce((sum, item) => sum + num(item.dailyAmount), 0);
+  const activeChannels = new Set(offlineItems.filter((x) => num(x.dailySales) > 0).map((x) => x.channelName)).size;
+  const activeProducts = new Set(offlineItems.filter((x) => num(x.dailySales) > 0).map((x) => x.styleCode)).size;
 
   const topProducts = Array.from(
-    items.reduce((map, item) => {
+    offlineItems.reduce((map, item) => {
       const key = `${item.styleCode}__${item.productName}`;
       if (!map.has(key)) {
         map.set(key, { styleCode: item.styleCode, productName: item.productName, dailySales: 0, dailyAmount: 0, stock: 0 });
@@ -188,7 +206,7 @@ export async function readDailySalesFromMarkDb() {
   ).sort((a: any, b: any) => b.dailySales - a.dailySales).slice(0, 30);
 
   const topChannels = Array.from(
-    items.reduce((map, item) => {
+    offlineItems.reduce((map, item) => {
       const key = item.channelName;
       if (!map.has(key)) map.set(key, { channelName: key, dailySales: 0, dailyAmount: 0, skuCount: new Set() });
       const bucket = map.get(key);
@@ -210,7 +228,8 @@ export async function readDailySalesFromMarkDb() {
     sheetName,
     sourceDate: items[0]?.sourceDate || ymdKST(),
     generatedAt: new Date().toISOString(),
-    itemCount: items.length,
+    itemCount: offlineItems.length,
+    allItemCount: items.length,
     totalDailySales,
     totalDailyAmount,
     activeChannels,
@@ -218,7 +237,8 @@ export async function readDailySalesFromMarkDb() {
     topProducts,
     topChannels,
     stockoutRisk,
-    items,
+    items: offlineItems,
+    allItems: items,
   };
 }
 

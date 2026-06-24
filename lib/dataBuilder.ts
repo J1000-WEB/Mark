@@ -48,6 +48,28 @@ function isExcludedStore(storeName: string) {
   return key.includes("포시즌아울렛") || key.includes("포시즌");
 }
 
+function isOnlineChannel(storeName: string) {
+  const s = String(storeName || "").trim().toLowerCase();
+  return (
+    s.startsWith("온라인") ||
+    s.includes("무신사") ||
+    s.includes("29cm") ||
+    s.includes("ssf") ||
+    s.includes("네이버") ||
+    s.includes("지그재그") ||
+    s.includes("w컨셉") ||
+    s.includes("wconcept") ||
+    s.includes("eql") ||
+    s.includes("한섬")
+  );
+}
+
+function isOfflineSalesStore(storeName: string) {
+  const s = String(storeName || "").trim();
+  if (!s || s === "합계" || s === "채널명") return false;
+  return !isOnlineChannel(s) && !isExcludedStore(s);
+}
+
 function normalizeStoreKey(storeName: string) {
   const raw = String(storeName || "").trim();
   return raw
@@ -588,7 +610,7 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[], com
 
   const map = new Map<string, any>();
 
-  for (const r of productRows.filter((x) => !isShop(x.storeName) && !isExcludedStore(x.storeName))) {
+  for (const r of productRows.filter((x) => isOfflineSalesStore(x.storeName))) {
     const season = r.season || "미지정";
     const key = `${season}__${r.styleCode}`;
     if (!map.has(key)) {
@@ -778,7 +800,7 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const map = new Map<string, any>();
 
-  for (const r of productRows.filter((x) => !isShop(x.storeName) && !isExcludedStore(x.storeName))) {
+  for (const r of productRows.filter((x) => isOfflineSalesStore(x.storeName))) {
     const key = r.styleCode;
     if (!key) continue;
     if (!map.has(key)) {
@@ -875,16 +897,77 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
   });
 }
 
+
+function buildOnlineTransferSuggestions(offlineRows: any[], onlineRows: any[], inventoryRows: any[]) {
+  const invMap = new Map(inventoryRows.map((r: any) => [r.styleCode, r]));
+  const offlineAgg = aggregateProducts(offlineRows, undefined, 9999);
+  const onlineAgg = aggregateProducts(onlineRows, undefined, 9999);
+  const onlineSalesMap = new Map(onlineAgg.map((r: any) => [r.styleCode, r]));
+
+  return offlineAgg
+    .map((item: any) => {
+      const inv: any = invMap.get(item.styleCode) || {};
+      const onlineSales: any = onlineSalesMap.get(item.styleCode) || {};
+      const offlineStock = Number(inv.offlineStock || 0);
+      const onlineStock = Number(inv.onlineStock || 0);
+      const weekNet = Math.max(0, Number(item.weekNet || 0));
+      const prevNet = Math.max(0, Number(item.prevNet || 0));
+      const offlineWeeks = weekNet > 0 ? offlineStock / weekNet : offlineStock > 0 ? 999 : 0;
+      const onlineRatio = offlineStock > 0 ? onlineStock / offlineStock : onlineStock > 0 ? 999 : 0;
+      const salesChangeRate = prevNet > 0 ? rate(weekNet, prevNet) : weekNet > 0 ? 100 : 0;
+      const needQty = Math.max(0, Math.ceil(weekNet * 3 - offlineStock));
+      const suggestQty = Math.max(0, Math.min(onlineStock, needQty || Math.ceil(weekNet * 2)));
+
+      let score = 0;
+      if (offlineWeeks <= 2 && weekNet > 0) score += 40;
+      if (onlineStock >= 50) score += 15;
+      if (onlineStock >= 200) score += 15;
+      if (onlineRatio >= 2) score += 15;
+      if (salesChangeRate >= 20) score += 10;
+      if (suggestQty > 0) score += 10;
+
+      return {
+        ...item,
+        onlineWeekNet: Number(onlineSales.weekNet || 0),
+        onlineWeekAmount: Number(onlineSales.weekAmount || 0),
+        offlineStock,
+        onlineStock,
+        offlineWeeks,
+        onlineRatio,
+        salesChangeRate,
+        suggestQty,
+        transferScore: score,
+        reason: [
+          `오프라인 주간판매 ${Math.round(weekNet).toLocaleString("ko-KR")}개 / 재고주수 ${offlineWeeks >= 999 ? "판매없음" : `${offlineWeeks.toFixed(1)}주`}`,
+          `온라인 가용재고 ${Math.round(onlineStock).toLocaleString("ko-KR")}개 / 오프라인 가용재고 ${Math.round(offlineStock).toLocaleString("ko-KR")}개`,
+          `온라인 재고 비율 ${onlineRatio >= 999 ? "오프라인 재고 없음" : `${onlineRatio.toFixed(1)}배`}`,
+          `추천 이관수량 ${Math.round(suggestQty).toLocaleString("ko-KR")}개`,
+        ].join("\\n"),
+      };
+    })
+    .filter((item: any) =>
+      Number(item.suggestQty || 0) > 0 &&
+      Number(item.onlineStock || 0) >= 20 &&
+      Number(item.weekNet || 0) > 0 &&
+      (Number(item.offlineWeeks || 0) <= 3 || Number(item.onlineRatio || 0) >= 2)
+    )
+    .sort((a: any, b: any) => Number(b.transferScore || 0) - Number(a.transferScore || 0))
+    .slice(0, 10);
+}
+
+
 function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
-  const coreProducts = productRows.filter((r) => !isShop(r.storeName));
+  const coreProducts = productRows.filter((r) => isOfflineSalesStore(r.storeName));
+  const onlineProducts = productRows.filter((r) => isOnlineChannel(r.storeName));
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const allProducts = aggregateProducts(coreProducts, undefined, 9999);
 
   const stockoutRisk: any[] = [];
   const overstockRisk: any[] = [];
   const allocationSuggestions: any[] = [];
+  const onlineTransferSuggestions = buildOnlineTransferSuggestions(coreProducts, onlineProducts, inventoryRows);
 
   for (const p of allProducts) {
     const inv: any = invMap.get(p.styleCode);
@@ -1142,10 +1225,11 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   });
 
   return {
-    periodLabel: "재고CTRL 기준: 금주/전주 판매/점포재고 + 온오프재고현황 R 가용(온) / S 가용(오프) / T 가용(합계)",
+    periodLabel: "재고CTRL 기준: RT=오프라인 점포 간 이동 / 온라인 이관=온라인 가용재고→오프라인 배분 / 프로모션=오프라인 운영재고",
     stockoutRisk: stockoutRisk.sort((a, b) => a.offlineWeeks - b.offlineWeeks).slice(0, 10),
     overstockRisk: overstockRisk.sort((a, b) => b.offlineWeeks - a.offlineWeeks).slice(0, 10),
     allocationSuggestions: allocationSuggestions.sort((a, b) => b.weekAmount - a.weekAmount).slice(0, 5),
+    onlineTransferSuggestions,
     rtSuggestions: rtSuggestions.sort((a, b) => (b.rtScore || 0) - (a.rtScore || 0) || (a.companyRank || 9999) - (b.companyRank || 9999)).slice(0, 10),
     consignmentRecommendations,
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
@@ -1154,7 +1238,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     productAnalysisList,
     aiBriefing: [
       `RT 이동 우선 검토 대상은 ${rtSuggestions.length}건입니다.`,
-      `물류 추가 할당 후보는 ${allocationSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
+      `온라인 이관 후보는 ${onlineTransferSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
       `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, TOP상품/판매상승 보호 제외 ${promotion.suppressedPromotionCandidates?.length || 0}개, RT 억제 전환 후보 ${promotion.rtSuppressedPromotionCandidates?.length || 0}개입니다.`,
       "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정하며, 출고점 안전재고를 남기고 다중 점포로 분산 보충합니다.",
@@ -1509,7 +1593,7 @@ export async function buildDashboardDataFromGoogleSheet() {
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
-  const filterVisibleStores = (rows: any[]) => rows.filter((r) => !isExcludedStore(r.storeName));
+  const filterVisibleStores = (rows: any[]) => rows.filter((r) => isOfflineSalesStore(r.storeName));
 
   const dailyCur = filterVisibleStores(parseTargetSheet(dailyCurrent, values[dailyCurrent] || []).rows);
   const dailyCmp = filterVisibleStores(parseTargetSheet(dailyCompare, values[dailyCompare] || []).rows);
@@ -1520,7 +1604,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const monthYear = filterVisibleStores(parseTargetSheet(prevYear, values[prevYear] || []).rows);
 
   const productRows = parseProducts(values[productSheet] || []);
-  const coreProductRows = productRows.filter((r) => !isShop(r.storeName) && !isExcludedStore(r.storeName));
+  const coreProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName));
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
@@ -1530,7 +1614,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   for (const store of storeNames) storeTopProducts[store] = aggregateProducts(coreProductRows, store, 20);
   const companyTopProducts = aggregateProducts(coreProductRows, undefined, 20);
 
-  const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => !isShop(r.storeName) && !isExcludedStore(r.storeName));
+  const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => isOfflineSalesStore(r.storeName));
   const coreWeekSales = mergedWeekly.reduce((s, r) => s + Number(r.weekSales || 0), 0);
   const top10Amount = companyTopProducts.slice(0, 10).reduce((s, p) => s + Number(p.weekAmount || 0), 0);
   const top10Concentration = coreWeekSales ? (top10Amount / coreWeekSales) * 100 : 0;
@@ -1554,7 +1638,7 @@ export async function buildDashboardDataFromGoogleSheet() {
     source: "google-sheet",
     updatedAt: new Date().toISOString(),
     daily: {
-      periodLabel: `분석일: ${dailyCurrent} / 비교일: ${dailyCompare}`,
+      periodLabel: `기준일자: ${dailyCurrent} / 오프라인 매장 기준`,
       current: dailyCur,
       compare: dailyCmp,
     },

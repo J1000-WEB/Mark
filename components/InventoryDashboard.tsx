@@ -750,7 +750,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                     <p className="text-xs font-bold text-slate-500">#{idx + 1} · {item.styleCode} · {item.toStore || item.channel || "-"}</p>
                     <p className="mt-1 truncate text-sm font-black">{item.productName}</p>
                     <p className={`mt-1 text-xs font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                      추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}
+                      추가판매 {fmtNum(item.addedQty)}개 · 추가매출 {won(item.addedAmount)}{bucket.category === "RT" && item.rtQty ? ` · 소진율 ${Number(item.depletionRate || 0).toFixed(1)}%` : ""}
                     </p>
                   </div>
                 ))}
@@ -856,6 +856,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                   <p className="text-xs font-bold text-slate-500">{item.category} · {item.styleCode} · {item.fromStore || item.channel || "-"} → {item.toStore || "-"}</p>
                   <p className="mt-1 font-black">{item.productName}</p>
                   {item.compareBasis ? <p className="mt-1 text-xs font-semibold text-blue-600">{item.compareBasis}</p> : null}
+                  {item.category === "RT" && item.rtQty ? <p className="mt-1 text-xs font-black text-emerald-600">RT수량 {fmtNum(item.rtQty)}개 · 소진율 {Number(item.depletionRate || 0).toFixed(1)}% · 등급 {item.rtGrade || "-"}</p> : null}
                   {item.note ? <p className="mt-1 text-xs font-semibold text-slate-500">{item.note}</p> : null}
                 </div>
                 <div className="text-right">

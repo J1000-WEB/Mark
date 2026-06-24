@@ -64,7 +64,7 @@ function clampDate(date: Date, start: Date, end: Date) {
 function categoryClass(category: string) {
   if (category === "promotion") return "bg-rose-500 text-white";
   if (category === "vmd") return "bg-emerald-500 text-white";
-  if (category === "marketing") return "bg-violet-500 text-white";
+  if (category === "meeting") return "bg-violet-500 text-white";
   if (category === "product") return "bg-cyan-500 text-white";
   if (category === "schedule") return "bg-blue-600 text-white";
   if (category === "performance") return "bg-amber-300 text-slate-900";
@@ -74,7 +74,7 @@ function categoryClass(category: string) {
 function categorySoftClass(category: string) {
   if (category === "promotion") return "border-rose-100 bg-rose-50 text-rose-700";
   if (category === "vmd") return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  if (category === "marketing") return "border-violet-100 bg-violet-50 text-violet-700";
+  if (category === "meeting") return "border-violet-100 bg-violet-50 text-violet-700";
   if (category === "product") return "border-cyan-100 bg-cyan-50 text-cyan-700";
   if (category === "schedule") return "border-blue-100 bg-blue-50 text-blue-700";
   if (category === "performance") return "border-amber-100 bg-amber-50 text-amber-700";
@@ -86,11 +86,9 @@ const TEAM_MEMBERS = ["지승현", "최다은", "손민지", "한선아", "소�
 const CATEGORY_ROWS = [
   { key: "promotion", label: "프로모션" },
   { key: "vmd", label: "VMD" },
-  { key: "marketing", label: "마케팅" },
-  { key: "product", label: "상품/입고" },
+  { key: "meeting", label: "회의" },
   ...TEAM_MEMBERS.map((name) => ({ key: `staff:${name}`, label: name, category: "schedule" })),
-  { key: "schedule", label: "기타 스케줄" },
-  { key: "performance", label: "실적/날씨" },
+  { key: "schedule", label: "기타 일정" },
   { key: "general", label: "기타" },
 ];
 
@@ -164,9 +162,8 @@ export default function ScheduleDashboard() {
     const json = await res.json();
     setData(json);
 
-    const firstEventDate = json?.events?.find((event: any) => event.startDate || event.date)?.startDate;
-    const d = toDate(firstEventDate);
-    if (d) setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    // MARK 4.91: 판매전체상 기준일은 항상 오늘 기준으로 시작합니다.
+    // 과거/미래 첫 일정으로 자동 이동하지 않습니다.
   }
 
   useEffect(() => {
@@ -280,7 +277,7 @@ export default function ScheduleDashboard() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => moveMonth(-1)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50">이전달</button>
-              <button type="button" onClick={() => setCurrentMonth(new Date())} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50">이번달</button>
+              <button type="button" onClick={() => setCurrentMonth(new Date())} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50">오늘</button>
               <button type="button" onClick={() => moveMonth(1)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50">다음달</button>
               <button type="button" onClick={load} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white">새로고침</button>
               <button

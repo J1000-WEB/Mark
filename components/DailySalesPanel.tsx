@@ -87,8 +87,8 @@ export default function DailySalesPanel() {
       <section className="rounded-3xl bg-slate-950 p-5 text-white shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-black text-slate-400">MARK 4.78 DAILY ENGINE</p>
-            <h2 className="mt-1 text-2xl font-black">일별 판매 데이터</h2>
+            <p className="text-xs font-black text-slate-400">DAILY SALES SNAPSHOT</p>
+            <h2 className="mt-1 text-2xl font-black">일간 판매 데이터</h2>
             <p className="mt-2 text-sm font-semibold text-slate-300">
               {data.sheetName} · 기준일자 {data.sourceDate}
             </p>
@@ -98,7 +98,7 @@ export default function DailySalesPanel() {
               새로고침
             </button>
             <button type="button" onClick={saveHistory} disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 disabled:opacity-50">
-              {saving ? "저장 중..." : "Daily History 저장"}
+              {saving ? "저장 중..." : "일간 스냅샷 저장"}
             </button>
           </div>
         </div>

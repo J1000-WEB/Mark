@@ -1328,15 +1328,21 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
   const colorCol = findCol(header, ["칼라", "컬러"], 3);
   const sizeCol = findCol(header, ["사이즈"], 4);
   const qtyCol = findCol(header, ["지시수량", "수량"], 5);
-  const dateCol = findCol(header, ["승인날짜", "제안날짜", "지시일", "승인일"], 6);
+
+  // MARK 4.91.4:
+  // RT_Result H열이 저장한 날짜 = 지시일입니다.
+  // 헤더명이 달라도 H열(0-base 7)을 우선 사용하고, 비어있을 때만 G열을 fallback으로 씁니다.
+  const headerDateCol = findCol(header, ["저장한날짜", "저장날짜", "지시일", "지시날짜", "다운로드날짜"], 7);
+  const dateCol = headerDateCol >= 0 ? headerDateCol : 7;
+  const fallbackDateCol = findCol(header, ["승인날짜", "제안날짜", "승인일"], 6);
 
   const grouped = new Map<string, any>();
 
   for (const row of rows.slice(startRow)) {
     const styleCode = text(row[styleCol]);
-    const startDate = normalizeDateKey(row[dateCol]);
+    const directiveDate = normalizeDateKey(row[dateCol]) || normalizeDateKey(row[fallbackDateCol]);
     const qty = num(row[qtyCol]);
-    if (!styleCode || !startDate || !qty) continue;
+    if (!styleCode || !directiveDate || !qty) continue;
 
     const rawFrom = text(row[fromCol]);
     const rawTo = text(row[toCol]);
@@ -1344,7 +1350,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
     const toStore = codeNameMap.get(rawTo) || displayStoreName(rawTo);
     const color = text(row[colorCol]);
     const size = text(row[sizeCol]);
-    const key = `${startDate}__${rawFrom}__${rawTo}__${styleCode}`;
+    const key = `${directiveDate}__${rawFrom}__${rawTo}__${styleCode}`;
 
     if (!grouped.has(key)) {
       grouped.set(key, {
@@ -1361,7 +1367,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
         channel: "",
         note: "",
         rtQty: 0,
-        startDate,
+        startDate: directiveDate,
         endDate: "",
         fromStore,
         toStore,
@@ -1383,7 +1389,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 
   return Array.from(grouped.values()).map((item: any) => ({
     ...item,
-    note: item.colorSizeSummary.length ? `RT_Result 기준: ${item.colorSizeSummary.slice(0, 8).join(", ")}${item.colorSizeSummary.length > 8 ? " ..." : ""}` : "RT_Result 기준",
+    note: item.colorSizeSummary.length ? `RT_Result H열 지시일 기준: ${item.colorSizeSummary.slice(0, 8).join(", ")}${item.colorSizeSummary.length > 8 ? " ..." : ""}` : "RT_Result H열 지시일 기준",
   }));
 }
 
@@ -1522,7 +1528,7 @@ function dateRange(startKey: string, endKey: string) {
   const out: string[] = [];
   const cur = new Date(start.getTime());
   while (cur.getTime() <= end.getTime()) {
-    out.push(cur.toISOString().slice(0, 10));
+    out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
     cur.setDate(cur.getDate() + 1);
   }
   return out;
@@ -1579,7 +1585,7 @@ function performancePeriods(row: any) {
     return {
       beforeDates: beforeWeek.dates,
       duringDates: duringWeek.dates,
-      basis: `RT 비교: 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
+      basis: `RT 비교: H열 지시일 기준 / 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
       beforeLabel: `${beforeWeek.start}~${beforeWeek.end}`,
       duringLabel: `${duringWeek.start}~${duringWeek.end}`,
     };
@@ -1598,7 +1604,7 @@ function performancePeriods(row: any) {
   return {
     beforeDates: dateRange(beforeStart, beforeEnd),
     duringDates: dateRange(duringStart, duringEnd),
-    basis: `프로모션 비교: 실행 전 ${beforeStart}~${beforeEnd} ↔ 실행 후 ${duringStart}~${duringEnd}`,
+    basis: `프로모션 비교: 핵심 오프라인 매장 기준 / 실행 전 ${beforeStart}~${beforeEnd} ↔ 실행 후 ${duringStart}~${duringEnd}`,
     beforeLabel: `${beforeStart}~${beforeEnd}`,
     duringLabel: `${duringStart}~${duringEnd}`,
   };
@@ -1634,10 +1640,14 @@ function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
   const targetStore = normalizeStoreKey(row.toStore || row.channel || "");
   const hasStoreFilter = Boolean(targetStore);
   const styleCode = text(row.styleCode);
+  const isPromotion = row.category === "PROMOTION";
 
   return dailyRows
     .filter((r) => dateSet.has(r.date))
     .filter((r) => !styleCode || r.styleCode === styleCode)
+    // 프로모션은 오프라인 핵심매장만 집계합니다. 온라인/위탁은 제외합니다.
+    .filter((r) => !isPromotion || isCoreOfflineSalesStore(r.storeName))
+    // RT는 받는점포 기준으로 성과를 확인합니다.
     .filter((r) => !hasStoreFilter || r.storeKey === targetStore || normalizeStoreKey(r.storeName).includes(targetStore) || targetStore.includes(r.storeKey))
     .reduce((acc, r) => {
       acc.qty += Number(r.qty || 0);

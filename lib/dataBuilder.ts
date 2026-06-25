@@ -1871,46 +1871,196 @@ async function loadPromotionPerformance() {
 }
 
 
+
+function ymdLocalDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthKey(dateKey: string) {
+  return String(dateKey || "").slice(0, 7);
+}
+
+function latestHistoryDate(rows: any[]) {
+  return [...new Set(rows.map((r: any) => r.date).filter(Boolean))].sort().pop() || "";
+}
+
+function firstDayOfMonth(dateKey: string) {
+  const d = parseDate(dateKey);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function lastDayOfMonth(dateKey: string) {
+  const d = parseDate(dateKey);
+  if (!d) return "";
+  return ymdLocalDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+}
+
+function previousMonthKey(dateKey: string) {
+  const d = parseDate(dateKey);
+  if (!d) return "";
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function sumHistory(rows: any[], storeName: string, dates: Set<string>) {
+  return rows
+    .filter((r: any) => r.storeName === storeName && dates.has(r.date))
+    .reduce((acc: any, r: any) => {
+      acc.qty += Number(r.qty || 0);
+      acc.amount += Number(r.amount || 0);
+      return acc;
+    }, { qty: 0, amount: 0 });
+}
+
+function buildHistoryStoreRows(rows: any[], currentDate: string, compareDate = "") {
+  if (!currentDate) return { dailyCur: [], dailyCmp: [], weeklyCur: [], weeklyCmp: [], monthCur: [], monthCmp: [], monthYear: [] };
+
+  const currentWeek = weekWindow(currentDate, 0);
+  const prevWeek = weekWindow(currentDate, -1);
+  const currentMonthStart = firstDayOfMonth(currentDate);
+  const currentMonthEnd = currentDate;
+  const prevMonth = previousMonthKey(currentDate);
+  const prevMonthStart = prevMonth ? `${prevMonth}-01` : "";
+  const prevMonthEnd = prevMonthStart ? lastDayOfMonth(prevMonthStart) : "";
+
+  const dayDates = new Set([currentDate]);
+  const compareDayDates = new Set([compareDate || dateAddDays(currentDate, -7)]);
+  const weekDates = new Set(currentWeek.dates);
+  const prevWeekDates = new Set(prevWeek.dates);
+  const monthDates = new Set(dateRange(currentMonthStart, currentMonthEnd));
+  const prevMonthDates = new Set(dateRange(prevMonthStart, prevMonthEnd));
+
+  const stores = [...new Set(rows.map((r: any) => r.storeName).filter(Boolean))].sort();
+
+  const makeRows = (dates: Set<string>, mode: "day" | "week" | "month") => stores.map((storeName) => {
+    const day = sumHistory(rows, storeName, dayDates);
+    const sum = sumHistory(rows, storeName, dates);
+    const month = sumHistory(rows, storeName, monthDates);
+    return {
+      storeName,
+      dayTarget: 0,
+      daySales: mode === "day" ? sum.amount : day.amount,
+      dayRate: 0,
+      weekTarget: 0,
+      weekSales: mode === "week" ? sum.amount : sum.amount,
+      weekRate: 0,
+      monthBaseTarget: 0,
+      monthTarget: 0,
+      monthSales: mode === "month" ? sum.amount : month.amount,
+      monthRateA: 0,
+      monthRate: 0,
+      yearTarget: 0,
+      yearSales: month.amount,
+      yearRate: 0,
+    };
+  }).filter((r) => Number(r.daySales || 0) || Number(r.weekSales || 0) || Number(r.monthSales || 0));
+
+  return {
+    dailyCur: makeRows(dayDates, "day"),
+    dailyCmp: makeRows(compareDayDates, "day"),
+    weeklyCur: makeRows(weekDates, "week"),
+    weeklyCmp: makeRows(prevWeekDates, "week"),
+    monthCur: makeRows(monthDates, "month"),
+    monthCmp: makeRows(prevMonthDates, "month"),
+    monthYear: [],
+    currentWeek,
+    prevWeek,
+    currentMonthStart,
+    currentMonthEnd,
+    prevMonthStart,
+    prevMonthEnd,
+  };
+}
+
+function buildHistoryProductRows(rows: any[], currentDate: string) {
+  if (!currentDate) return [] as any[];
+  const currentWeek = weekWindow(currentDate, 0);
+  const prevWeek = weekWindow(currentDate, -1);
+  const currentSet = new Set(currentWeek.dates);
+  const prevSet = new Set(prevWeek.dates);
+  const map = new Map<string, any>();
+
+  for (const r of rows) {
+    const key = `${r.storeName}__${r.styleCode}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        storeName: r.storeName,
+        storeKey: normalizeStoreKey(r.storeName),
+        styleCode: r.styleCode,
+        productName: r.productName,
+        weekNet: 0,
+        weekAmount: 0,
+        prevNet: 0,
+        prevAmount: 0,
+        storeStock: 0,
+        skuRows: [],
+      });
+    }
+    const item = map.get(key);
+    if (currentSet.has(r.date)) {
+      item.weekNet += Number(r.qty || 0);
+      item.weekAmount += Number(r.amount || 0);
+    }
+    if (prevSet.has(r.date)) {
+      item.prevNet += Number(r.qty || 0);
+      item.prevAmount += Number(r.amount || 0);
+    }
+  }
+
+  return Array.from(map.values()).filter((r: any) => Number(r.weekNet || 0) || Number(r.weekAmount || 0) || Number(r.prevNet || 0) || Number(r.prevAmount || 0));
+}
+
+async function loadDashboardDailyHistory() {
+  const historyId = getHistorySheetId();
+  const titles = await getSpreadsheetTitlesById(historyId).catch(() => []);
+  const sheetName = pickNormalizedTitle(titles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
+  if (!sheetName || !titles.includes(sheetName)) return { sheetName: "", rows: [] as any[] };
+  const values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);
+  return { sheetName, rows: parseDailyHistoryRows(values || []) };
+}
+
 export async function buildDashboardDataFromGoogleSheet() {
   const titles = await getSpreadsheetTitles();
 
-  const dailyCurrent = pickTitle(titles, "일_전일");
-  const dailyCompare = pickTitle(titles, "일_전주");
-  const weeklyCurrent = pickWeeklyCurrent(titles);
-  const weeklyCompare = pickWeeklyCompare(titles);
-  const prevMonth = pickTitle(titles, "전월마감(2604)", "전월마감");
-  const prevYear = pickTitle(titles, "전년마감(2505)", "전년마감");
+  // MARK 5.0.1:
+  // 일간/주간/월간 매출대시보드는 Daily_Sales_History 누적 데이터로 집계합니다.
+  // ERP 원본 시트는 Daily_Sales_History 생성/재고CTRL/재고현황 보조용으로만 최소 조회합니다.
   const productSheet = pickProductSheet(titles);
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
   const annualSalesSheet = pickNormalizedTitle(titles, ["연간판매", "연간 판매"], "연간판매");
   const standardSheet = pickNormalizedTitle(titles, ["기준"], "기준");
 
-  const needed = [dailyCurrent, dailyCompare, weeklyCurrent, weeklyCompare, prevMonth, prevYear, productSheet, inventorySheet, annualSalesSheet, standardSheet]
+  const needed = [productSheet, inventorySheet, annualSalesSheet, standardSheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   const values = await getManySheetValues(needed, "A:AZ");
 
-  const filterVisibleStores = (rows: any[]) => rows.filter((r) => isOfflineSalesStore(r.storeName));
+  const history = await loadDashboardDailyHistory();
+  const historyRowsAll = history.rows || [];
+  const historyRows = historyRowsAll.filter((r: any) => isOfflineSalesStore(r.storeName));
+  const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
+  const currentDate = latestHistoryDate(historyRows);
 
-  const dailyCur = filterVisibleStores(parseTargetSheet(dailyCurrent, values[dailyCurrent] || []).rows);
-  const dailyCmp = filterVisibleStores(parseTargetSheet(dailyCompare, values[dailyCompare] || []).rows);
-  const weeklyCur = filterVisibleStores(parseTargetSheet(weeklyCurrent, values[weeklyCurrent] || []).rows);
-  const weeklyCmp = filterVisibleStores(parseTargetSheet(weeklyCompare, values[weeklyCompare] || []).rows);
-  const monthCur = weeklyCur;
-  const monthCmp = filterVisibleStores(parseTargetSheet(prevMonth, values[prevMonth] || []).rows);
-  const monthYear = filterVisibleStores(parseTargetSheet(prevYear, values[prevYear] || []).rows);
+  const historyStores = buildHistoryStoreRows(historyRows, currentDate);
+  const dailyCur = historyStores.dailyCur;
+  const dailyCmp = historyStores.dailyCmp;
+  const weeklyCur = historyStores.weeklyCur;
+  const weeklyCmp = historyStores.weeklyCmp;
+  const monthCur = historyStores.monthCur;
+  const monthCmp = historyStores.monthCmp;
+  const monthYear = historyStores.monthYear;
 
-  const productRows = parseProducts(values[productSheet] || []);
-  const offlineProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName));
-  const coreProductRows = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
-  const consignmentProductRows = productRows.filter((r) => isOfflineSalesStore(r.storeName) && isConsignmentChannel(r.storeName));
+  // 상품/재고CTRL은 실재고와 제안 로직 때문에 현재 ERP 보조 데이터를 유지합니다.
+  const productRowsRaw = parseProducts(values[productSheet] || []);
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
 
-  const storeNames = [...new Set(coreProductRows.map((r) => r.storeName).filter(Boolean))].sort();
+  const historyProductRows = buildHistoryProductRows(coreHistoryRows, currentDate);
+  const companyTopProducts = aggregateProducts(historyProductRows, undefined, 20);
+  const storeNames = [...new Set(historyProductRows.map((r: any) => r.storeName).filter(Boolean))].sort();
   const storeTopProducts: Record<string, any[]> = {};
-  for (const store of storeNames) storeTopProducts[store] = aggregateProducts(coreProductRows, store, 20);
-  const companyTopProducts = aggregateProducts(coreProductRows, undefined, 20);
+  for (const store of storeNames) storeTopProducts[store] = aggregateProducts(historyProductRows, store, 20);
 
   const mergedWeekly = mergeStoreRows(weeklyCur, weeklyCmp).filter((r) => isOfflineSalesStore(r.storeName));
   const coreMergedWeekly = mergedWeekly.filter((r) => isCoreOfflineSalesStore(r.storeName));
@@ -1931,19 +2081,25 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
   const topProduct = companyTopProducts[0];
 
-  const inventory = { ...buildInventory(productRows, inventoryRows, companyTopProducts), performance };
+  // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지
+  const inventory = { ...buildInventory(productRowsRaw, inventoryRows, companyTopProducts), performance };
 
   return {
     ...(fallback as any),
-    source: "google-sheet",
+    source: "daily-sales-history",
     updatedAt: new Date().toISOString(),
+    historySource: {
+      sheetName: history.sheetName,
+      latestDate: currentDate,
+      rows: historyRows.length,
+    },
     daily: {
-      periodLabel: `기준일자: ${dailyCurrent} / 오프라인 매장 기준`,
+      periodLabel: `기준일자: ${currentDate || "Daily_Sales_History 없음"} / Daily_Sales_History 기준`,
       current: dailyCur,
       compare: dailyCmp,
     },
     weekly: {
-      periodLabel: `분석기간: ${weeklyCurrent} / 비교기간: ${weeklyCompare}`,
+      periodLabel: `분석기간: ${historyStores.currentWeek?.start || "-"}~${historyStores.currentWeek?.end || "-"} / 비교기간: ${historyStores.prevWeek?.start || "-"}~${historyStores.prevWeek?.end || "-"}`,
       current: weeklyCur,
       compare: weeklyCmp,
       companyTopProducts,
@@ -1952,15 +2108,15 @@ export async function buildDashboardDataFromGoogleSheet() {
       top10Concentration,
       newTop10Entrants: entrants,
       aiBriefing: [
-        `위탁 포함 오프라인 주간 매출은 ${Math.round(totalOfflineWeekSales).toLocaleString("ko-KR")}원이며 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
+        `Daily_Sales_History 기준 위탁 포함 오프라인 주간 매출은 ${Math.round(totalOfflineWeekSales).toLocaleString("ko-KR")}원이며 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
         `호조 매장은 ${good.map((r) => r.storeName).join(", ") || "데이터 없음"} 중심으로 확인됩니다.`,
         `부진 매장은 ${bad.map((r) => r.storeName).join(", ") || "데이터 없음"}이며 상품 구성과 재고 보강 점검이 필요합니다.`,
-        `전사 TOP 상품은 ${topProduct?.productName || "데이터 없음"}이며 TOP10 상품 매출 비중은 ${top10Concentration.toFixed(1)}%입니다.`,
-        "위탁 채널은 재고 효율과 가용재고를 함께 보며 투입 후보를 관리하는 것이 좋습니다.",
+        `핵심 오프라인 TOP 상품은 ${topProduct?.productName || "데이터 없음"}이며 TOP10 상품 매출 비중은 ${top10Concentration.toFixed(1)}%입니다.`,
+        "대시보드는 Daily_Sales_History 누적 데이터로 집계되며 원본 ERP 직접 조회를 최소화합니다.",
       ],
     },
     monthly: {
-      periodLabel: `분석월: ${weeklyCurrent} 월누적 / 비교월: ${prevMonth} / 전년동월: ${prevYear}`,
+      periodLabel: `분석월: ${historyStores.currentMonthStart || "-"}~${historyStores.currentMonthEnd || "-"} / 비교월: ${historyStores.prevMonthStart || "-"}~${historyStores.prevMonthEnd || "-"}`,
       current: monthCur,
       compare: monthCmp,
       year: monthYear,

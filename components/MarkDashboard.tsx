@@ -321,19 +321,44 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState("");
   const [store, setStore] = useState(markData.weekly?.productStoreNames?.[0] || "");
   const [reviewStore, setReviewStore] = useState("");
 
+  async function loadDashboard() {
+    const res = await fetch("/api/data", { cache: "no-store" });
+    const d = await res.json();
+    setDashboardData(d);
+    setDataStatus(
+      d.source === "daily-sales-history"
+        ? "Daily_Sales_History 기준 데이터"
+        : d.source === "google-sheet"
+          ? "구글시트 실시간 데이터"
+          : "내장 데이터"
+    );
+    setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
+    const first = d.weekly?.productStoreNames?.[0] || "";
+    if (first && (!store || !(d.weekly?.productStoreNames || []).includes(store))) setStore(first);
+  }
+
+  async function refreshSnapshot() {
+    setRefreshing(true);
+    try {
+      await fetch("/api/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ type: `dashboard-${active}` }),
+      });
+      await loadDashboard();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   useEffect(() => {
-    fetch("/api/data", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        setDashboardData(d);
-        setDataStatus(d.source === "google-sheet" ? "구글시트 실시간 데이터" : "내장 데이터");
-        const first = d.weekly?.productStoreNames?.[0] || "";
-        if (first && (!store || !(d.weekly?.productStoreNames || []).includes(store))) setStore(first);
-      })
-      .catch(() => setDataStatus("내장 데이터"));
+    loadDashboard().catch(() => setDataStatus("내장 데이터"));
   }, []);
 
   const pageData = dashboardData?.[active] || { current: [], compare: [], year: [], periodLabel: "" };
@@ -373,9 +398,21 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               {active === "weekly" && "주간 매출, 점포별 흐름, 상품 반응을 확인합니다."}
               {active === "monthly" && "월간 누적 매출과 전월/전년 흐름을 확인합니다."}
             </p>
-            <p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
+            <p className="mt-1 text-xs font-semibold text-blue-600">
+              {dataStatus}{lastRefreshedAt ? ` · 최종조회 ${lastRefreshedAt}` : ""}
+            </p>
           </div>
-          <NavTabs active={active} />
+          <div className="flex flex-col gap-2 sm:items-end">
+            <NavTabs active={active} />
+            <button
+              type="button"
+              onClick={refreshSnapshot}
+              disabled={refreshing}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+            >
+              {refreshing ? "갱신중..." : "데이터 새로고침"}
+            </button>
+          </div>
         </header>
 
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">

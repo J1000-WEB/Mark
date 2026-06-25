@@ -1639,6 +1639,28 @@ function parseDailyHistoryRows(rows: any[][]) {
     .filter((r) => r.date && r.styleCode);
 }
 
+type PerformanceOverride = {
+  categoryFilter?: "ALL" | "RT" | "PROMOTION";
+  selectedDate?: string;
+  beforeStart?: string;
+  beforeEnd?: string;
+  duringStart?: string;
+  duringEnd?: string;
+};
+
+function overridePeriods(row: any, override?: PerformanceOverride) {
+  if (!override?.beforeStart || !override?.beforeEnd || !override?.duringStart || !override?.duringEnd) {
+    return null;
+  }
+  return {
+    beforeDates: dateRange(override.beforeStart, override.beforeEnd),
+    duringDates: dateRange(override.duringStart, override.duringEnd),
+    basis: `사용자 지정 비교: 실행 전 ${override.beforeStart}~${override.beforeEnd} ↔ 실행 후 ${override.duringStart}~${override.duringEnd}`,
+    beforeLabel: `${override.beforeStart}~${override.beforeEnd}`,
+    duringLabel: `${override.duringStart}~${override.duringEnd}`,
+  };
+}
+
 function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
   const dateSet = new Set(dates);
   const targetStore = normalizeStoreKey(row.toStore || row.channel || "");
@@ -1660,11 +1682,11 @@ function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
     }, { qty: 0, amount: 0 });
 }
 
-function applyDailyPerformance(rows: any[], dailyRows: any[]) {
+function applyDailyPerformance(rows: any[], dailyRows: any[], override?: PerformanceOverride) {
   if (!dailyRows.length) return rows;
 
   return rows.map((row: any) => {
-    const periods = performancePeriods(row);
+    const periods = overridePeriods(row, override) || performancePeriods(row);
     const before = sumDailyPerformance(dailyRows, row, periods.beforeDates);
     const during = sumDailyPerformance(dailyRows, row, periods.duringDates);
 
@@ -1759,13 +1781,12 @@ function buildPerformanceSummary(rows: any[]) {
   };
 }
 
-async function loadPromotionPerformance() {
+export async function buildPerformanceAnalysis(override: PerformanceOverride = {}) {
   try {
     const dbId = getDbSheetId();
     const historyId = getHistorySheetId();
     const mainId = getSheetId();
 
-    // Promotion_Performance는 MARK_DB, Daily_Sales_History는 MARK_HISTORY, RT_Result는 메인 스프레드시트에서 읽습니다.
     const dbTitles = await getSpreadsheetTitlesById(dbId);
     const historyTitles = await getSpreadsheetTitlesById(historyId).catch(() => []);
     const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
@@ -1797,7 +1818,6 @@ async function loadPromotionPerformance() {
 
     const dailyRows = parseDailyHistoryRows(dailyValues || []);
 
-    // Daily_Sales_History 기준으로 RT_Result 품번의 상품명 보강
     for (const row of dailyRows as any[]) {
       const style = text(row.styleCode);
       const productName = text(row.productName);
@@ -1811,16 +1831,24 @@ async function loadPromotionPerformance() {
     const rtValues = rtSheetName ? await getSheetValuesById(mainId, rtSheetName, "A:AZ").catch(() => []) : [];
     const rtRows = parseRtResultRows(rtValues || [], codeNameMap, productNameMap);
 
-    const performanceRows = mergeRtRows(basePerformanceRows, rtRows);
+    let performanceRows = mergeRtRows(basePerformanceRows, rtRows);
     for (const row of performanceRows as any[]) {
       if (!row.productName && productNameMap.has(row.styleCode)) row.productName = productNameMap.get(row.styleCode) || "";
     }
 
-    const rows = applyDailyPerformance(performanceRows, dailyRows);
+    if (override.selectedDate) {
+      performanceRows = performanceRows.filter((row: any) => row.startDate === override.selectedDate);
+    }
+    if (override.categoryFilter && override.categoryFilter !== "ALL") {
+      performanceRows = performanceRows.filter((row: any) => row.category === override.categoryFilter);
+    }
+
+    const rows = applyDailyPerformance(performanceRows, dailyRows, override);
     const summary = buildPerformanceSummary(rows);
 
     return {
       ...summary,
+      override,
       debug: {
         performanceSheetName,
         dailySheetName: dailySheetName || "",
@@ -1833,9 +1861,13 @@ async function loadPromotionPerformance() {
       },
     };
   } catch (error: any) {
-    console.error("loadPromotionPerformance failed:", error);
+    console.error("buildPerformanceAnalysis failed:", error);
     return buildPerformanceSummary([]);
   }
+}
+
+async function loadPromotionPerformance() {
+  return buildPerformanceAnalysis();
 }
 
 

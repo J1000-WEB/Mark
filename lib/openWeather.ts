@@ -3,7 +3,7 @@ import { ensureSheetExistsById, getSheetValuesById, updateValuesById } from "@/l
 // MARK Weather 설정
 // 여기에 OpenWeather API Key만 붙여넣으면 됩니다.
 // 예: const OPENWEATHER_API_KEY = "abcd1234...";
-export const OPENWEATHER_API_KEY = "여기에_OPENWEATHER_API_KEY_붙여넣기";
+export const OPENWEATHER_API_KEY = "a78c5c40b7c18d95d057f5ad1878a741";
 
 const WEATHER_SPREADSHEET_ID = "12pDes6F0Go356pXvXNZx2egifDB4tsY2K915JN_K0Lg";
 const SHEET_NAME = "Weather_History";

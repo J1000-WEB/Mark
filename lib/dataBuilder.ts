@@ -2083,6 +2083,13 @@ export async function buildDashboardDataFromGoogleSheet() {
 
   // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지
   const inventory = { ...buildInventory(productRowsRaw, inventoryRows, companyTopProducts), performance };
+  const latestPerformance = performance?.byDate?.[performance?.latestDate || ""] || {};
+  const rtBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "RT") || {};
+  const promoBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "PROMOTION") || {};
+  const performanceBriefing = [
+    rtBucket.count ? `RT 성과: ${Math.round(Number(rtBucket.count || 0)).toLocaleString("ko-KR")}건 / 평균 소진율 ${Number(rtBucket.avgDepletionRate || 0).toFixed(1)}% / 추가매출 ${Math.round(Number(rtBucket.addedAmount || 0)).toLocaleString("ko-KR")}원` : "",
+    promoBucket.count ? `프로모션 성과: ${Math.round(Number(promoBucket.count || 0)).toLocaleString("ko-KR")}건 / 성공률 ${Number(promoBucket.successRate || 0).toFixed(1)}% / 추가매출 ${Math.round(Number(promoBucket.addedAmount || 0)).toLocaleString("ko-KR")}원` : "",
+  ].filter(Boolean);
 
   return {
     ...(fallback as any),
@@ -2112,6 +2119,7 @@ export async function buildDashboardDataFromGoogleSheet() {
         `호조 매장은 ${good.map((r) => r.storeName).join(", ") || "데이터 없음"} 중심으로 확인됩니다.`,
         `부진 매장은 ${bad.map((r) => r.storeName).join(", ") || "데이터 없음"}이며 상품 구성과 재고 보강 점검이 필요합니다.`,
         `핵심 오프라인 TOP 상품은 ${topProduct?.productName || "데이터 없음"}이며 TOP10 상품 매출 비중은 ${top10Concentration.toFixed(1)}%입니다.`,
+        ...performanceBriefing,
         "대시보드는 Daily_Sales_History 누적 데이터로 집계되며 원본 ERP 직접 조회를 최소화합니다.",
       ],
     },

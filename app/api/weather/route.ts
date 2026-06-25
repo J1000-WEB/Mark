@@ -1,24 +1,24 @@
 import { NextResponse } from "next/server";
-import { readWeatherHistory, saveDailySeoulWeather } from "@/lib/weather";
+import { readWeatherHistory, saveSeoulWeatherSnapshot } from "@/lib/openWeather";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const records = await readWeatherHistory();
-    return NextResponse.json({ ok: true, records }, { headers: { "Cache-Control": "no-store, max-age=0" } });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error?.message || "Weather_History를 불러오지 못했습니다.", records: [] }, { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } });
-  }
-}
+    const url = new URL(req.url);
+    const refresh = url.searchParams.get("refresh") === "1";
+    const result = refresh ? await saveSeoulWeatherSnapshot() : { records: await readWeatherHistory() };
 
-export async function POST() {
-  try {
-    const saved = await saveDailySeoulWeather();
-    const records = await readWeatherHistory();
-    return NextResponse.json({ ok: true, saved, records }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    return NextResponse.json(
+      { ok: true, ...result },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error?.message || "날씨 저장 실패" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
+    console.error("Weather API failed:", error);
+    return NextResponse.json(
+      { ok: false, error: error?.message || "날씨 데이터를 불러오지 못했습니다.", records: [] },
+      { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
   }
 }

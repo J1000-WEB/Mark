@@ -156,11 +156,21 @@ export default function ScheduleDashboard() {
   const [query, setQuery] = useState("");
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hiddenSchedule, setHiddenSchedule] = useState(true);
+  const [weatherData, setWeatherData] = useState<any[]>([]);
 
   async function load() {
-    const res = await fetch("/api/schedule", { cache: "no-store" });
-    const json = await res.json();
+    const [scheduleRes, weatherRes] = await Promise.all([
+      fetch("/api/schedule", { cache: "no-store" }),
+      fetch("/api/weather", { cache: "no-store" }).catch(() => null),
+    ]);
+
+    const json = await scheduleRes.json();
     setData(json);
+
+    if (weatherRes) {
+      const weatherJson = await weatherRes.json().catch(() => ({ records: [] }));
+      setWeatherData(Array.isArray(weatherJson.records) ? weatherJson.records : []);
+    }
 
     // MARK 4.91: 판매전체상 기준일은 항상 오늘 기준으로 시작합니다.
     // 과거/미래 첫 일정으로 자동 이동하지 않습니다.
@@ -213,6 +223,27 @@ export default function ScheduleDashboard() {
     for (const event of filteredEvents) base[event.category || "general"] = (base[event.category || "general"] || 0) + 1;
     return base;
   }, [filteredEvents]);
+
+  function getWeatherForDay(day: Date) {
+    const date = ymd(day);
+    return weatherData.find((row: any) => row.date === date && row.type === "actual") || weatherData.find((row: any) => row.date === date && row.type === "forecast") || null;
+  }
+
+  function weatherTitle(row: any) {
+    if (!row) return "날씨 데이터 없음";
+    return [
+      `구분: ${row.type === "actual" ? "기록" : "예보"}`,
+      `지역: ${row.region || "서울"}`,
+      `날씨: ${row.weather || "-"}`,
+      `최고기온: ${row.maxTemp ?? "-"}℃`,
+      `최저기온: ${row.minTemp ?? "-"}℃`,
+      `강수확률: ${row.rainChance ?? "-"}%`,
+      `강수량: ${row.rainAmount ?? "-"}mm`,
+      `습도: ${row.humidity ?? "-"}%`,
+      `풍속: ${row.wind ?? "-"}m/s`,
+      `저장시간: ${row.savedAt || "-"}`,
+    ].join("\n");
+  }
 
   function moveMonth(delta: number) {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
@@ -352,6 +383,34 @@ export default function ScheduleDashboard() {
                 </div>
               );
             })}
+
+            <div className="flex border-b border-slate-100 bg-sky-50/70">
+              <div className="sticky left-0 z-10 flex w-36 shrink-0 items-center border-r border-sky-100 bg-sky-50 p-3">
+                <div>
+                  <p className="text-sm font-black text-sky-800">서울 날씨</p>
+                  <p className="mt-1 text-[11px] font-bold text-sky-500">최고/최저/상태</p>
+                </div>
+              </div>
+
+              <div className="grid" style={{ gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`, width: `${timelineWidth}px` }}>
+                {days.map((day) => {
+                  const weather = getWeatherForDay(day);
+                  return (
+                    <div key={`weather-${ymd(day)}`} title={weatherTitle(weather)} className="min-h-[66px] border-r border-sky-100 px-2 py-2 text-center text-xs">
+                      {weather ? (
+                        <>
+                          <p className="font-black text-sky-900">{weather.maxTemp}° / {weather.minTemp}°</p>
+                          <p className="mt-1 truncate font-bold text-sky-700">{weather.weather}</p>
+                          <p className="mt-1 text-[10px] font-bold text-sky-400">{weather.type === "actual" ? "기록" : "예보"}</p>
+                        </>
+                      ) : (
+                        <p className="mt-4 font-bold text-slate-300">-</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </section>
 

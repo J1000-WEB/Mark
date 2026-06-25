@@ -1,10 +1,11 @@
-import { ensureSheetExists, getSheetValues, updateValues } from "@/lib/googleSheets";
+import { ensureSheetExistsById, getSheetValuesById, updateValuesById } from "@/lib/googleSheets";
 
 // MARK Weather 설정
 // 여기에 OpenWeather API Key만 붙여넣으면 됩니다.
 // 예: const OPENWEATHER_API_KEY = "abcd1234...";
-export const OPENWEATHER_API_KEY = "a78c5c40b7c18d95d057f5ad1878a741";
+export const OPENWEATHER_API_KEY = "여기에_OPENWEATHER_API_KEY_붙여넣기";
 
+const WEATHER_SPREADSHEET_ID = "12pDes6F0Go356pXvXNZx2egifDB4tsY2K915JN_K0Lg";
 const SHEET_NAME = "Weather_History";
 const CITY_QUERY = "Seoul,KR";
 const REGION_LABEL = "서울";
@@ -175,13 +176,13 @@ async function fetchOpenWeatherForecast(): Promise<WeatherRecord[]> {
 }
 
 export async function readWeatherHistory() {
-  await ensureSheetExists(SHEET_NAME, WEATHER_HEADER);
-  const rows = await getSheetValues(SHEET_NAME, "A:K").catch(() => []);
+  await ensureSheetExistsById(WEATHER_SPREADSHEET_ID, SHEET_NAME, WEATHER_HEADER);
+  const rows = await getSheetValuesById(WEATHER_SPREADSHEET_ID, SHEET_NAME, "A:K").catch(() => []);
   return parseRows(rows);
 }
 
 export async function saveSeoulWeatherSnapshot() {
-  await ensureSheetExists(SHEET_NAME, WEATHER_HEADER);
+  await ensureSheetExistsById(WEATHER_SPREADSHEET_ID, SHEET_NAME, WEATHER_HEADER);
 
   const existing = await readWeatherHistory();
   const yesterday = ymd(kstDate(-1));
@@ -205,7 +206,7 @@ export async function saveSeoulWeatherSnapshot() {
   while (paddedRows.length < 120) paddedRows.push(new Array(WEATHER_HEADER.length).fill(""));
 
   // 기존 예보 행이 더 많았던 경우를 대비해 A:K 일부를 빈 행으로 같이 덮어씁니다.
-  await updateValues(`'${SHEET_NAME}'!A1:K${paddedRows.length}`, paddedRows);
+  await updateValuesById(WEATHER_SPREADSHEET_ID, `'${SHEET_NAME}'!A1:K${paddedRows.length}`, paddedRows);
 
   return {
     sheetName: SHEET_NAME,

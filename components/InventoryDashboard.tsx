@@ -631,14 +631,55 @@ function AllocationLookupSection({ data }: { data: any }) {
 
 
 function PerformanceTrackingSection({ data }: { data: any }) {
-  const performance = data.performance || {};
+  const basePerformance = data.performance || {};
+  const [performanceState, setPerformanceState] = useState<any>(basePerformance);
+  const performance = performanceState || basePerformance;
   const dates = performance.dates || [];
   const [selectedDate, setSelectedDate] = useState(performance.latestDate || "");
   const [categoryFilter, setCategoryFilter] = useState<"ALL" | "RT" | "PROMOTION">("ALL");
+  const [manualMode, setManualMode] = useState(false);
+  const [beforeStart, setBeforeStart] = useState("");
+  const [beforeEnd, setBeforeEnd] = useState("");
+  const [duringStart, setDuringStart] = useState("");
+  const [duringEnd, setDuringEnd] = useState("");
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+
+  useEffect(() => {
+    setPerformanceState(basePerformance);
+  }, [basePerformance]);
 
   useEffect(() => {
     if (!selectedDate && performance.latestDate) setSelectedDate(performance.latestDate);
   }, [performance.latestDate, selectedDate]);
+
+  async function runPerformanceAnalysis(useManual = manualMode) {
+    setPerformanceLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("category", categoryFilter);
+      if (selectedDate) params.set("selectedDate", selectedDate);
+      if (useManual) {
+        params.set("beforeStart", beforeStart);
+        params.set("beforeEnd", beforeEnd);
+        params.set("duringStart", duringStart);
+        params.set("duringEnd", duringEnd);
+      }
+      const res = await fetch(`/api/performance?${params.toString()}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "성과 분석 실패");
+      setPerformanceState(json.performance || {});
+      if (json.performance?.latestDate) setSelectedDate(json.performance.latestDate);
+    } catch (error: any) {
+      alert(error?.message || "성과 분석 실패");
+    } finally {
+      setPerformanceLoading(false);
+    }
+  }
+
+  function resetAutoAnalysis() {
+    setManualMode(false);
+    setPerformanceState(basePerformance);
+  }
 
   const rawSelected = performance.byDate?.[selectedDate] || {
     count: 0,
@@ -723,6 +764,74 @@ function PerformanceTrackingSection({ data }: { data: any }) {
         </div>
       }
     >
+      <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-black text-slate-800">성과 분석 기준</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              RT 기본값은 실행전주 7일 ↔ 실행주 7일, 프로모션 기본값은 시작일 기준 전주 동일요일 3일 ↔ 실행 3일입니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={resetAutoAnalysis}
+              className={`rounded-xl px-4 py-2 text-xs font-black ${!manualMode ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+            >
+              자동분석
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualMode(true)}
+              className={`rounded-xl px-4 py-2 text-xs font-black ${manualMode ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+            >
+              사용자 지정
+            </button>
+          </div>
+        </div>
+
+        {manualMode ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-5">
+            <label className="text-xs font-black text-slate-600">
+              비교 시작
+              <input type="date" value={beforeStart} onChange={(e) => setBeforeStart(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            </label>
+            <label className="text-xs font-black text-slate-600">
+              비교 종료
+              <input type="date" value={beforeEnd} onChange={(e) => setBeforeEnd(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            </label>
+            <label className="text-xs font-black text-slate-600">
+              실행 시작
+              <input type="date" value={duringStart} onChange={(e) => setDuringStart(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            </label>
+            <label className="text-xs font-black text-slate-600">
+              실행 종료
+              <input type="date" value={duringEnd} onChange={(e) => setDuringEnd(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            </label>
+            <button
+              type="button"
+              onClick={() => runPerformanceAnalysis(true)}
+              disabled={performanceLoading || !beforeStart || !beforeEnd || !duringStart || !duringEnd}
+              className="rounded-xl bg-purple-700 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
+            >
+              {performanceLoading ? "분석중..." : "성과 분석"}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => runPerformanceAnalysis(false)}
+              disabled={performanceLoading}
+              className="rounded-xl bg-purple-700 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
+            >
+              {performanceLoading ? "분석중..." : "자동 기준 재분석"}
+            </button>
+            <p className="text-xs font-semibold text-slate-500">선택한 시작일/유형 기준으로 최신 Daily_Sales_History를 다시 계산합니다.</p>
+          </div>
+        )}
+      </section>
+
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="실행건수" value={`${fmtNum(selected.count)}건`} />
         <Stat label="추가판매" value={`${fmtNum(selected.addedQty)}개`} colorClass={Number(selected.addedQty || 0) >= 0 ? "text-blue-600" : "text-red-600"} />

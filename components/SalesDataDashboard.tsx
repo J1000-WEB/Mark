@@ -11,10 +11,17 @@ function displayCell(value: any) {
   const s = String(value ?? "").trim();
   if (!s) return "";
   const n = Number(s.replace(/,/g, ""));
-  if (/^-?\d+(\.\d+)?$/.test(s.replace(/,/g, "")) && Number.isFinite(n) && Math.abs(n) >= 1000) {
-    return Math.round(n).toLocaleString("ko-KR");
+  if (/^-?\d+(\.\d+)?$/.test(s.replace(/,/g, "")) && Number.isFinite(n)) {
+    if (Math.abs(n) > 0 && Math.abs(n) < 1) return `${Math.round(n * 1000) / 10}%`;
+    if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString("ko-KR");
+    if (!Number.isInteger(n)) return (Math.round(n * 10) / 10).toLocaleString("ko-KR");
   }
   return s;
+}
+
+function isNumeric(value: any) {
+  const s = String(value ?? "").trim().replace(/,/g, "");
+  return /^-?\d+(\.\d+)?$/.test(s);
 }
 
 export default function SalesDataDashboard() {
@@ -24,9 +31,11 @@ export default function SalesDataDashboard() {
   const [rows, setRows] = useState<any[][]>([]);
   const [sheetName, setSheetName] = useState("");
   const [status, setStatus] = useState("불러오는 중...");
+  const [sources, setSources] = useState<any>({});
+  const [meta, setMeta] = useState<any>({});
 
   async function load(nextWeek = week, nextType = type) {
-    setStatus("불러오는 중...");
+    setStatus("MARK 데이터로 판매데이터 생성 중...");
     const params = new URLSearchParams();
     if (nextWeek) params.set("week", nextWeek);
     params.set("type", nextType);
@@ -42,7 +51,9 @@ export default function SalesDataDashboard() {
     setType(data.type === "color" ? "color" : "style");
     setRows(data.rows || []);
     setSheetName(data.sheetName || "");
-    setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}행 × ${data.colCount || 0}열` : "판매데이터 시트를 찾지 못했습니다.");
+    setSources(data.sources || {});
+    setMeta(data || {});
+    setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}개 상품 · ${data.colCount || 0}열` : "판매데이터를 생성하지 못했습니다.");
   }
 
   useEffect(() => {
@@ -53,11 +64,14 @@ export default function SalesDataDashboard() {
 
   return (
     <main className="min-h-screen p-6">
-      <div className="mx-auto max-w-[1800px] space-y-6">
+      <div className="mx-auto max-w-[1900px] space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">판매데이터</h1>
-            <p className="mt-1 text-sm text-slate-500">주간판매데이터 엑셀의 품번/컬러 탭을 웹 화면에서 전체 펼침으로 확인합니다.</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight">판매데이터</h1>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0</span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">주간판매데이터 엑셀을 MARK_DB / MARK_HISTORY 수치로 자동 생성합니다.</p>
             <p className="mt-1 text-xs font-semibold text-blue-600">{status}</p>
           </div>
           <NavTabs active="sales-data" />
@@ -71,12 +85,13 @@ export default function SalesDataDashboard() {
                 key={w.week}
                 type="button"
                 onClick={() => load(w.week, type)}
+                title={`분석 ${w.analysisLabel} / 비교 ${w.compareLabel}`}
                 className={cls(
                   "rounded-xl px-4 py-2 text-xs font-black transition",
                   week === w.week ? "bg-slate-900 text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
                 )}
               >
-                {w.week}
+                {w.label || w.week}
               </button>
             ))}
             <div className="ml-auto flex rounded-xl border border-slate-200 bg-slate-50 p-1">
@@ -84,31 +99,44 @@ export default function SalesDataDashboard() {
               <button type="button" onClick={() => load(week, "color")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "color" ? "bg-blue-600 text-white" : "text-slate-600")}>컬러</button>
             </div>
           </div>
+          <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600 md:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 px-3 py-2">분석기간: <b className="text-slate-900">{meta.analysisLabel || "-"}</b></div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-2">비교기간: <b className="text-slate-900">{meta.compareLabel || "-"}</b></div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: {sources.sales || "-"} / 재고: {sources.stock || "-"}</div>
+          </div>
         </section>
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="max-h-[calc(100vh-260px)] overflow-auto">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-sm font-black text-slate-800">{sheetName || "판매데이터"}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">초기 버전은 엑셀과 동일하게 전체 컬럼을 펼쳐서 보여줍니다. 이후 필요 없는 컬럼은 접거나 줄이면 됩니다.</p>
+          </div>
+          <div className="max-h-[calc(100vh-300px)] overflow-auto">
             {!rows.length ? (
               <div className="p-12 text-center text-sm font-semibold text-slate-500">표시할 판매데이터가 없습니다.</div>
             ) : (
               <table className="min-w-max border-collapse text-[11px] leading-tight">
                 <tbody>
                   {rows.map((row, r) => (
-                    <tr key={r} className={r < 6 ? "bg-slate-100 font-black" : r % 2 ? "bg-white" : "bg-slate-50/40"}>
-                      {Array.from({ length: maxCols }).map((_, c) => (
-                        <td
-                          key={c}
-                          className={cls(
-                            "max-w-[180px] whitespace-nowrap border border-slate-200 px-2 py-1 align-middle",
-                            c < 2 ? "sticky left-0 z-10 bg-inherit" : "",
-                            r < 6 ? "text-center text-slate-900" : "text-slate-700",
-                            c >= 2 && /^-?\d/.test(String(row[c] ?? "")) ? "text-right tabular-nums" : ""
-                          )}
-                          title={String(row[c] ?? "")}
-                        >
-                          {displayCell(row[c])}
-                        </td>
-                      ))}
+                    <tr key={r} className={r < 7 ? "bg-slate-100 font-black" : r % 2 ? "bg-white" : "bg-slate-50/40"}>
+                      {Array.from({ length: maxCols }).map((_, c) => {
+                        const value = row[c];
+                        const sticky = type === "color" ? c === 0 : c === 7;
+                        return (
+                          <td
+                            key={c}
+                            className={cls(
+                              "max-w-[190px] whitespace-nowrap border border-slate-200 px-2 py-1 align-middle",
+                              sticky ? "sticky left-0 z-10 bg-inherit" : "",
+                              r < 7 ? "text-center text-slate-900" : "text-slate-700",
+                              isNumeric(value) ? "text-right tabular-nums" : ""
+                            )}
+                            title={String(value ?? "")}
+                          >
+                            {displayCell(value)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

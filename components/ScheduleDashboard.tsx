@@ -439,36 +439,6 @@ export default function ScheduleDashboard() {
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-black">전체 일정 목록</h2>
-          <div className="mt-4 max-h-[420px] overflow-x-auto overflow-y-auto">
-            <table className="min-w-full text-left text-xs">
-              <thead className="sticky top-0 bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">시작일</th>
-                  <th className="px-3 py-2">종료일</th>
-                  <th className="px-3 py-2">대분류</th>
-                  <th className="px-3 py-2">성명</th>
-                  <th className="px-3 py-2">구분</th>
-                  <th className="px-3 py-2">내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEvents.map((event: any) => (
-                  <tr key={`table-${event.id}`} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-bold">{event.startDate}</td>
-                    <td className="px-3 py-2 font-bold">{event.endDate}</td>
-                    <td className="px-3 py-2"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${categoryClass(event.category)}`}>{event.largeCategory || event.categoryLabel}</span></td>
-                    <td className="px-3 py-2 font-bold">{event.person || "-"}</td>
-                    <td className="px-3 py-2 font-bold">{event.group}</td>
-                    <td className="px-3 py-2 text-slate-600">{event.content || event.title}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-black">4.80 운영 메모</h2>
           <div className="mt-3 grid gap-3 text-sm font-semibold leading-6 text-slate-600 md:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 p-4">자동 Snapshot: 매일 12:00 Daily_Sales_History 저장</div>

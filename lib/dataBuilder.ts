@@ -43,9 +43,22 @@ function isShop(storeName: string) {
 }
 
 function isExcludedStore(storeName: string) {
+  const raw = String(storeName || "").trim();
+  const lower = raw.toLowerCase();
   const key = normalizeStoreKey(storeName);
   // 포시즌 아울렛은 프로젝트성 매장이라 핵심 매장 호조/부진/랭킹/합산에서 제외합니다.
-  return key.includes("포시즌아울렛") || key.includes("포시즌");
+  // 주간/일간 매출 집계에서 글로벌_ / 기타_ 채널은 오프라인 매출이 아니므로 제외합니다.
+  return (
+    key.includes("포시즌아울렛") ||
+    key.includes("포시즌") ||
+    raw.startsWith("글로벌_") ||
+    raw.startsWith("기타_") ||
+    lower.startsWith("global_") ||
+    lower.startsWith("etc_") ||
+    key === "기타" ||
+    key.startsWith("기타") ||
+    key.includes("글로벌")
+  );
 }
 
 function isOnlineChannel(storeName: string) {
@@ -2020,6 +2033,164 @@ async function loadDashboardDailyHistory() {
   return { sheetName, rows: parseDailyHistoryRows(values || []) };
 }
 
+function isOfflineTeamValue(value: any) {
+  return normalizeStoreKey(text(value)).includes("오프라인팀");
+}
+
+function isNonOfflineDailyChannel(channelName: string, teamName = "") {
+  const raw = text(channelName);
+  const team = text(teamName);
+  const key = normalizeStoreKey(raw);
+  const teamKey = normalizeStoreKey(team);
+  return (
+    isOnlineChannel(raw) ||
+    isExcludedStore(raw) ||
+    teamKey.includes("온라인") ||
+    teamKey.includes("글로벌") ||
+    teamKey.includes("기타") ||
+    key.includes("온라인") ||
+    key.includes("글로벌") ||
+    key === "기타" ||
+    key.startsWith("기타")
+  );
+}
+
+function parseDailySalesSheetRows(rows: any[][]) {
+  if (!rows.length) return [] as any[];
+
+  const metaLimit = Math.min(rows.length, 20);
+  let teamRow = -1;
+  for (let r = 0; r < metaLimit; r++) {
+    const count = (rows[r] || []).filter((cell) => isOfflineTeamValue(cell)).length;
+    if (count >= 1) {
+      teamRow = r;
+      break;
+    }
+  }
+  if (teamRow < 0) return [] as any[];
+
+  const channelNameRow = Math.max(0, teamRow - 1);
+  const channelCodeRow = Math.max(0, teamRow - 2);
+  const team = rows[teamRow] || [];
+  const channelNames = rows[channelNameRow] || [];
+  const channelCodes = rows[channelCodeRow] || [];
+
+  const targetCols: { col: number; storeName: string; channelCode: string; teamName: string }[] = [];
+  for (let c = 7; c < Math.max(team.length, channelNames.length, channelCodes.length); c++) {
+    const teamName = text(team[c]);
+    if (!isOfflineTeamValue(teamName)) continue;
+    const rawName = text(channelNames[c]) || text(channelCodes[c]);
+    if (!rawName || isNonOfflineDailyChannel(rawName, teamName)) continue;
+    const storeName = displayStoreName(rawName);
+    if (!storeName || storeName === "합계" || storeName === "채널명") continue;
+    targetCols.push({ col: c, storeName, channelCode: text(channelCodes[c]), teamName });
+  }
+
+  if (!targetCols.length) return [] as any[];
+
+  const records: any[] = [];
+  for (let r = teamRow + 1; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const first = text(row[0]);
+    const second = text(row[1]);
+    const date = normalizeDateKey(first) || normalizeDateKey(second);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    for (const colInfo of targetCols) {
+      const amount = num(row[colInfo.col]);
+      if (!amount) continue;
+      records.push({
+        date,
+        storeName: colInfo.storeName,
+        storeKey: normalizeStoreKey(colInfo.storeName),
+        amount,
+        channelCode: colInfo.channelCode,
+        teamName: colInfo.teamName,
+      });
+    }
+  }
+
+  return records;
+}
+
+async function loadDailyStoreSalesFromMarkDb() {
+  const dbId = getDbSheetId();
+  const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
+  const sheetName = pickNormalizedTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "일간매출(26년)");
+  if (!sheetName || !titles.includes(sheetName)) return { sheetName: "", rows: [] as any[] };
+  const values = await getSheetValuesById(dbId, sheetName, "A:ZZ").catch(() => []);
+  return { sheetName, rows: parseDailySalesSheetRows(values || []) };
+}
+
+function latestStoreSalesDate(rows: any[]) {
+  return [...new Set(rows.map((r: any) => r.date).filter(Boolean))].sort().pop() || "";
+}
+
+function sumStoreSalesRows(rows: any[], storeName: string, dates: Set<string>) {
+  return rows
+    .filter((r: any) => r.storeName === storeName && dates.has(r.date))
+    .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+}
+
+function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "") {
+  if (!currentDate) return null as any;
+
+  const currentWeek = weekWindow(currentDate, 0);
+  const prevWeek = weekWindow(currentDate, -1);
+  const currentMonthStart = firstDayOfMonth(currentDate);
+  const currentMonthEnd = currentDate;
+  const prevMonth = previousMonthKey(currentDate);
+  const prevMonthStart = prevMonth ? `${prevMonth}-01` : "";
+  const prevMonthEnd = prevMonthStart ? lastDayOfMonth(prevMonthStart) : "";
+
+  const dayDates = new Set([currentDate]);
+  const compareDayDates = new Set([compareDate || dateAddDays(currentDate, -7)]);
+  const weekDates = new Set(currentWeek.dates);
+  const prevWeekDates = new Set(prevWeek.dates);
+  const monthDates = new Set(dateRange(currentMonthStart, currentMonthEnd));
+  const prevMonthDates = new Set(dateRange(prevMonthStart, prevMonthEnd));
+  const stores = [...new Set(rows.map((r: any) => r.storeName).filter(Boolean))].sort();
+
+  const makeRows = (dates: Set<string>) => stores.map((storeName) => {
+    const daySales = sumStoreSalesRows(rows, storeName, dayDates);
+    const weekSales = sumStoreSalesRows(rows, storeName, dates);
+    const monthSales = sumStoreSalesRows(rows, storeName, monthDates);
+    return {
+      storeName,
+      dayTarget: 0,
+      daySales,
+      dayRate: 0,
+      weekTarget: 0,
+      weekSales,
+      weekRate: 0,
+      monthBaseTarget: 0,
+      monthTarget: 0,
+      monthSales,
+      monthRateA: 0,
+      monthRate: 0,
+      yearTarget: 0,
+      yearSales: monthSales,
+      yearRate: 0,
+    };
+  }).filter((r) => Number(r.daySales || 0) || Number(r.weekSales || 0) || Number(r.monthSales || 0));
+
+  return {
+    dailyCur: makeRows(dayDates),
+    dailyCmp: makeRows(compareDayDates),
+    weeklyCur: makeRows(weekDates),
+    weeklyCmp: makeRows(prevWeekDates),
+    monthCur: makeRows(monthDates),
+    monthCmp: makeRows(prevMonthDates),
+    monthYear: [],
+    currentWeek,
+    prevWeek,
+    currentMonthStart,
+    currentMonthEnd,
+    prevMonthStart,
+    prevMonthEnd,
+  };
+}
+
 export async function buildDashboardDataFromGoogleSheet() {
   const titles = await getSpreadsheetTitles();
 
@@ -2039,16 +2210,24 @@ export async function buildDashboardDataFromGoogleSheet() {
   const historyRowsAll = history.rows || [];
   const historyRows = historyRowsAll.filter((r: any) => isOfflineSalesStore(r.storeName));
   const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
-  const currentDate = latestHistoryDate(historyRows);
 
-  const historyStores = buildHistoryStoreRows(historyRows, currentDate);
-  const dailyCur = historyStores.dailyCur;
-  const dailyCmp = historyStores.dailyCmp;
-  const weeklyCur = historyStores.weeklyCur;
-  const weeklyCmp = historyStores.weeklyCmp;
-  const monthCur = historyStores.monthCur;
-  const monthCmp = historyStores.monthCmp;
-  const monthYear = historyStores.monthYear;
+  // MARK 5.0 final:
+  // 점포별 일/주/월 매출은 MARK_DB의 `일간매출(26년)` 시트를 우선 사용합니다.
+  // 왼쪽 A~G 합산 영역은 제외하고 H열 이후의 `오프라인팀` 채널만 집계합니다.
+  const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
+  const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
+  const currentDate = latestStoreSalesDate(dailyStoreRows) || latestHistoryDate(historyRows);
+
+  const historyStores = dailyStoreRows.length
+    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate)
+    : buildHistoryStoreRows(historyRows, currentDate);
+  const dailyCur = historyStores?.dailyCur || [];
+  const dailyCmp = historyStores?.dailyCmp || [];
+  const weeklyCur = historyStores?.weeklyCur || [];
+  const weeklyCmp = historyStores?.weeklyCmp || [];
+  const monthCur = historyStores?.monthCur || [];
+  const monthCmp = historyStores?.monthCmp || [];
+  const monthYear = historyStores?.monthYear || [];
 
   // 상품/재고CTRL은 실재고와 제안 로직 때문에 현재 ERP 보조 데이터를 유지합니다.
   const productRowsRaw = parseProducts(values[productSheet] || []);
@@ -2099,6 +2278,9 @@ export async function buildDashboardDataFromGoogleSheet() {
       sheetName: history.sheetName,
       latestDate: currentDate,
       rows: historyRows.length,
+      storeSalesSheetName: dailyStoreSales.sheetName || "",
+      storeSalesRows: dailyStoreRows.length,
+      storeSalesSource: dailyStoreRows.length ? "일간매출(26년)" : "Daily_Sales_History fallback",
     },
     daily: {
       periodLabel: `기준일자: ${currentDate || "Daily_Sales_History 없음"} / Daily_Sales_History 기준`,

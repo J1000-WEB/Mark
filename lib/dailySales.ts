@@ -65,9 +65,24 @@ function toDateText(value: any) {
   return s || ymdKST();
 }
 
+function isExcludedSalesChannel(channelName: string) {
+  const raw = text(channelName);
+  const s = raw.toLowerCase();
+  return (
+    raw.startsWith("글로벌_") ||
+    raw.startsWith("기타_") ||
+    s.startsWith("글로벌_") ||
+    s.startsWith("기타_") ||
+    s.includes("글로벌") ||
+    s === "기타" ||
+    s.startsWith("기타")
+  );
+}
+
 function isOnlineChannel(channelName: string) {
   const s = text(channelName).toLowerCase();
   return (
+    isExcludedSalesChannel(channelName) ||
     s.startsWith("온라인") ||
     s.includes("무신사") ||
     s.includes("29cm") ||
@@ -105,7 +120,7 @@ function buildChannelBlocks(row2: any[], row3: any[]) {
 
     if (normalize(row3[c]) === normalize("일간")) {
       const channelName = currentChannel;
-      if (isSummaryChannel(channelName)) continue;
+      if (isSummaryChannel(channelName) || isExcludedSalesChannel(channelName)) continue;
 
       const weeklyCol = normalize(row3[c + 1]) === normalize("주간") ? c + 1 : -1;
       const cumulativeCol = normalize(row3[c + 2]) === normalize("누적") ? c + 2 : -1;

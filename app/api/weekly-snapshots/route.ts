@@ -46,6 +46,15 @@ function makeId() {
 
 function parseDateText(value: any) {
   const s = text(value);
+  const korean = s.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(AM|PM|오전|오후)?\s*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?/i);
+  if (korean) {
+    let hour = Number(korean[5] || 0);
+    const ampm = korean[4] || "";
+    if ((ampm === "PM" || ampm === "오후") && hour < 12) hour += 12;
+    if ((ampm === "AM" || ampm === "오전") && hour === 12) hour = 0;
+    const d = new Date(Number(korean[1]), Number(korean[2]) - 1, Number(korean[3]), hour, Number(korean[6] || 0), Number(korean[7] || 0));
+    return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  }
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }

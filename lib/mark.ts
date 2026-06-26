@@ -38,7 +38,9 @@ export function isShopInShop(storeName: string) {
 
 export function isOfflineDashboardStore(storeName: string) {
   const s = String(storeName || "").trim();
+  const key = s.replace(/[\s_\-·.()]/g, "").toLowerCase();
   if (!s || s === "합계" || s === "채널명") return false;
+  if (s.startsWith("글로벌_") || s.startsWith("기타_") || key.includes("글로벌") || key === "기타" || key.startsWith("기타")) return false;
   return !isOnlineChannel(s);
 }
 

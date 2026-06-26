@@ -28,6 +28,29 @@ function dayName(date: Date) {
   return ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
 }
 
+function normalizeWeatherText(raw: any) {
+  const value = text(raw).toLowerCase();
+  if (!value || value === '-') return '-';
+
+  const rules: Array<[RegExp, string]> = [
+    [/thunder|천둥|뇌우/, "⛈️ 뇌우"],
+    [/snow|sleet|눈|진눈깨비/, "❄️ 눈"],
+    [/shower|소나기/, "⛈ 소나기"],
+    [/rain|drizzle|비|실 비|가벼운 비|약한 비/, "🌧 비"],
+    [/mist|fog|haze|박무|안개|연무/, "🌫 안개"],
+    [/clear|맑음/, "☀️ 맑음"],
+    [/few clouds|구름조금/, "🌤 구름조금"],
+    [/scattered clouds|broken clouds|튼구름|구름 많/, "⛅ 구름많음"],
+    [/overcast clouds|clouds|온흐림|흐림/, "☁️ 흐림"],
+  ];
+
+  for (const [pattern, label] of rules) {
+    if (pattern.test(value)) return label;
+  }
+
+  return text(raw) || '-';
+}
+
 function monthTitle(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 }
@@ -392,17 +415,17 @@ export default function ScheduleDashboard() {
                 {days.map((day) => {
                   const key = ymd(day);
                   const weather = weatherByDate.get(key);
+                  const displayWeather = weather ? normalizeWeatherText(weather.weather) : "-";
                   const tooltip = weather
-                    ? `구분: ${weather.source === "actual" ? "전일 확정" : "예보"}\n날씨: ${weather.weather || "-"}\n최고기온: ${weather.maxTemp ?? "-"}℃\n최저기온: ${weather.minTemp ?? "-"}℃\n강수확률: ${weather.rainChance ?? "-"}%\n강수량: ${weather.rainMm ?? "-"}mm\n습도: ${weather.humidity ?? "-"}%\n풍속: ${weather.windSpeed ?? "-"}m/s\n저장시간: ${weather.savedAt || "-"}`
+                    ? `구분: ${weather.source === "actual" ? "전일 확정" : "예보"}\n날씨: ${displayWeather}\n최고기온: ${weather.maxTemp ?? "-"}℃\n최저기온: ${weather.minTemp ?? "-"}℃\n강수확률: ${weather.rainChance ?? "-"}%\n강수량: ${weather.rainMm ?? "-"}mm\n습도: ${weather.humidity ?? "-"}%\n풍속: ${weather.windSpeed ?? "-"}m/s\n저장시간: ${weather.savedAt || "-"}`
                     : "날씨 데이터 없음";
 
                   return (
                     <div key={`weather-${key}`} title={tooltip} className={`min-h-[66px] border-r border-sky-100 p-2 text-center ${day.getDay() === 0 || day.getDay() === 6 ? "bg-sky-100/50" : ""}`}>
                       {weather ? (
                         <>
-                          <p className="text-[11px] font-black text-sky-900">{Math.round(Number(weather.maxTemp || 0))}° / {Math.round(Number(weather.minTemp || 0))}°</p>
-                          <p className="mt-1 truncate text-[11px] font-bold text-sky-700">{weather.weather || "-"}</p>
-                          <p className="mt-1 text-[10px] font-bold text-sky-500">{weather.source === "actual" ? "확정" : "예보"}</p>
+                          <p className="truncate text-[11px] font-black text-sky-900">{displayWeather}</p>
+                          <p className="mt-1 text-[11px] font-bold text-sky-700">{Math.round(Number(weather.maxTemp || 0))}° / {Math.round(Number(weather.minTemp || 0))}°</p>
                         </>
                       ) : (
                         <p className="pt-3 text-[11px] font-bold text-slate-300">-</p>

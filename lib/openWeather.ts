@@ -51,6 +51,29 @@ function round1(v: number) {
   return Math.round(v * 10) / 10;
 }
 
+function normalizeWeatherText(raw: string) {
+  const value = text(raw).toLowerCase();
+  if (!value || value === '-') return '-';
+
+  const rules: Array<[RegExp, string]> = [
+    [/thunder|천둥|뇌우/, "⛈️ 뇌우"],
+    [/snow|sleet|눈|진눈깨비/, "❄️ 눈"],
+    [/shower|소나기/, "⛈ 소나기"],
+    [/rain|drizzle|비|실 비|가벼운 비|약한 비/, "🌧 비"],
+    [/mist|fog|haze|박무|안개|연무/, "🌫 안개"],
+    [/clear|맑음/, "☀️ 맑음"],
+    [/few clouds|구름조금/, "🌤 구름조금"],
+    [/scattered clouds|broken clouds|튼구름|구름 많/, "⛅ 구름많음"],
+    [/overcast clouds|clouds|온흐림|흐림/, "☁️ 흐림"],
+  ];
+
+  for (const [pattern, label] of rules) {
+    if (pattern.test(value)) return label;
+  }
+
+  return raw;
+}
+
 function kstDate(offsetDays = 0) {
   const now = new Date();
   const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
@@ -116,7 +139,7 @@ async function fetchOpenWeatherForecast(): Promise<WeatherRecord[]> {
   url.searchParams.set("q", CITY_QUERY);
   url.searchParams.set("appid", OPENWEATHER_API_KEY);
   url.searchParams.set("units", "metric");
-  url.searchParams.set("lang", "kr");
+  url.searchParams.set("lang", "en");
 
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
@@ -154,7 +177,7 @@ async function fetchOpenWeatherForecast(): Promise<WeatherRecord[]> {
   const savedAt = nowKST();
   return Array.from(grouped.entries())
     .map(([date, bucket]) => {
-      const weather = bucket.weatherTexts.find(Boolean) || "-";
+      const weather = normalizeWeatherText(bucket.weatherTexts.find(Boolean) || "-");
       const avgHumidity = bucket.humidity.length ? bucket.humidity.reduce((a: number, b: number) => a + b, 0) / bucket.humidity.length : 0;
       const avgWind = bucket.wind.length ? bucket.wind.reduce((a: number, b: number) => a + b, 0) / bucket.wind.length : 0;
 

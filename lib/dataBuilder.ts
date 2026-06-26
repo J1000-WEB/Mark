@@ -2177,10 +2177,10 @@ function parseWeeklyTargetRows(rows: any[][]) {
   let yearTargetCol = -1;
 
   for (let c = 0; c < Math.max(header.length, subHeader.length); c++) {
-    const h = normalize(header[c]);
-    const sh = normalize(subHeader[c]);
-    if (h.includes("일실적") && sh === normalize("목표")) dayTargetCol = c;
-    if (h.includes("주실적") && sh === normalize("목표")) weekTargetCol = c;
+    const h = normalizedHeader(header[c]);
+    const sh = normalizedHeader(subHeader[c]);
+    if (h.includes("일실적") && sh === normalizedHeader("목표")) dayTargetCol = c;
+    if (h.includes("주실적") && sh === normalizedHeader("목표")) weekTargetCol = c;
     if (h.includes("월판매") && sh.includes("월누적목표")) monthTargetCol = c;
     if (h.includes("월판매") && sh.includes("기준일목표")) monthBaseTargetCol = c;
     if (h.includes("년실적") && sh.includes("년목표")) yearTargetCol = c;

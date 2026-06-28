@@ -91,6 +91,7 @@ export default function SalesDataDashboard() {
   const [sources, setSources] = useState<any>({});
   const [meta, setMeta] = useState<any>({});
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
+  const [showStores, setShowStores] = useState(false);
 
   async function load(nextWeek = week, nextType = type) {
     setStatus("MARK 데이터로 판매데이터 생성 중...");
@@ -112,6 +113,7 @@ export default function SalesDataDashboard() {
     setSources(data.sources || {});
     setMeta(data || {});
     setSort(null);
+    setShowStores(false);
     setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}개 상품 · ${data.colCount || 0}열` : "판매데이터를 생성하지 못했습니다.");
   }
 
@@ -128,6 +130,18 @@ export default function SalesDataDashboard() {
     const idx = group.findIndex((x) => rawString(x) === "금액판매");
     return idx >= 0 ? idx : headers.findIndex((x) => rawString(x) === "주간");
   }, [rows, headers]);
+
+  const storeStartCol = useMemo(() => {
+    const group = rows[2] || [];
+    const idx = group.findIndex((x) => rawString(x).includes("점포별"));
+    return idx >= 0 ? idx : maxCols;
+  }, [rows, maxCols]);
+
+  const visibleColIndices = useMemo(() => {
+    return Array.from({ length: maxCols })
+      .map((_, i) => i)
+      .filter((i) => showStores || i < storeStartCol);
+  }, [maxCols, showStores, storeStartCol]);
 
   const visibleRows = useMemo(() => {
     if (!rows.length) return [];
@@ -185,7 +199,17 @@ export default function SalesDataDashboard() {
                 {w.label || w.week}
               </button>
             ))}
-            <div className="ml-auto flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setShowStores((v) => !v)}
+              className={cls(
+                "ml-auto rounded-xl px-4 py-2 text-xs font-black transition",
+                showStores ? "bg-emerald-600 text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
+              )}
+            >
+              {showStores ? "점포별 판매/재고 접기" : "점포별 판매/재고 펼치기"}
+            </button>
+            <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button type="button" onClick={() => load(week, "style")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "style" ? "bg-blue-600 text-white" : "text-slate-600")}>품번</button>
               <button type="button" onClick={() => load(week, "color")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "color" ? "bg-blue-600 text-white" : "text-slate-600")}>컬러</button>
             </div>
@@ -195,14 +219,14 @@ export default function SalesDataDashboard() {
             <div className="rounded-2xl bg-slate-50 px-3 py-2">비교기간: <b className="text-slate-900">{meta.compareLabel || "-"}</b></div>
             <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-emerald-800">총판매금액: <b>{displayCell(totalAmount)}</b></div>
             <div className="rounded-2xl bg-blue-50 px-3 py-2 text-blue-800">총판매수량: <b>{displayCell(totalQty)}</b></div>
-            <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: {sources.sales || "-"} / 재고: {sources.stock || "-"}</div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: {sources.sales || "-"} / 가격: {sources.weeklyPrice || "-"} / 재고: {sources.stock || "-"}</div>
           </div>
         </section>
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
             <p className="text-sm font-black">{sheetName || "판매데이터"}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더를 클릭하면 오름차순/내림차순으로 정렬됩니다.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더 클릭 정렬, 점포별 판매/재고 접기·펼치기를 지원합니다.</p>
           </div>
           <div className="max-h-[calc(100vh-300px)] overflow-auto">
             {!rows.length ? (
@@ -225,7 +249,7 @@ export default function SalesDataDashboard() {
                           r >= dataStartIndex ? (r % 2 ? "bg-white" : "bg-slate-50/70") : ""
                         )}
                       >
-                        {Array.from({ length: maxCols }).map((_, c) => {
+                        {visibleColIndices.map((c) => {
                           const value = row[c];
                           const header = headers[c] || "";
                           const sortMark = sort?.col === c ? (sort.dir === "desc" ? "▼" : "▲") : "⇅";

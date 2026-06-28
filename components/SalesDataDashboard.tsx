@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 
 type SortDir = "asc" | "desc";
+type GroupState = Record<string, boolean>;
 
 function cls(...items: string[]) {
   return items.filter(Boolean).join(" ");
@@ -91,7 +92,7 @@ export default function SalesDataDashboard() {
   const [sources, setSources] = useState<any>({});
   const [meta, setMeta] = useState<any>({});
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
-  const [showStores, setShowStores] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<GroupState>({ "점포별 판매/재고": true });
   const [query, setQuery] = useState("");
 
   async function load(nextWeek = week, nextType = type) {
@@ -114,7 +115,7 @@ export default function SalesDataDashboard() {
     setSources(data.sources || {});
     setMeta(data || {});
     setSort(null);
-    setShowStores(false);
+    setCollapsedGroups({ "점포별 판매/재고": true });
     setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}개 상품 · ${data.colCount || 0}열` : "판매데이터를 생성하지 못했습니다.");
   }
 
@@ -138,11 +139,42 @@ export default function SalesDataDashboard() {
     return idx >= 0 ? idx : maxCols;
   }, [rows, maxCols]);
 
+  const columnGroups = useMemo(() => {
+    const group = rows[2] || [];
+    const groups: { name: string; start: number; end: number }[] = [];
+    for (let i = 0; i < maxCols; i++) {
+      const name = rawString(group[i]);
+      if (!name) continue;
+      groups.push({ name, start: i, end: maxCols });
+    }
+    for (let i = 0; i < groups.length; i++) {
+      groups[i].end = i + 1 < groups.length ? groups[i + 1].start : maxCols;
+    }
+    return groups;
+  }, [rows, maxCols]);
+
+  const groupByColumn = useMemo(() => {
+    const map = new Map<number, { name: string; start: number; end: number }>();
+    columnGroups.forEach((group) => {
+      for (let i = group.start; i < group.end; i++) map.set(i, group);
+    });
+    return map;
+  }, [columnGroups]);
+
+  function toggleGroup(name: string) {
+    setCollapsedGroups((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
+
   const visibleColIndices = useMemo(() => {
     return Array.from({ length: maxCols })
       .map((_, i) => i)
-      .filter((i) => showStores || i < storeStartCol);
-  }, [maxCols, showStores, storeStartCol]);
+      .filter((i) => {
+        if (i === 0) return true;
+        const group = groupByColumn.get(i);
+        if (!group) return true;
+        return !collapsedGroups[group.name] || i === group.start;
+      });
+  }, [maxCols, collapsedGroups, groupByColumn]);
 
   const visibleRows = useMemo(() => {
     if (!rows.length) return [];
@@ -179,7 +211,7 @@ export default function SalesDataDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">판매데이터</h1>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0.4</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0.5</span>
             </div>
             <p className="mt-1 text-sm text-slate-500">주간판매데이터 엑셀을 MARK_DB / MARK_HISTORY 수치로 자동 생성합니다.</p>
             <p className="mt-1 text-xs font-semibold text-blue-600">{status}</p>
@@ -215,16 +247,22 @@ export default function SalesDataDashboard() {
                 <button type="button" onClick={() => setQuery("")} className="text-xs font-black text-slate-400 hover:text-slate-700">×</button>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => setShowStores((v) => !v)}
-              className={cls(
-                "rounded-xl px-4 py-2 text-xs font-black transition",
-                showStores ? "bg-emerald-600 text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
-              )}
-            >
-              {showStores ? "점포별 판매/재고 접기" : "점포별 판매/재고 펼치기"}
-            </button>
+            <div className="flex flex-wrap gap-1">
+              {columnGroups.filter((g) => g.name).map((g) => (
+                <button
+                  key={g.name}
+                  type="button"
+                  onClick={() => toggleGroup(g.name)}
+                  className={cls(
+                    "rounded-xl px-3 py-2 text-[11px] font-black transition",
+                    collapsedGroups[g.name] ? "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white" : "bg-emerald-600 text-white"
+                  )}
+                  title={`${g.name} 컬럼 ${collapsedGroups[g.name] ? "펼치기" : "접기"}`}
+                >
+                  {collapsedGroups[g.name] ? "＋" : "－"} {g.name}
+                </button>
+              ))}
+            </div>
             <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button type="button" onClick={() => load(week, "style")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "style" ? "bg-blue-600 text-white" : "text-slate-600")}>품번</button>
               <button type="button" onClick={() => load(week, "color")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "color" ? "bg-blue-600 text-white" : "text-slate-600")}>컬러</button>
@@ -242,7 +280,7 @@ export default function SalesDataDashboard() {
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
             <p className="text-sm font-black">{sheetName || "판매데이터"}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더 클릭 정렬, 검색, 점포별 판매/재고 접기·펼치기를 지원합니다.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더 클릭 정렬, 검색, 컬럼 그룹 접기·펼치기를 지원합니다.</p>
           </div>
           <div className="max-h-[calc(100vh-300px)] overflow-auto">
             {!rows.length ? (
@@ -288,6 +326,16 @@ export default function SalesDataDashboard() {
                                   <span>{displayCell(value)}</span>
                                   <span className={cls("text-[9px]", sort?.col === c ? "text-yellow-300" : "text-slate-400")}>{sortMark}</span>
                                 </span>
+                              ) : isGroup && rawString(value) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(rawString(value))}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-white/80 px-2 py-1 text-[10px] font-black text-blue-800 shadow-sm ring-1 ring-blue-200 hover:bg-blue-50"
+                                  title={`${rawString(value)} 컬럼 ${collapsedGroups[rawString(value)] ? "펼치기" : "접기"}`}
+                                >
+                                  <span>{collapsedGroups[rawString(value)] ? "＋" : "－"}</span>
+                                  <span>{displayCell(value)}</span>
+                                </button>
                               ) : header === "순위" && r >= dataStartIndex ? (
                                 rankLabel(value)
                               ) : (

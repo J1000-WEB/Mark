@@ -342,32 +342,40 @@ function buildExcelLikeRows(args: {
   const amount = ["주간", "2주전", "비중"];
   const qty = ["주간", "2주전", "3주전", "4주전"];
   const stock = ["총재고", "물류", "물류(온)", "물류(오프)", "점포"];
-  const headers = [...prefix, ...lifecycle, ...ranking, ...amount, ...qty, ...stock, ...stores];
+  const headers = ["순위", ...prefix, ...lifecycle, ...ranking, ...amount, ...qty, ...stock, ...stores];
 
   const groupRow = Array(headers.length).fill("");
   groupRow[1] = "카테고리";
-  groupRow[type === "color" ? 9 : 7] = "상품현황";
-  groupRow[type === "color" ? 14 : 11] = "상품가격";
-  groupRow[prefix.length] = "제품라이프사이클";
-  groupRow[prefix.length + lifecycle.length] = "랭킹";
-  groupRow[prefix.length + lifecycle.length + ranking.length] = "금액판매";
-  groupRow[prefix.length + lifecycle.length + ranking.length + amount.length] = "수량판매";
-  groupRow[prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = "재고";
-  groupRow[prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + stock.length] = "점포별 주간판매수량";
+  groupRow[type === "color" ? 10 : 8] = "상품현황";
+  groupRow[type === "color" ? 15 : 12] = "상품가격";
+  groupRow[1 + prefix.length] = "제품라이프사이클";
+  groupRow[1 + prefix.length + lifecycle.length] = "랭킹";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length] = "금액판매";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length] = "수량판매";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = "재고";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + stock.length] = "점포별 주간판매수량";
 
   const summaryRow = Array(headers.length).fill("");
   const offStockTotal = keys.reduce((sum, key) => sum + (productMap.get(key)?.offlineStock || 0), 0);
   const onStockTotal = keys.reduce((sum, key) => sum + (productMap.get(key)?.onlineStock || 0), 0);
   const totalStock = keys.reduce((sum, key) => sum + (productMap.get(key)?.totalStock || 0), 0);
-  summaryRow[prefix.length + lifecycle.length + ranking.length] = totalAmount;
-  summaryRow[prefix.length + lifecycle.length + ranking.length + amount.length] = totalQty;
-  summaryRow[prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = totalStock;
-  summaryRow[prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 2] = onStockTotal;
-  summaryRow[prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length] = totalAmount;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length] = totalQty;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = totalStock;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 2] = onStockTotal;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
+
+  const titleRow = Array(headers.length).fill("");
+  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0 자동생성`;
+  titleRow[8] = selected.sheetLabel;
+  titleRow[headers.length - 1] = keys.length;
+
+  const periodRow = Array(headers.length).fill("");
+  periodRow[0] = `${selected.label} / 분석 ${selected.analysisLabel} / 비교 ${selected.compareLabel}`;
 
   const rows: Row[] = [
-    ["", `Top Item Sales (Store/WK) · MARK 6.0 자동생성`, "", "", "", "", "", selected.sheetLabel, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", keys.length],
-    [`${selected.label} / 분석 ${selected.analysisLabel} / 비교 ${selected.compareLabel}`, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    titleRow,
+    periodRow,
     groupRow,
     headers,
     Array(headers.length).fill(""),
@@ -389,7 +397,7 @@ function buildExcelLikeRows(args: {
     const planned = soldCume + stockTotal * (p.salePrice || 0);
     const saleRate = ratio(soldCume, planned);
     const markdown = p.salePrice && p.tagPrice ? 1 - p.salePrice / p.tagPrice : 0;
-    const row: Row = [];
+    const row: Row = [rank || ""];
 
     if (type === "color") {
       row.push(`${p.style || ""}${p.color || ""}`, p.year || "", p.season || "", p.itemGroup || "", p.category || "", p.item || "", p.className === "재런칭" ? "재런칭" : "", p.line || "", "", p.style || "", p.color || "", p.styleName || "", p.style ? 1 : 0, p.color ? 1 : 0, p.cost || "", p.tagPrice || "", p.salePrice || "", Math.round((p.salePrice || 0) * 0.9), Math.round((p.salePrice || 0) * 0.8), markdown, "", "");

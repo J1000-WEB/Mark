@@ -63,7 +63,7 @@ function text(v: any) {
 }
 
 function compact(v: any) {
-  return text(v).replace(/\s/g, "");
+  return text(v).replace(/[\s\/_\-·.()]/g, "");
 }
 
 function num(v: any) {
@@ -340,8 +340,13 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     const key = salesKey(style, color, type);
     const stock = num(r[stockCol]);
 
-    const currentQty = num(r[curQtyCol]) || num(r[8]);
-    const currentAmount = num(r[curAmountCol]) || num(r[9]);
+    // 금주/전주 시트는 원본 붙여넣기 영역(I/J)에 수량/금액이 있고,
+    // 우측 금주/전주 계산영역(S:Z)은 수식 재계산 상태에 따라 0 또는 빈값으로 내려올 수 있습니다.
+    // 따라서 계산영역 값이 없으면 원본 수량/금액(I/J)을 금주 판매값으로 사용합니다.
+    const rawQty = num(r[8]);
+    const rawAmount = num(r[9]);
+    const currentQty = num(r[curQtyCol]) || rawQty;
+    const currentAmount = num(r[curAmountCol]) || rawAmount;
     const prevQty = num(r[prevQtyCol]);
     const prevAmount = num(r[prevAmountCol]);
 
@@ -483,7 +488,7 @@ function buildExcelLikeRows(args: {
   summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
 
   const titleRow = Array(headers.length).fill("");
-  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.3 RC 자동생성`;
+  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.4 FIX 자동생성`;
   titleRow[8] = selected.sheetLabel;
   titleRow[headers.length - 1] = keys.length;
 
@@ -618,7 +623,7 @@ export async function GET(req: Request) {
 
     const productRaw = await readFirstAvailableSheet(ids, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
     const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
-    const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주"], "A:AZ");
+    const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
     const productMaps = buildProductMaster(productRaw.rows);
     mergeOnOffStock(stockRaw.rows, productMaps);
 
@@ -645,7 +650,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       mode: "generated",
-      version: "MARK 6.0.3 RC",
+      version: "MARK 6.0.4 FIX",
       type,
       weeks,
       selectedWeek: selected.week,

@@ -1,17 +1,31 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 
+type SortDir = "asc" | "desc";
+
 function cls(...items: string[]) {
   return items.filter(Boolean).join(" ");
 }
 
+function rawString(value: any) {
+  return String(value ?? "").trim();
+}
+
+function toNumber(value: any) {
+  const s = rawString(value).replace(/,/g, "").replace(/%/g, "");
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 function displayCell(value: any) {
-  const s = String(value ?? "").trim();
+  const s = rawString(value);
   if (!s) return "";
-  const n = Number(s.replace(/,/g, ""));
-  if (/^-?\d+(\.\d+)?$/.test(s.replace(/,/g, "")) && Number.isFinite(n)) {
+  const n = toNumber(s);
+  if (n !== null && /^-?\d+(\.\d+)?%?$/.test(s.replace(/,/g, ""))) {
+    if (s.includes("%")) return `${Math.round(n * 10) / 10}%`;
     if (Math.abs(n) > 0 && Math.abs(n) < 1) return `${Math.round(n * 1000) / 10}%`;
     if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString("ko-KR");
     if (!Number.isInteger(n)) return (Math.round(n * 10) / 10).toLocaleString("ko-KR");
@@ -20,8 +34,51 @@ function displayCell(value: any) {
 }
 
 function isNumeric(value: any) {
-  const s = String(value ?? "").trim().replace(/,/g, "");
-  return /^-?\d+(\.\d+)?$/.test(s);
+  return toNumber(value) !== null && /^-?\d+(\.\d+)?%?$/.test(rawString(value).replace(/,/g, ""));
+}
+
+function compareCell(a: any, b: any, dir: SortDir) {
+  const an = toNumber(a);
+  const bn = toNumber(b);
+  let result = 0;
+  if (an !== null && bn !== null) result = an - bn;
+  else result = rawString(a).localeCompare(rawString(b), "ko", { numeric: true, sensitivity: "base" });
+  return dir === "asc" ? result : -result;
+}
+
+function valueTone(header: string, value: any, rowIndex: number) {
+  const h = rawString(header);
+  const n = toNumber(value);
+  if (h === "순위") {
+    if (n === 1) return "bg-amber-100 text-amber-900 font-black";
+    if (n === 2) return "bg-slate-200 text-slate-900 font-black";
+    if (n === 3) return "bg-orange-100 text-orange-900 font-black";
+    if (n !== null && n <= 10) return "bg-blue-50 text-blue-700 font-black";
+    return "text-slate-600 font-bold";
+  }
+  if (h.includes("비중") || h.includes("할인율") || h.includes("판매%") || h.includes("입고%")) {
+    if (n !== null && n > 0) return "text-emerald-700 font-bold";
+  }
+  if (h.includes("등락")) {
+    if (n !== null && n > 0) return "text-emerald-700 font-black";
+    if (n !== null && n < 0) return "text-rose-600 font-black";
+    return "text-slate-400 font-bold";
+  }
+  if (h.includes("재고") || h.includes("물류") || h.includes("점포")) {
+    if (n === 0) return "bg-rose-50 text-rose-700 font-bold";
+    if (n !== null && n <= 5) return "bg-orange-50 text-orange-700 font-bold";
+    if (n !== null && n <= 20) return "bg-yellow-50 text-yellow-700 font-bold";
+  }
+  if (h === "주간" && rowIndex >= 7) return "font-black text-slate-900";
+  return "";
+}
+
+function rankLabel(value: any) {
+  const n = toNumber(value);
+  if (n === 1) return "🥇 1";
+  if (n === 2) return "🥈 2";
+  if (n === 3) return "🥉 3";
+  return displayCell(value);
 }
 
 export default function SalesDataDashboard() {
@@ -33,6 +90,7 @@ export default function SalesDataDashboard() {
   const [status, setStatus] = useState("불러오는 중...");
   const [sources, setSources] = useState<any>({});
   const [meta, setMeta] = useState<any>({});
+  const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
 
   async function load(nextWeek = week, nextType = type) {
     setStatus("MARK 데이터로 판매데이터 생성 중...");
@@ -53,6 +111,7 @@ export default function SalesDataDashboard() {
     setSheetName(data.sheetName || "");
     setSources(data.sources || {});
     setMeta(data || {});
+    setSort(null);
     setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}개 상품 · ${data.colCount || 0}열` : "판매데이터를 생성하지 못했습니다.");
   }
 
@@ -60,10 +119,42 @@ export default function SalesDataDashboard() {
     load("", "style").catch((e) => setStatus(e?.message || "불러오기 실패"));
   }, []);
 
+  const headerRowIndex = 3;
+  const dataStartIndex = 7;
+  const headers = rows[headerRowIndex] || [];
   const maxCols = useMemo(() => Math.max(0, ...rows.map((r) => r.length)), [rows]);
+  const amountCol = useMemo(() => {
+    const group = rows[2] || [];
+    const idx = group.findIndex((x) => rawString(x) === "금액판매");
+    return idx >= 0 ? idx : headers.findIndex((x) => rawString(x) === "주간");
+  }, [rows, headers]);
+
+  const visibleRows = useMemo(() => {
+    if (!rows.length) return [];
+    const top = rows.slice(0, dataStartIndex);
+    let body = rows.slice(dataStartIndex);
+    if (sort) {
+      body = [...body].sort((a, b) => compareCell(a[sort.col], b[sort.col], sort.dir));
+    }
+    return [...top, ...body];
+  }, [rows, sort]);
+
+  function onHeaderClick(col: number) {
+    setSort((prev) => {
+      if (!prev || prev.col !== col) return { col, dir: "desc" };
+      return { col, dir: prev.dir === "desc" ? "asc" : "desc" };
+    });
+  }
+
+  const totalAmount = useMemo(() => rows[5]?.[amountCol] || 0, [rows, amountCol]);
+  const qtyCol = useMemo(() => {
+    const group = rows[2] || [];
+    return group.findIndex((x) => rawString(x) === "수량판매");
+  }, [rows]);
+  const totalQty = useMemo(() => rows[5]?.[qtyCol] || 0, [rows, qtyCol]);
 
   return (
-    <main className="min-h-screen p-6">
+    <main className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto max-w-[1900px] space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -99,17 +190,19 @@ export default function SalesDataDashboard() {
               <button type="button" onClick={() => load(week, "color")} className={cls("rounded-lg px-4 py-2 text-xs font-black", type === "color" ? "bg-blue-600 text-white" : "text-slate-600")}>컬러</button>
             </div>
           </div>
-          <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600 md:grid-cols-3">
+          <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600 md:grid-cols-5">
             <div className="rounded-2xl bg-slate-50 px-3 py-2">분석기간: <b className="text-slate-900">{meta.analysisLabel || "-"}</b></div>
             <div className="rounded-2xl bg-slate-50 px-3 py-2">비교기간: <b className="text-slate-900">{meta.compareLabel || "-"}</b></div>
+            <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-emerald-800">총판매금액: <b>{displayCell(totalAmount)}</b></div>
+            <div className="rounded-2xl bg-blue-50 px-3 py-2 text-blue-800">총판매수량: <b>{displayCell(totalQty)}</b></div>
             <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: {sources.sales || "-"} / 재고: {sources.stock || "-"}</div>
           </div>
         </section>
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-black text-slate-800">{sheetName || "판매데이터"}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">초기 버전은 엑셀과 동일하게 전체 컬럼을 펼쳐서 보여줍니다. 이후 필요 없는 컬럼은 접거나 줄이면 됩니다.</p>
+          <div className="border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
+            <p className="text-sm font-black">{sheetName || "판매데이터"}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더를 클릭하면 오름차순/내림차순으로 정렬됩니다.</p>
           </div>
           <div className="max-h-[calc(100vh-300px)] overflow-auto">
             {!rows.length ? (
@@ -117,28 +210,55 @@ export default function SalesDataDashboard() {
             ) : (
               <table className="min-w-max border-collapse text-[11px] leading-tight">
                 <tbody>
-                  {rows.map((row, r) => (
-                    <tr key={r} className={r < 7 ? "bg-slate-100 font-black" : r % 2 ? "bg-white" : "bg-slate-50/40"}>
-                      {Array.from({ length: maxCols }).map((_, c) => {
-                        const value = row[c];
-                        const sticky = type === "color" ? c === 0 : c === 7;
-                        return (
-                          <td
-                            key={c}
-                            className={cls(
-                              "max-w-[190px] whitespace-nowrap border border-slate-200 px-2 py-1 align-middle",
-                              sticky ? "sticky left-0 z-10 bg-inherit" : "",
-                              r < 7 ? "text-center text-slate-900" : "text-slate-700",
-                              isNumeric(value) ? "text-right tabular-nums" : ""
-                            )}
-                            title={String(value ?? "")}
-                          >
-                            {displayCell(value)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {visibleRows.map((row, r) => {
+                    const isHeader = r === headerRowIndex;
+                    const isGroup = r === 2;
+                    const isSummary = r === 5;
+                    return (
+                      <tr
+                        key={r}
+                        className={cls(
+                          isHeader ? "bg-slate-800 text-white" : "",
+                          isGroup ? "bg-blue-100 font-black text-blue-900" : "",
+                          isSummary ? "bg-emerald-50 font-black text-emerald-900" : "",
+                          !isHeader && !isGroup && !isSummary && r < dataStartIndex ? "bg-slate-100 font-black" : "",
+                          r >= dataStartIndex ? (r % 2 ? "bg-white" : "bg-slate-50/70") : ""
+                        )}
+                      >
+                        {Array.from({ length: maxCols }).map((_, c) => {
+                          const value = row[c];
+                          const header = headers[c] || "";
+                          const sortMark = sort?.col === c ? (sort.dir === "desc" ? "▼" : "▲") : "⇅";
+                          return (
+                            <td
+                              key={c}
+                              onClick={isHeader ? () => onHeaderClick(c) : undefined}
+                              className={cls(
+                                "max-w-[190px] whitespace-nowrap border border-slate-200 px-2 py-1 align-middle",
+                                isHeader ? "sticky top-0 z-20 cursor-pointer select-none border-slate-600 bg-slate-800 text-center font-black text-white hover:bg-slate-700" : "",
+                                r < dataStartIndex && !isHeader ? "text-center" : "text-slate-700",
+                                isNumeric(value) ? "text-right tabular-nums" : "",
+                                r >= dataStartIndex ? valueTone(header, value, r) : "",
+                                c === amountCol && r >= dataStartIndex ? "bg-emerald-50/80" : ""
+                              )}
+                              title={String(value ?? "")}
+                            >
+                              {isHeader ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <span>{displayCell(value)}</span>
+                                  <span className={cls("text-[9px]", sort?.col === c ? "text-yellow-300" : "text-slate-400")}>{sortMark}</span>
+                                </span>
+                              ) : header === "순위" && r >= dataStartIndex ? (
+                                rankLabel(value)
+                              ) : (
+                                displayCell(value)
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

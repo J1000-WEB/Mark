@@ -42,17 +42,33 @@ type SalesAgg = {
   amount: number;
   qty: number;
   byStore: Record<string, number>;
-  byStoreStock?: Record<string, number>;
-  byStoreAmount?: Record<string, number>;
+  byStoreStock: Record<string, number>;
+  byStoreAmount: Record<string, number>;
+};
+
+type WeekInfo = {
+  week: string;
+  label: string;
+  sheetLabel: string;
+  analysisLabel: string;
+  compareLabel: string;
+  analysisStart: string;
+  analysisEnd: string;
+  compareStart: string;
+  compareEnd: string;
 };
 
 function text(v: any) {
   return String(v ?? "").trim();
 }
 
+function compact(v: any) {
+  return text(v).replace(/\s/g, "");
+}
+
 function num(v: any) {
   if (v === null || v === undefined || v === "") return 0;
-  const n = Number(String(v).replace(/,/g, ""));
+  const n = Number(String(v).replace(/,/g, "").replace(/%/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -69,6 +85,8 @@ function parseDate(v: any): Date | null {
   if (Number.isFinite(n) && n > 30000 && n < 70000) return excelSerialToDate(n);
   const m = s.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const md = s.match(/(\d{1,2})[/.](\d{1,2})/);
+  if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2]));
   return null;
 }
 
@@ -115,24 +133,33 @@ function salesKey(style: string, color?: string, type: SalesType = "style") {
 function isOfflineStore(store: string) {
   const s = text(store);
   if (!s) return false;
-  if (s.startsWith("온라인_")) return false;
-  if (s.startsWith("글로벌_")) return false;
-  if (s.startsWith("기타_")) return false;
-  if (s.includes("온라인")) return false;
-  if (s.includes("글로벌")) return false;
-  if (s.includes("직원구매")) return false;
-  if (s.includes("물류")) return false;
+  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_")) return false;
+  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류")) return false;
   return true;
 }
 
 function pickHeaderIndex(header: string[], candidates: string[]) {
-  const normalized = header.map((x) => text(x).replace(/\s/g, ""));
+  const normalized = header.map((x) => compact(x));
   for (const c of candidates) {
     const target = c.replace(/\s/g, "");
     const idx = normalized.findIndex((h) => h === target || h.includes(target));
     if (idx >= 0) return idx;
   }
   return -1;
+}
+
+function emptyAgg(): SalesAgg {
+  return { amount: 0, qty: 0, byStore: {}, byStoreStock: {}, byStoreAmount: {} };
+}
+
+function addAggValue(map: Map<string, SalesAgg>, key: string, patch: Partial<SalesAgg>) {
+  const agg = map.get(key) || emptyAgg();
+  agg.amount += patch.amount || 0;
+  agg.qty += patch.qty || 0;
+  for (const [store, v] of Object.entries(patch.byStore || {})) agg.byStore[store] = (agg.byStore[store] || 0) + v;
+  for (const [store, v] of Object.entries(patch.byStoreAmount || {})) agg.byStoreAmount[store] = (agg.byStoreAmount[store] || 0) + v;
+  for (const [store, v] of Object.entries(patch.byStoreStock || {})) agg.byStoreStock[store] = (agg.byStoreStock[store] || 0) + v;
+  map.set(key, agg);
 }
 
 function buildProductMaster(rows: Row[]) {
@@ -210,12 +237,12 @@ function mergeOnOffStock(rows: Row[], maps: { byStyle: Map<string, ProductMaster
     if (!style) continue;
     const color = text(r[idxColor]);
     const key = salesKey(style, color, "color");
-    const colorEntry = maps.byColor.get(key) || {
+    const colorEntry = maps.byColor.get(key) || ({
       style,
       color,
       styleName: text(r[idxStyleName]),
       colorName: text(r[idxColorName]),
-    } as ProductMaster;
+    } as ProductMaster);
     colorEntry.year ||= text(r[idxYear]);
     colorEntry.season ||= text(r[idxSeason]);
     colorEntry.itemGroup ||= text(r[idxItemGroup]);
@@ -227,10 +254,10 @@ function mergeOnOffStock(rows: Row[], maps: { byStyle: Map<string, ProductMaster
     colorEntry.totalStock = (colorEntry.totalStock || 0) + (idxTotal >= 0 ? num(r[idxTotal]) : num(r[idxStock]));
     colorEntry.onlineStock = (colorEntry.onlineStock || 0) + (idxOnline >= 0 ? num(r[idxOnline]) : 0);
     colorEntry.offlineStock = (colorEntry.offlineStock || 0) + (idxOffline >= 0 ? num(r[idxOffline]) : 0);
-    colorEntry.storeStock = (colorEntry.offlineStock || 0);
+    colorEntry.storeStock = colorEntry.offlineStock || 0;
     maps.byColor.set(key, colorEntry);
 
-    const styleEntry = maps.byStyle.get(style) || { style, styleName: text(r[idxStyleName]) } as ProductMaster;
+    const styleEntry = maps.byStyle.get(style) || ({ style, styleName: text(r[idxStyleName]) } as ProductMaster);
     styleEntry.year ||= colorEntry.year;
     styleEntry.season ||= colorEntry.season;
     styleEntry.itemGroup ||= colorEntry.itemGroup;
@@ -242,44 +269,12 @@ function mergeOnOffStock(rows: Row[], maps: { byStyle: Map<string, ProductMaster
     styleEntry.totalStock = (styleEntry.totalStock || 0) + (idxTotal >= 0 ? num(r[idxTotal]) : num(r[idxStock]));
     styleEntry.onlineStock = (styleEntry.onlineStock || 0) + (idxOnline >= 0 ? num(r[idxOnline]) : 0);
     styleEntry.offlineStock = (styleEntry.offlineStock || 0) + (idxOffline >= 0 ? num(r[idxOffline]) : 0);
-    styleEntry.storeStock = (styleEntry.offlineStock || 0);
+    styleEntry.storeStock = styleEntry.offlineStock || 0;
     maps.byStyle.set(style, styleEntry);
   }
 }
 
-function emptyAgg(): SalesAgg {
-  return { amount: 0, qty: 0, byStore: {}, byStoreStock: {}, byStoreAmount: {} };
-}
-
-function cloneAgg(a?: SalesAgg): SalesAgg {
-  return {
-    amount: a?.amount || 0,
-    qty: a?.qty || 0,
-    byStore: { ...(a?.byStore || {}) },
-    byStoreStock: { ...(a?.byStoreStock || {}) },
-    byStoreAmount: { ...(a?.byStoreAmount || {}) },
-  };
-}
-
-function mergeAgg(base: SalesAgg | undefined, patch: SalesAgg | undefined, options?: { amountFromPatch?: boolean; storesFromPatch?: boolean }) {
-  const out = cloneAgg(base);
-  if (!patch) return out;
-  if (options?.amountFromPatch && patch.amount) out.amount = patch.amount;
-  else if (!out.amount && patch.amount) out.amount = patch.amount;
-  if (!out.qty && patch.qty) out.qty = patch.qty;
-  if (options?.storesFromPatch) {
-    out.byStore = { ...(patch.byStore || {}) };
-    out.byStoreStock = { ...(patch.byStoreStock || {}) };
-    out.byStoreAmount = { ...(patch.byStoreAmount || {}) };
-  } else {
-    for (const [k, v] of Object.entries(patch.byStore || {})) out.byStore[k] = out.byStore[k] || v;
-    for (const [k, v] of Object.entries(patch.byStoreStock || {})) out.byStoreStock![k] = out.byStoreStock![k] || v;
-    for (const [k, v] of Object.entries(patch.byStoreAmount || {})) out.byStoreAmount![k] = out.byStoreAmount![k] || v;
-  }
-  return out;
-}
-
-function aggregateSales(rows: Row[], start: Date, end: Date, type: SalesType) {
+function aggregateSalesQtyOnly(rows: Row[], start: Date, end: Date, type: SalesType) {
   const map = new Map<string, SalesAgg>();
   const stores = new Set<string>();
   const startMs = start.getTime();
@@ -296,25 +291,45 @@ function aggregateSales(rows: Row[], start: Date, end: Date, type: SalesType) {
     const style = text(r[2]);
     const color = text(r[4]);
     if (!style) continue;
-    const key = salesKey(style, color, type);
-    const agg = map.get(key) || emptyAgg();
     const qty = num(r[7]);
-    const amount = num(r[8]);
-    agg.qty += qty;
-    agg.amount += amount;
-    agg.byStore[store] = (agg.byStore[store] || 0) + qty;
-    agg.byStoreAmount![store] = (agg.byStoreAmount![store] || 0) + amount;
-    map.set(key, agg);
+    const key = salesKey(style, color, type);
+    addAggValue(map, key, { qty, byStore: { [store]: qty } });
     stores.add(store);
   }
   return { map, stores };
+}
+
+function findGroupColumn(rows: Row[], groupName: string, headerName: string, fallback: number) {
+  const groupRow = (rows[1] || []).map(text);
+  const headerRow = (rows[2] || []).map(text);
+  const groupStart = groupRow.findIndex((x) => compact(x) === compact(groupName));
+  if (groupStart >= 0) {
+    let groupEnd = headerRow.length;
+    for (let i = groupStart + 1; i < groupRow.length; i++) {
+      if (text(groupRow[i])) {
+        groupEnd = i;
+        break;
+      }
+    }
+    const target = compact(headerName);
+    for (let i = groupStart; i < groupEnd; i++) {
+      if (compact(headerRow[i]) === target || compact(headerRow[i]).includes(target)) return i;
+    }
+  }
+  return fallback;
 }
 
 function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
   const current = new Map<string, SalesAgg>();
   const previous = new Map<string, SalesAgg>();
   const stores = new Set<string>();
-  if (!rows?.length) return { current, previous, stores };
+  if (!rows?.length) return { current, previous, stores, columns: {} };
+
+  const curQtyCol = findGroupColumn(rows, "금주", "합계", 20);
+  const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 21);
+  const prevQtyCol = findGroupColumn(rows, "전주", "합계", 24);
+  const prevAmountCol = findGroupColumn(rows, "전주", "판매금액", 25);
+  const stockCol = 7;
 
   for (const r of rows.slice(3)) {
     const channelName = text(r[1]);
@@ -323,46 +338,44 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     const color = text(r[4]);
     if (!style) continue;
     const key = salesKey(style, color, type);
-    const stock = num(r[7]);
+    const stock = num(r[stockCol]);
 
-    // 금주전주 시트 기준: 금주 S~V, 전주 W~Z. 금주 그룹이 0이면 앞쪽 I/J를 보조로 사용.
-    const currentQty = num(r[20]) || num(r[8]);
-    const currentAmount = num(r[21]) || num(r[9]);
-    const prevQty = num(r[24]);
-    const prevAmount = num(r[25]);
+    const currentQty = num(r[curQtyCol]) || num(r[8]);
+    const currentAmount = num(r[curAmountCol]) || num(r[9]);
+    const prevQty = num(r[prevQtyCol]);
+    const prevAmount = num(r[prevAmountCol]);
 
-    const c = current.get(key) || emptyAgg();
-    c.qty += currentQty;
-    c.amount += currentAmount;
-    c.byStore[channelName] = (c.byStore[channelName] || 0) + currentQty;
-    c.byStoreAmount![channelName] = (c.byStoreAmount![channelName] || 0) + currentAmount;
-    c.byStoreStock![channelName] = (c.byStoreStock![channelName] || 0) + stock;
-    current.set(key, c);
-
-    const p = previous.get(key) || emptyAgg();
-    p.qty += prevQty;
-    p.amount += prevAmount;
-    p.byStore[channelName] = (p.byStore[channelName] || 0) + prevQty;
-    p.byStoreAmount![channelName] = (p.byStoreAmount![channelName] || 0) + prevAmount;
-    p.byStoreStock![channelName] = (p.byStoreStock![channelName] || 0) + stock;
-    previous.set(key, p);
+    addAggValue(current, key, {
+      qty: currentQty,
+      amount: currentAmount,
+      byStore: { [channelName]: currentQty },
+      byStoreAmount: { [channelName]: currentAmount },
+      byStoreStock: { [channelName]: stock },
+    });
+    addAggValue(previous, key, {
+      qty: prevQty,
+      amount: prevAmount,
+      byStore: { [channelName]: prevQty },
+      byStoreAmount: { [channelName]: prevAmount },
+      byStoreStock: { [channelName]: stock },
+    });
     stores.add(channelName);
   }
-  return { current, previous, stores };
+  return { current, previous, stores, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
 }
 
-function combineCurrentSales(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
+function preferQtyFromDailyAndAmountFromPrice(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
   const out = new Map<string, SalesAgg>();
   for (const key of new Set([...daily.keys(), ...price.keys()])) {
-    out.set(key, mergeAgg(daily.get(key), price.get(key), { amountFromPatch: true, storesFromPatch: true }));
-  }
-  return out;
-}
-
-function combinePreviousSales(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
-  const out = new Map<string, SalesAgg>();
-  for (const key of new Set([...daily.keys(), ...price.keys()])) {
-    out.set(key, mergeAgg(daily.get(key), price.get(key), { amountFromPatch: true, storesFromPatch: true }));
+    const d = daily.get(key) || emptyAgg();
+    const p = price.get(key) || emptyAgg();
+    const merged = emptyAgg();
+    merged.qty = d.qty || p.qty;
+    merged.amount = p.amount; // 판매금액/가격은 금주전주 시트 기준. Daily 금액은 상품 가격 계산에 사용하지 않음.
+    merged.byStore = Object.keys(p.byStore).length ? { ...p.byStore } : { ...d.byStore };
+    merged.byStoreAmount = { ...p.byStoreAmount };
+    merged.byStoreStock = { ...p.byStoreStock };
+    out.set(key, merged);
   }
   return out;
 }
@@ -371,7 +384,7 @@ function makeWeeks(salesRows: Row[]) {
   const dates = salesRows.slice(1).map((r) => parseDate(r[0])).filter(Boolean) as Date[];
   const latest = dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : new Date();
   const base = mondayOfWeek(latest);
-  return Array.from({ length: 10 }).map((_, i) => {
+  return Array.from({ length: 12 }).map((_, i) => {
     const monday = addDays(base, -7 * i);
     const analysisStart = addDays(monday, -7);
     const analysisEnd = addDays(monday, -1);
@@ -387,21 +400,36 @@ function makeWeeks(salesRows: Row[]) {
       analysisEnd: isoDate(analysisEnd),
       compareStart: isoDate(compareStart),
       compareEnd: isoDate(compareEnd),
-    };
+    } satisfies WeekInfo;
   });
 }
 
 function rankMap(aggs: Map<string, SalesAgg>) {
-  return new Map([...aggs.entries()].sort((a, b) => b[1].amount - a[1].amount).map(([key], idx) => [key, idx + 1]));
+  const sorted = [...aggs.entries()]
+    .filter(([, a]) => (a.amount || 0) !== 0)
+    .sort((a, b) => (b[1].amount || 0) - (a[1].amount || 0));
+  const out = new Map<string, number>();
+  let rank = 0;
+  let lastAmount: number | null = null;
+  sorted.forEach(([key, agg], idx) => {
+    if (lastAmount === null || agg.amount !== lastAmount) rank = idx + 1;
+    lastAmount = agg.amount;
+    out.set(key, rank);
+  });
+  return out;
 }
 
 function ratio(n: number, d: number) {
   return d ? n / d : 0;
 }
 
+function priceByAmountQty(amount: number, qty: number) {
+  return qty ? Math.round(amount / qty) : "";
+}
+
 function buildExcelLikeRows(args: {
   type: SalesType;
-  selected: any;
+  selected: WeekInfo;
   current: Map<string, SalesAgg>;
   prev1: Map<string, SalesAgg>;
   prev2: Map<string, SalesAgg>;
@@ -423,12 +451,12 @@ function buildExcelLikeRows(args: {
   }).sort((a, b) => (current.get(b)?.amount || 0) - (current.get(a)?.amount || 0));
 
   const prefix = type === "color"
-    ? ["품번+컬러", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업", "연출강화", "품번", "컬러", "품명", "STY", "COL", "원가", "TAG가", "판매가", "OFF가", "프로모션가", "할인율", "기간한정가", "할인율"]
-    : ["", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "품번", "품명", "STY", "COL", "원가", "TAG가", "판매가", "OFF가", "프로모션가", "할인율"];
+    ? ["품번+컬러", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업", "연출강화", "품번", "컬러", "컬러명", "품명", "STY", "COL", "원가", "TAG가", "실판매가", "주간평균가", "전주평균가", "평균가등락", "할인율"]
+    : ["", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "품번", "품명", "STY", "COL", "원가", "TAG가", "실판매가", "주간평균가", "전주평균가", "평균가등락", "할인율"];
   const lifecycle = ["기획", "입고%", "입고", "판매", "재고", "판매%", "초입고", "초출고"];
   const ranking = ["주간", "2주전", "등락"];
   const amount = ["주간", "2주전", "비중"];
-  const qty = ["주간", "2주전", "3주전", "4주전"];
+  const qty = ["주간", "2주전", "3주전", "4주전", "증감"];
   const stock = ["총재고", "물류", "물류(온)", "물류(오프)", "점포"];
   const storeHeaders = stores.flatMap((store) => [`${store} 판매`, `${store} 재고`]);
   const headers = ["순위", ...prefix, ...lifecycle, ...ranking, ...amount, ...qty, ...stock, ...storeHeaders];
@@ -436,7 +464,7 @@ function buildExcelLikeRows(args: {
   const groupRow = Array(headers.length).fill("");
   groupRow[1] = "카테고리";
   groupRow[type === "color" ? 10 : 8] = "상품현황";
-  groupRow[type === "color" ? 15 : 12] = "상품가격";
+  groupRow[type === "color" ? 16 : 13] = "가격";
   groupRow[1 + prefix.length] = "제품라이프사이클";
   groupRow[1 + prefix.length + lifecycle.length] = "랭킹";
   groupRow[1 + prefix.length + lifecycle.length + ranking.length] = "금액판매";
@@ -455,7 +483,7 @@ function buildExcelLikeRows(args: {
   summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
 
   const titleRow = Array(headers.length).fill("");
-  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0 자동생성`;
+  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.3 RC 자동생성`;
   titleRow[8] = selected.sheetLabel;
   titleRow[headers.length - 1] = keys.length;
 
@@ -473,7 +501,7 @@ function buildExcelLikeRows(args: {
   ];
 
   for (const key of keys) {
-    const p = productMap.get(key) || { style: type === "color" ? key.split("__")[0] : key } as ProductMaster;
+    const p = productMap.get(key) || ({ style: type === "color" ? key.split("__")[0] : key } as ProductMaster);
     const c = current.get(key) || emptyAgg();
     const p1 = prev1.get(key) || emptyAgg();
     const p2 = prev2.get(key) || emptyAgg();
@@ -483,25 +511,69 @@ function buildExcelLikeRows(args: {
     const diff = rank && oldRank ? Number(oldRank) - Number(rank) : "";
     const stockTotal = p.totalStock || (p.onlineStock || 0) + (p.offlineStock || 0) + (p.whStock || 0);
     const soldCume = p.cumulativeSalesAmount || 0;
-    const avgSalePrice = c.qty ? Math.round(c.amount / c.qty) : (p.salePrice || 0);
-    const prevAvgSalePrice = p1.qty ? Math.round(p1.amount / p1.qty) : 0;
-    const planned = soldCume + stockTotal * (avgSalePrice || p.salePrice || 0);
-    const saleRate = ratio(soldCume, planned);
-    const markdown = avgSalePrice && p.tagPrice ? 1 - avgSalePrice / p.tagPrice : 0;
+    const avgSalePrice = priceByAmountQty(c.amount, c.qty);
+    const prevAvgSalePrice = priceByAmountQty(p1.amount, p1.qty);
+    const avgPriceDelta = avgSalePrice && prevAvgSalePrice ? Number(avgSalePrice) - Number(prevAvgSalePrice) : "";
+    const displaySalePrice = p.salePrice || avgSalePrice || "";
+    const planned = soldCume + stockTotal * (Number(avgSalePrice) || p.salePrice || 0);
+    const saleRate = ratio(c.qty, c.qty + stockTotal);
+    const markdown = avgSalePrice && p.tagPrice ? 1 - Number(avgSalePrice) / p.tagPrice : "";
     const row: Row = [rank || ""];
 
     if (type === "color") {
-      row.push(`${p.style || ""}${p.color || ""}`, p.year || "", p.season || "", p.itemGroup || "", p.category || "", p.item || "", p.className === "재런칭" ? "재런칭" : "", p.line || "", "", p.style || "", p.color || "", p.styleName || "", p.style ? 1 : 0, p.color ? 1 : 0, p.cost || "", p.tagPrice || "", avgSalePrice || p.salePrice || "", Math.round((avgSalePrice || p.salePrice || 0) * 0.9), Math.round((avgSalePrice || p.salePrice || 0) * 0.8), markdown, prevAvgSalePrice || "", "");
+      row.push(
+        `${p.style || ""}${p.color || ""}`,
+        p.year || "",
+        p.season || "",
+        p.itemGroup || "",
+        p.category || "",
+        p.item || "",
+        p.className === "재런칭" ? "재런칭" : "",
+        p.line || "",
+        "",
+        p.style || "",
+        p.color || "",
+        p.colorName || "",
+        p.styleName || "",
+        p.style ? 1 : 0,
+        p.color ? 1 : 0,
+        p.cost || "",
+        p.tagPrice || "",
+        displaySalePrice,
+        avgSalePrice,
+        prevAvgSalePrice,
+        avgPriceDelta,
+        markdown
+      );
     } else {
-      row.push("", p.year || "", p.season || "", p.itemGroup || "", p.category || "", p.item || "", p.className === "재런칭" ? "재런칭" : "", p.style || "", p.styleName || "", p.style ? 1 : 0, "", p.cost || "", p.tagPrice || "", avgSalePrice || p.salePrice || "", Math.round((avgSalePrice || p.salePrice || 0) * 0.9), Math.round((avgSalePrice || p.salePrice || 0) * 0.8), markdown);
+      row.push(
+        "",
+        p.year || "",
+        p.season || "",
+        p.itemGroup || "",
+        p.category || "",
+        p.item || "",
+        p.className === "재런칭" ? "재런칭" : "",
+        p.style || "",
+        p.styleName || "",
+        p.style ? 1 : 0,
+        "",
+        p.cost || "",
+        p.tagPrice || "",
+        displaySalePrice,
+        avgSalePrice,
+        prevAvgSalePrice,
+        avgPriceDelta,
+        markdown
+      );
     }
 
-    row.push(planned || "", saleRate || "", soldCume || "", c.amount || "", Math.max(0, planned - soldCume) || stockTotal || "", saleRate || "", "", "");
+    row.push(planned || "", saleRate || "", soldCume || "", c.qty || "", stockTotal || "", saleRate || "", "", "");
     row.push(rank, oldRank, diff);
     row.push(c.amount || "", p1.amount || "", ratio(c.amount, totalAmount));
-    row.push(c.qty || "", p1.qty || "", p2.qty || "", p3.qty || "");
+    row.push(c.qty || "", p1.qty || "", p2.qty || "", p3.qty || "", c.qty - p1.qty || "");
     row.push(stockTotal || "", p.whStock || "", p.onlineStock || "", p.offlineStock || "", p.storeStock || p.offlineStock || "");
-    for (const store of stores) row.push(c.byStore[store] || "", c.byStoreStock?.[store] || "");
+    for (const store of stores) row.push(c.byStore[store] || "", c.byStoreStock[store] || "");
     rows.push(row);
   }
   return { rows, rowCount: keys.length, colCount: headers.length };
@@ -510,7 +582,7 @@ function buildExcelLikeRows(args: {
 async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string) {
   for (const spreadsheetId of ids) {
     const titles = await getSpreadsheetTitlesById(spreadsheetId).catch(() => []);
-    const found = titles.find((title) => candidates.includes(title)) || titles.find((title) => candidates.some((c) => title.replace(/\s/g, "").includes(c.replace(/\s/g, ""))));
+    const found = titles.find((title) => candidates.includes(title)) || titles.find((title) => candidates.some((c) => compact(title).includes(compact(c))));
     if (found) {
       const rows = await getSheetValuesById(spreadsheetId, found, range).catch(() => []);
       return { spreadsheetId, sheetName: found, rows };
@@ -550,20 +622,20 @@ export async function GET(req: Request) {
     const productMaps = buildProductMaster(productRaw.rows);
     mergeOnOffStock(stockRaw.rows, productMaps);
 
-    const curDaily = aggregateSales(salesRows, currentStart, currentEnd, type);
-    const prev1Daily = aggregateSales(salesRows, prev1Start, prev1End, type);
-    const prev2 = aggregateSales(salesRows, prev2Start, prev2End, type);
-    const prev3 = aggregateSales(salesRows, prev3Start, prev3End, type);
+    const curDaily = aggregateSalesQtyOnly(salesRows, currentStart, currentEnd, type);
+    const prev1Daily = aggregateSalesQtyOnly(salesRows, prev1Start, prev1End, type);
+    const prev2 = aggregateSalesQtyOnly(salesRows, prev2Start, prev2End, type);
+    const prev3 = aggregateSalesQtyOnly(salesRows, prev3Start, prev3End, type);
     const priceAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, type);
-    const cur = { map: combineCurrentSales(curDaily.map, priceAgg.current), stores: new Set([...curDaily.stores, ...priceAgg.stores]) };
-    const prev1 = { map: combinePreviousSales(prev1Daily.map, priceAgg.previous), stores: new Set([...prev1Daily.stores, ...priceAgg.stores]) };
-    const stores = [...cur.stores].sort((a, b) => a.localeCompare(b, "ko"));
+    const current = preferQtyFromDailyAndAmountFromPrice(curDaily.map, priceAgg.current);
+    const previous = preferQtyFromDailyAndAmountFromPrice(prev1Daily.map, priceAgg.previous);
+    const stores = [...new Set([...curDaily.stores, ...priceAgg.stores])].sort((a, b) => a.localeCompare(b, "ko"));
     const productMap = type === "color" ? productMaps.byColor : productMaps.byStyle;
     const built = buildExcelLikeRows({
       type,
       selected,
-      current: cur.map,
-      prev1: prev1.map,
+      current,
+      prev1: previous,
       prev2: prev2.map,
       prev3: prev3.map,
       productMap,
@@ -573,7 +645,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       mode: "generated",
-      version: "MARK 6.0",
+      version: "MARK 6.0.3 RC",
       type,
       weeks,
       selectedWeek: selected.week,
@@ -586,10 +658,11 @@ export async function GET(req: Request) {
       colCount: built.colCount,
       stores,
       sources: {
-        sales: "MARK_HISTORY / Daily_Sales_History",
+        salesQty: "MARK_HISTORY / Daily_Sales_History",
+        salesAmountPrice: weeklyPriceRaw.sheetName || "not found",
         product: productRaw.sheetName || "not found",
         stock: stockRaw.sheetName || "not found",
-        weeklyPrice: weeklyPriceRaw.sheetName || "not found",
+        weeklyPriceColumns: priceAgg.columns,
       },
     }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {

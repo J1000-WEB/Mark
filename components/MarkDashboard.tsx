@@ -318,6 +318,24 @@ function StoreDetailPanel({ storeName, storeRow, data }: { storeName: string; st
 }
 
 
+function formatMdLabel(value: any) {
+  const s = String(value || "").trim();
+  const m = s.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${Number(m[2])}/${Number(m[3])}`;
+  return s || "-";
+}
+
+function weeklyDisplayLabel(weekly: any, fallbackLabel = "") {
+  const anchor = weekly?.anchorMonday || weekly?.selectedWeek || "";
+  const current = weekly?.currentPeriod || {};
+  const compare = weekly?.comparePeriod || {};
+  if (current?.start && current?.end && compare?.start && compare?.end) {
+    const anchorText = anchor ? `선택주차: ${formatMdLabel(anchor)} 월요일 / ` : "";
+    return `${anchorText}분석기간: ${formatMdLabel(current.start)}~${formatMdLabel(current.end)} / 비교기간: ${formatMdLabel(compare.start)}~${formatMdLabel(compare.end)}`;
+  }
+  return String(fallbackLabel || weekly?.periodLabel || "").replace(/분석기간:\s*차주\(([^)]+)\)\s*\/\s*비교기간:\s*전주\(([^)]+)\)/, "분석기간: 실제 기간 미확인 / 비교기간: 실제 기간 미확인");
+}
+
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
@@ -342,10 +360,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
   function snapshotButtonLabel(snapshot: any) {
     const payload = snapshot?.payload || null;
+    const weekly = payload?.weekly || {};
+    if (weekly?.anchorMonday) return `${formatMdLabel(weekly.anchorMonday)} 월요일 기준`;
     const label = payload?.weekly?.periodLabel || snapshot?.periodLabel || "";
     const m = label.match(/기준주차:\s*([^/]+)/);
-    if (m) return `${m[1].trim()} 주차`;
-    return snapshot?.periodLabel || snapshot?.createdAt || snapshot?.snapshotId || "스냅샷";
+    if (m) return `${m[1].trim()} 기준`;
+    return snapshot?.createdAt || snapshot?.snapshotId || "스냅샷";
   }
 
   async function loadWeeklySnapshot(id?: string) {
@@ -532,7 +552,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         </header>
 
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
-          {pageData.periodLabel}
+          {active === "weekly" ? weeklyDisplayLabel(dashboardData.weekly, pageData.periodLabel) : pageData.periodLabel}
         </section>
 
         {active === "weekly" && (
@@ -544,22 +564,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               </div>
               <p className="text-xs font-black text-blue-600">{weeklySnapshots.length}개 · {weeklyMode === "snapshot" ? "스냅샷" : "실시간"}</p>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {weeklySnapshots.length === 0 && <span className="text-xs font-semibold text-slate-500">저장된 주간 스냅샷이 없습니다.</span>}
-              {weeklySnapshots.map((snapshot: any) => (
-                <button
-                  key={snapshot.snapshotId}
-                  type="button"
-                  onClick={() => loadWeeklySnapshot(snapshot.snapshotId)}
-                  className={`rounded-full px-4 py-2 text-xs font-black transition ${
-                    selectedSnapshotId === snapshot.snapshotId && weeklyMode === "snapshot"
-                      ? "bg-blue-600 text-white"
-                      : "border border-blue-100 bg-white text-blue-700 hover:bg-blue-100"
-                  }`}
-                >
-                  {snapshotButtonLabel(snapshot)}
-                </button>
-              ))}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {weeklySnapshots.length === 0 ? (
+                <span className="text-xs font-semibold text-slate-500">저장된 주간 스냅샷이 없습니다.</span>
+              ) : (
+                <label className="flex min-w-[320px] items-center gap-2 rounded-2xl border border-blue-100 bg-white px-3 py-2">
+                  <span className="text-xs font-black text-blue-700">주차 선택</span>
+                  <select
+                    value={selectedSnapshotId}
+                    onChange={(e) => loadWeeklySnapshot(e.target.value)}
+                    className="w-full bg-transparent text-xs font-black text-slate-900 outline-none"
+                  >
+                    {weeklySnapshots.map((snapshot: any) => (
+                      <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
+                        {snapshotButtonLabel(snapshot)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           </section>
         )}

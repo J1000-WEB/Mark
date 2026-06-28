@@ -179,7 +179,7 @@ export default function SalesDataDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">판매데이터</h1>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0.3</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0.4</span>
             </div>
             <p className="mt-1 text-sm text-slate-500">주간판매데이터 엑셀을 MARK_DB / MARK_HISTORY 수치로 자동 생성합니다.</p>
             <p className="mt-1 text-xs font-semibold text-blue-600">{status}</p>
@@ -189,21 +189,20 @@ export default function SalesDataDashboard() {
 
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-2 text-sm font-black text-slate-700">주차 선택</span>
-            {weeks.map((w) => (
-              <button
-                key={w.week}
-                type="button"
-                onClick={() => load(w.week, type)}
-                title={`분석 ${w.analysisLabel} / 비교 ${w.compareLabel}`}
-                className={cls(
-                  "rounded-xl px-4 py-2 text-xs font-black transition",
-                  week === w.week ? "bg-slate-900 text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
-                )}
+            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="text-sm font-black text-slate-700">주차 선택</span>
+              <select
+                value={week}
+                onChange={(e) => load(e.target.value, type)}
+                className="min-w-[210px] bg-transparent text-xs font-black text-slate-900 outline-none"
               >
-                {w.label || w.week}
-              </button>
-            ))}
+                {weeks.map((w) => (
+                  <option key={w.week} value={w.week}>
+                    {w.label || w.week} · 분석 {w.analysisLabel} / 비교 {w.compareLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="ml-auto flex min-w-[260px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
               <span className="text-xs font-black text-slate-500">검색</span>
               <input

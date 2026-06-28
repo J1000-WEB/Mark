@@ -92,6 +92,7 @@ export default function SalesDataDashboard() {
   const [meta, setMeta] = useState<any>({});
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
   const [showStores, setShowStores] = useState(false);
+  const [query, setQuery] = useState("");
 
   async function load(nextWeek = week, nextType = type) {
     setStatus("MARK 데이터로 판매데이터 생성 중...");
@@ -147,11 +148,15 @@ export default function SalesDataDashboard() {
     if (!rows.length) return [];
     const top = rows.slice(0, dataStartIndex);
     let body = rows.slice(dataStartIndex);
+    const q = rawString(query).toLowerCase();
+    if (q) {
+      body = body.filter((row) => row.some((cell) => rawString(cell).toLowerCase().includes(q)));
+    }
     if (sort) {
       body = [...body].sort((a, b) => compareCell(a[sort.col], b[sort.col], sort.dir));
     }
     return [...top, ...body];
-  }, [rows, sort]);
+  }, [rows, sort, query]);
 
   function onHeaderClick(col: number) {
     setSort((prev) => {
@@ -174,7 +179,7 @@ export default function SalesDataDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">판매데이터</h1>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">MARK 6.0.3</span>
             </div>
             <p className="mt-1 text-sm text-slate-500">주간판매데이터 엑셀을 MARK_DB / MARK_HISTORY 수치로 자동 생성합니다.</p>
             <p className="mt-1 text-xs font-semibold text-blue-600">{status}</p>
@@ -199,11 +204,23 @@ export default function SalesDataDashboard() {
                 {w.label || w.week}
               </button>
             ))}
+            <div className="ml-auto flex min-w-[260px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="text-xs font-black text-slate-500">검색</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="품번/품명/컬러/점포"
+                className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none placeholder:text-slate-400"
+              />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} className="text-xs font-black text-slate-400 hover:text-slate-700">×</button>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => setShowStores((v) => !v)}
               className={cls(
-                "ml-auto rounded-xl px-4 py-2 text-xs font-black transition",
+                "rounded-xl px-4 py-2 text-xs font-black transition",
                 showStores ? "bg-emerald-600 text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
               )}
             >
@@ -219,14 +236,14 @@ export default function SalesDataDashboard() {
             <div className="rounded-2xl bg-slate-50 px-3 py-2">비교기간: <b className="text-slate-900">{meta.compareLabel || "-"}</b></div>
             <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-emerald-800">총판매금액: <b>{displayCell(totalAmount)}</b></div>
             <div className="rounded-2xl bg-blue-50 px-3 py-2 text-blue-800">총판매수량: <b>{displayCell(totalQty)}</b></div>
-            <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: {sources.sales || "-"} / 가격: {sources.weeklyPrice || "-"} / 재고: {sources.stock || "-"}</div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-2">소스: 수량 {sources.salesQty || sources.sales || "-"} / 금액·가격 {sources.salesAmountPrice || sources.weeklyPrice || "-"} / 재고 {sources.stock || "-"}</div>
           </div>
         </section>
 
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
             <p className="text-sm font-black">{sheetName || "판매데이터"}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더 클릭 정렬, 점포별 판매/재고 접기·펼치기를 지원합니다.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-200">기본 정렬은 금주 판매금액 기준 1위부터 표시합니다. 헤더 클릭 정렬, 검색, 점포별 판매/재고 접기·펼치기를 지원합니다.</p>
           </div>
           <div className="max-h-[calc(100vh-300px)] overflow-auto">
             {!rows.length ? (

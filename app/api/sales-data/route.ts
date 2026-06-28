@@ -133,8 +133,8 @@ function salesKey(style: string, color?: string, type: SalesType = "style") {
 function isOfflineStore(store: string) {
   const s = text(store);
   if (!s) return false;
-  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_")) return false;
-  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류")) return false;
+  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_") || s.startsWith("오프라인_")) return false;
+  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류") || s.includes("위탁샵") || s.includes("위탁")) return false;
   return true;
 }
 
@@ -488,7 +488,7 @@ function buildExcelLikeRows(args: {
   summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
 
   const titleRow = Array(headers.length).fill("");
-  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.4 FIX 자동생성`;
+  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.5 자동생성`;
   titleRow[8] = selected.sheetLabel;
   titleRow[headers.length - 1] = keys.length;
 
@@ -650,7 +650,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       mode: "generated",
-      version: "MARK 6.0.4 FIX",
+      version: "MARK 6.0.5 SALES DATA GROUP FIX",
       type,
       weeks,
       selectedWeek: selected.week,

@@ -1410,24 +1410,45 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 }
 
 function mergeRtRows(performanceRows: any[], rtRows: any[]) {
-  const keyOf = (row: any) => `${row.startDate}__${row.category || "RT"}__${normalizeStoreKey(row.toStore || row.channel || "")}__${row.styleCode}`;
+  const keyOf = (row: any) => `${row.startDate}__${row.category || "RT"}__${row.styleCode}`;
   const map = new Map<string, any>();
 
   for (const row of performanceRows) {
-    map.set(keyOf(row), row);
+    const key = keyOf(row);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...row, fromStores: row.fromStore ? [row.fromStore] : [] });
+      continue;
+    }
+    const fromStores = new Set([...(existing.fromStores || []), row.fromStore].filter(Boolean));
+    map.set(key, {
+      ...existing,
+      ...row,
+      productName: existing.productName || row.productName,
+      toStore: existing.toStore || row.toStore,
+      channel: existing.channel || row.channel,
+      rtQty: Number(existing.rtQty || 0) + Number(row.rtQty || 0),
+      fromStores: Array.from(fromStores),
+      fromStore: Array.from(fromStores).join(", "),
+      note: [existing.note, row.note].filter(Boolean).join(" / "),
+    });
   }
 
   for (const rt of rtRows) {
     const key = keyOf(rt);
     if (map.has(key)) {
       const existing = map.get(key);
+      const fromStores = new Set([...(existing.fromStores || []), ...(rt.fromStores || []), existing.fromStore, rt.fromStore].filter(Boolean));
       map.set(key, {
-        ...rt,
         ...existing,
-        rtQty: Number(existing.rtQty || 0) || Number(rt.rtQty || 0),
-        fromStore: existing.fromStore || rt.fromStore,
+        ...rt,
+        productName: existing.productName || rt.productName,
         toStore: existing.toStore || rt.toStore,
-        note: existing.note || rt.note,
+        channel: existing.channel || rt.channel,
+        rtQty: Number(existing.rtQty || 0) + Number(rt.rtQty || 0),
+        fromStores: Array.from(fromStores),
+        fromStore: Array.from(fromStores).join(", "),
+        note: [existing.note, rt.note].filter(Boolean).join(" / "),
         source: `${existing.source || "Promotion_Performance"}+RT_Result`,
       });
     } else {
@@ -1435,7 +1456,15 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
     }
   }
 
-  return Array.from(map.values());
+  return Array.from(map.values()).map((row: any) => {
+    if (row.category !== "RT") return row;
+    return {
+      ...row,
+      saleType: "RT",
+      // 같은 시작일/같은 상품은 여러 매장에서 같은 점포로 이동해도 성과표 1행으로 봅니다.
+      note: row.note || "RT_Result H열 지시일 기준 / 동일 상품 통합",
+    };
+  });
 }
 
 function parsePerformanceRows(rows: any[][]) {
@@ -1656,6 +1685,63 @@ function parseDailyHistoryRows(rows: any[][]) {
 }
 
 
+
+function groupedHeaderLabel(rows: any[][], headerRow: number, col: number) {
+  for (let r = headerRow - 1; r >= 0 && r >= headerRow - 3; r--) {
+    const v = text(rows[r]?.[col]);
+    if (v) return v;
+  }
+  return "";
+}
+
+function parseWeeklyUnitPriceMap(rows: any[][]) {
+  const map = new Map<string, number>();
+  const headerRow = findHeaderRow(rows, ["스타일", "판매금액"]);
+  if (headerRow < 0) return map;
+
+  const header = rows[headerRow] || [];
+  const styleCol = findCol(header, ["스타일", "품번"], 2);
+  const currentQtyCol = header.findIndex((h, c) => {
+    const hText = normalizedHeader(h);
+    const gText = normalizedHeader(groupedHeaderLabel(rows, headerRow, c));
+    return gText.includes(normalizedHeader("금주")) && (hText === normalizedHeader("합계") || hText.includes(normalizedHeader("판매수량")) || hText === normalizedHeader("판매"));
+  });
+  const currentAmountCol = header.findIndex((h, c) => {
+    const hText = normalizedHeader(h);
+    const gText = normalizedHeader(groupedHeaderLabel(rows, headerRow, c));
+    return gText.includes(normalizedHeader("금주")) && hText.includes(normalizedHeader("판매금액"));
+  });
+
+  // 금주/전주 시트 표준 구조 fallback: U=금주 합계(0-base 20), V=금주 판매금액(0-base 21)
+  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 20;
+  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 21;
+
+  for (const row of rows.slice(headerRow + 1)) {
+    const styleCode = text(row[styleCol]);
+    if (!styleCode) continue;
+    const qty = num(row[qtyCol]);
+    const amount = num(row[amountCol]);
+    if (!qty || !amount) continue;
+    const prev = map.get(styleCode) || 0;
+    // 스타일 기준 평균가를 위해 amount/qty를 바로 평균내지 않고 누적용 임시 키를 사용합니다.
+    map.set(`${styleCode}__amount`, (map.get(`${styleCode}__amount`) || 0) + amount);
+    map.set(`${styleCode}__qty`, (map.get(`${styleCode}__qty`) || 0) + qty);
+    if (!prev) map.set(styleCode, amount / qty);
+  }
+
+  for (const key of Array.from(map.keys())) {
+    if (!key.endsWith("__amount")) continue;
+    const style = key.replace(/__amount$/, "");
+    const amount = map.get(`${style}__amount`) || 0;
+    const qty = map.get(`${style}__qty`) || 0;
+    if (qty) map.set(style, amount / qty);
+    map.delete(`${style}__amount`);
+    map.delete(`${style}__qty`);
+  }
+
+  return map;
+}
+
 function parseWeeklyStoreHistoryRows(rows: any[][]) {
   const header = rows[0] || [];
   const basisCol = findCol(header, ["기준일"], 0);
@@ -1792,7 +1878,7 @@ function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
     }, { qty: 0, amount: 0 });
 }
 
-function applyDailyPerformance(rows: any[], dailyRows: any[], override?: PerformanceOverride) {
+function applyDailyPerformance(rows: any[], dailyRows: any[], override?: PerformanceOverride, weeklyUnitPriceMap = new Map<string, number>()) {
   if (!dailyRows.length) return rows;
 
   return rows.map((row: any) => {
@@ -1802,18 +1888,25 @@ function applyDailyPerformance(rows: any[], dailyRows: any[], override?: Perform
 
     // 시트에 값을 직접 입력한 경우에는 수동값을 우선합니다.
     // 비어있거나 0이면 Daily_Sales_History 기준 자동 계산값을 사용합니다.
-    const beforeQty = Number(row.beforeQty || 0) || before.qty;
-    const duringQty = Number(row.duringQty || 0) || during.qty;
-    const beforeAmount = Number(row.beforeAmount || 0) || before.amount;
-    const duringAmount = Number(row.duringAmount || 0) || during.amount;
+    const beforeQty = row.category === "RT" ? before.qty : (Number(row.beforeQty || 0) || before.qty);
+    const duringQty = row.category === "RT" ? during.qty : (Number(row.duringQty || 0) || during.qty);
+    const weeklyUnitPrice = weeklyUnitPriceMap.get(text(row.styleCode)) || 0;
+    const unitPrice = row.category === "RT" ? (weeklyUnitPrice || Number(row.salePrice || 0) || (during.qty ? during.amount / during.qty : 0) || (before.qty ? before.amount / before.qty : 0)) : 0;
+    const beforeAmount = row.category === "RT"
+      ? beforeQty * unitPrice
+      : (Number(row.beforeAmount || 0) || before.amount);
+    const duringAmount = row.category === "RT"
+      ? duringQty * unitPrice
+      : (Number(row.duringAmount || 0) || during.amount);
     const addedQty = duringQty - beforeQty;
-    const addedAmount = duringAmount - beforeAmount;
+    const addedAmount = row.category === "RT" ? addedQty * unitPrice : duringAmount - beforeAmount;
 
     const rtQty = row.category === "RT" ? extractRtQty(row) : 0;
     const depletionRate = row.category === "RT" && rtQty ? (duringQty / rtQty) * 100 : 0;
 
     return {
       ...row,
+      salePrice: row.category === "RT" ? unitPrice : row.salePrice,
       rtQty,
       depletionRate,
       rtGrade: row.category === "RT" && rtQty ? rtGrade(depletionRate) : "",
@@ -1932,6 +2025,12 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(historyId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
     const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
 
+    const weeklyPriceSheetName = pickNormalizedTitle(mainTitles, ["금주전주", "금주/전주", "금주 전주"], "금주전주");
+    const weeklyPriceValues = weeklyPriceSheetName && mainTitles.includes(weeklyPriceSheetName)
+      ? await getSheetValuesById(mainId, weeklyPriceSheetName, "A:AZ").catch(() => [])
+      : [];
+    const weeklyUnitPriceMap = parseWeeklyUnitPriceMap(weeklyPriceValues || []);
+
     for (const row of dailyRows as any[]) {
       const style = text(row.styleCode);
       const productName = text(row.productName);
@@ -1957,8 +2056,10 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
       performanceRows = performanceRows.filter((row: any) => row.category === override.categoryFilter);
     }
 
-    const weeklyApplied = applyWeeklyPerformance(performanceRows, weeklyStoreRows, override);
-    const rows = applyDailyPerformance(weeklyApplied, dailyRows, override);
+    // RT/프로모션 성과의 수량 추이는 Daily_Sales_History 기준으로 봅니다.
+    // Weekly_Store_History는 주간 대시보드/판매데이터용이며, RT 성과 수량에는 섞지 않습니다.
+    const weeklyApplied = performanceRows;
+    const rows = applyDailyPerformance(weeklyApplied, dailyRows, override, weeklyUnitPriceMap);
     const summary = buildPerformanceSummary(rows);
 
     return {
@@ -1975,6 +2076,8 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
         dailySource,
         weeklyStoreSheetName,
         weeklyStoreRows: weeklyStoreRows.length,
+        weeklyPriceSheetName: weeklyPriceSheetName || "",
+        weeklyUnitPriceCount: weeklyUnitPriceMap.size,
       },
     };
   } catch (error: any) {

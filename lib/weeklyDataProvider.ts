@@ -324,10 +324,13 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
   const stores = new Set<string>();
   if (!rows?.length) return { current, previous, stores, columns: {} };
 
-  const curQtyCol = findGroupColumn(rows, "금주", "합계", 19); // T열: 금주 합계수량
-  const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 20); // U열: 금주 판매금액
-  const prevQtyCol = findGroupColumn(rows, "전주", "합계", 24); // Y열: 전주 합계수량
-  const prevAmountCol = findGroupColumn(rows, "전주", "판매금액", 25); // Z열: 전주 판매금액
+  // MARK 6.1.8: 주간매출은 금주/전주 시트의 고정 집계 컬럼을 Source of Truth로 사용합니다.
+  // 0-base 기준 T=19(금주 합계수량), U=20(금주 판매금액), Y=24(전주 합계수량), Z=25(전주 판매금액).
+  // 헤더 자동탐색/원본 I,J fallback은 매출 뻥튀기 원인이 되어 주간매출 집계에서는 사용하지 않습니다.
+  const curQtyCol = 19;
+  const curAmountCol = 20;
+  const prevQtyCol = 24;
+  const prevAmountCol = 25;
   const stockCol = 7;
 
   for (const r of rows.slice(3)) {
@@ -335,17 +338,11 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     if (!isOfflineStore(channelName)) continue;
     const style = text(r[2]);
     const color = text(r[4]);
-    if (!style) continue;
+    if (!style || style.includes("합계") || style.includes("총계")) continue;
     const key = salesKey(style, color, type);
     const stock = num(r[stockCol]);
-
-    // 주간 데이터는 회사 검증 기준인 금주/전주 시트의 집계영역을 Source of Truth로 사용합니다.
-    // T/U = 금주 합계수량/판매금액, Y/Z = 전주 합계수량/판매금액.
-    // 집계영역이 비어있는 임시 데이터에서만 원본 I/J를 금주 보조값으로 사용합니다.
-    const rawQty = num(r[8]);
-    const rawAmount = num(r[9]);
-    const currentQty = num(r[curQtyCol]) || rawQty;
-    const currentAmount = num(r[curAmountCol]) || rawAmount;
+    const currentQty = num(r[curQtyCol]);
+    const currentAmount = num(r[curAmountCol]);
     const prevQty = num(r[prevQtyCol]);
     const prevAmount = num(r[prevAmountCol]);
 
@@ -1137,6 +1134,90 @@ function storeSummaryFromRecords(records: any[], storeRecords: any[], basis: str
   return { current, compare, companyTopProducts, storeTopProducts, productStoreNames: storeNames };
 }
 
+
+function storeSummaryFromWeeklySheet(rows: Row[], selected: WeekInfo) {
+  const curQtyCol = 19;
+  const curAmountCol = 20;
+  const prevQtyCol = 24;
+  const prevAmountCol = 25;
+  const storeCurrent: Record<string, number> = {};
+  const storePrevious: Record<string, number> = {};
+  const storeTopMap = new Map<string, any>();
+  const companyMap = new Map<string, any>();
+
+  for (const r of rows.slice(3)) {
+    const store = text(r[1]);
+    if (!isOfflineStore(store)) continue;
+    const style = text(r[2]);
+    if (!style || style.includes("합계") || style.includes("총계")) continue;
+    const styleName = text(r[3]);
+    const currentAmount = num(r[curAmountCol]);
+    const prevAmount = num(r[prevAmountCol]);
+    const currentQty = num(r[curQtyCol]);
+    const prevQty = num(r[prevQtyCol]);
+
+    storeCurrent[store] = (storeCurrent[store] || 0) + currentAmount;
+    storePrevious[store] = (storePrevious[store] || 0) + prevAmount;
+
+    const storeStyleKey = `${store}__${style}`;
+    const sp = storeTopMap.get(storeStyleKey) || { store, styleCode: style, productName: styleName, weekAmount: 0, prevAmount: 0, weekQty: 0, prevQty: 0 };
+    sp.weekAmount += currentAmount;
+    sp.prevAmount += prevAmount;
+    sp.weekQty += currentQty;
+    sp.prevQty += prevQty;
+    storeTopMap.set(storeStyleKey, sp);
+
+    const cp = companyMap.get(style) || { styleCode: style, productName: styleName, weekAmount: 0, prevAmount: 0, weekQty: 0, prevQty: 0 };
+    cp.weekAmount += currentAmount;
+    cp.prevAmount += prevAmount;
+    cp.weekQty += currentQty;
+    cp.prevQty += prevQty;
+    companyMap.set(style, cp);
+  }
+
+  const storeNames = [...new Set([...Object.keys(storeCurrent), ...Object.keys(storePrevious)])].sort((a, b) => a.localeCompare(b, "ko"));
+  const current = storeNames.map((storeName) => ({
+    storeName,
+    weekSales: storeCurrent[storeName] || 0,
+    compareWeekSales: storePrevious[storeName] || 0,
+    weekChangeRate: percentChange(storeCurrent[storeName] || 0, storePrevious[storeName] || 0),
+    weekTarget: 0,
+    weekRate: 0,
+    monthSales: 0,
+    monthTarget: 0,
+    monthRate: 0,
+  })).sort((a, b) => b.weekSales - a.weekSales);
+
+  const compare = storeNames.map((storeName) => ({ storeName, weekSales: storePrevious[storeName] || 0 }));
+  const storeTopProducts: Record<string, any[]> = {};
+  for (const item of storeTopMap.values()) {
+    if (!storeTopProducts[item.store]) storeTopProducts[item.store] = [];
+    storeTopProducts[item.store].push({
+      styleCode: item.styleCode,
+      productName: item.productName,
+      weekAmount: item.weekAmount,
+      prevAmount: item.prevAmount,
+      amountChangeRate: percentChange(item.weekAmount, item.prevAmount),
+    });
+  }
+  Object.keys(storeTopProducts).forEach((store) => {
+    storeTopProducts[store] = storeTopProducts[store].sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0)).slice(0, 20);
+  });
+
+  const companyTopProducts = [...companyMap.values()]
+    .map((item) => ({
+      ...item,
+      amountChangeRate: percentChange(item.weekAmount, item.prevAmount),
+      currentRank: 0,
+      previousRank: 0,
+    }))
+    .sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0))
+    .map((item, idx) => ({ ...item, currentRank: idx + 1 }))
+    .slice(0, 20);
+
+  return { current, compare, companyTopProducts, storeTopProducts, productStoreNames: storeNames };
+}
+
 export async function getWeeklyDashboardPayload(requestedWeek = "", options: { refresh?: boolean } = {}) {
   const historyId = getHistorySheetId();
   const dbId = getDbSheetId();
@@ -1159,7 +1240,12 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
     selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
-  const summary = storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
+  // 현재 주차는 금주/전주 시트를 직접 읽어 주간매출 대시보드를 구성합니다.
+  // 기존 Weekly_History에 과거 잘못된 매핑으로 저장된 값이 있어도 현재 대시보드 매출이 뻥튀기되지 않게 하기 위함입니다.
+  const useDirectWeeklySheet = Boolean(currentWeeklyRaw.rows?.length) && (!requestedWeek || selected.week === currentBasis);
+  const summary = useDirectWeeklySheet
+    ? storeSummaryFromWeeklySheet(currentWeeklyRaw.rows, selected)
+    : storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
   return {
     ok: true,
     mode: "weekly-history",
@@ -1190,32 +1276,28 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
     },
     inventory: {},
     sources: {
-      primary: "MARK_HISTORY / Weekly_History",
+      primary: useDirectWeeklySheet ? "금주/전주 시트 직접 집계" : "MARK_HISTORY / Weekly_History",
       fallback: "금주/전주 시트 → Weekly_History 자동 Snapshot",
       currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
       basisCell: "금주/전주!B2",
+      fixedColumns: "T=금주수량, U=금주금액, Y=전주수량, Z=전주금액",
     },
   };
 }
 
 export async function getWeeklyDashboardBase(requestedWeek = "", options: { refresh?: boolean } = {}) {
   const dashboard = await getWeeklyDashboardPayload(requestedWeek, options);
-  const payload = await getSalesDataPayload("style", requestedWeek, options);
-  const header = payload.rows[3] || [];
-  const amountCol = header.findIndex((x) => text(x) === "주간");
-  const qtyGroupStart = (payload.rows[2] || []).findIndex((x) => text(x) === "수량판매");
-  const rows = payload.rows.slice(7);
-  const totalAmount = rows.reduce((sum, r) => sum + num(r[amountCol]), 0);
-  const totalQty = rows.reduce((sum, r) => sum + num(r[qtyGroupStart]), 0);
+  const currentRows = dashboard.weekly?.current || [];
+  const totalAmount = currentRows.reduce((sum: number, r: any) => sum + num(r.weekSales), 0);
   return {
     ok: true,
-    selectedWeek: payload.selectedWeek,
-    selectedWeekLabel: payload.selectedWeekLabel,
-    analysisLabel: payload.analysisLabel,
-    compareLabel: payload.compareLabel,
+    selectedWeek: dashboard.selectedWeek,
+    selectedWeekLabel: dashboard.selectedWeekLabel,
+    analysisLabel: dashboard.weekly?.currentPeriod ? `${formatMD(parseDate(dashboard.weekly.currentPeriod.start) || new Date())}~${formatMD(parseDate(dashboard.weekly.currentPeriod.end) || new Date())}` : "",
+    compareLabel: dashboard.weekly?.comparePeriod ? `${formatMD(parseDate(dashboard.weekly.comparePeriod.start) || new Date())}~${formatMD(parseDate(dashboard.weekly.comparePeriod.end) || new Date())}` : "",
     totalAmount,
-    totalQty,
-    rows,
-    sources: payload.sources,
+    totalQty: 0,
+    rows: currentRows,
+    sources: dashboard.sources,
   };
 }

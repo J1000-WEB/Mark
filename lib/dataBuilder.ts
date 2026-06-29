@@ -1765,12 +1765,11 @@ function parseWeeklyUnitPriceMap(rows: any[][]) {
     return gText.includes(normalizedHeader("금주")) && hText.includes(normalizedHeader("판매금액"));
   });
 
-  // 금주/전주 시트 표준 구조 fallback:
-  // 실제 시트는 S=금주 판매, T=금주 반품, U=금주 합계수량, V=금주 판매금액입니다.
-  // 과거 딕셔너리의 T/U 표기와 화면 열명이 어긋날 수 있으므로 헤더 탐색을 우선하고,
-  // 실패했을 때만 U/V(0-base 20/21)를 사용합니다.
-  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 20;
-  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 21;
+  // MARK 6.1.8 표준 구조 fallback:
+  // T=금주 합계수량, U=금주 판매금액입니다.
+  // U/V로 밀려 읽으면 판매가 1원/매출 뻥튀기 오류가 발생하므로 실패 시 T/U(0-base 19/20)만 사용합니다.
+  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 19;
+  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 20;
 
   for (const row of rows.slice(headerRow + 1)) {
     const styleCode = text(row[styleCol]);

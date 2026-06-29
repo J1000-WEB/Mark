@@ -1352,7 +1352,13 @@ function buildChannelCodeNameMap(rows: any[][]): Map<string, string> {
     "21012": "한남 플래그십",
     "21016": "포시즌 아울렛 신사",
     "21001": "현대아울렛 송도점",
-    "42004": "현대아울렛 송도점",
+    "41001": "롯데아울렛 서울역점",
+    "42002": "현대아울렛 송도점",
+    "42004": "현대아울렛 남양주점",
+    "35002": "신세계 광주점",
+    "46003": "롯데아울렛 김해점",
+    "52034": "스타필드 빌리지 운정점",
+    "36001": "롯데백화점 광복점",
   };
   for (const [code, name] of Object.entries(fallback)) {
     if (!map.has(code)) setMap(code, name);
@@ -1390,8 +1396,8 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 
     const rawFrom = text(row[fromCol]);
     const rawTo = text(row[toCol]);
-    const fromStore = codeNameMap.get(rawFrom) || codeNameMap.get(normalizeStoreKey(rawFrom)) || displayStoreName(rawFrom);
-    const toStore = codeNameMap.get(rawTo) || codeNameMap.get(normalizeStoreKey(rawTo)) || displayStoreName(rawTo);
+    const fromStore = codeNameMap.get(rawFrom) || codeNameMap.get(normalizeStoreKey(rawFrom)) || (/^\d+$/.test(rawFrom) ? `미확인점포(${rawFrom})` : displayStoreName(rawFrom));
+    const toStore = codeNameMap.get(rawTo) || codeNameMap.get(normalizeStoreKey(rawTo)) || (/^\d+$/.test(rawTo) ? `미확인점포(${rawTo})` : displayStoreName(rawTo));
     const color = text(row[colorCol]);
     const size = text(row[sizeCol]);
     // 여러 매장에서 같은 상품을 한 점포로 보낸 RT는 성과표에서 상품 1행으로 봅니다.
@@ -1729,9 +1735,14 @@ function parseDailyHistoryRows(rows: any[][]) {
 
 
 function groupedHeaderLabel(rows: any[][], headerRow: number, col: number) {
+  // 엑셀 병합 헤더는 병합 시작 셀에만 값이 들어옵니다.
+  // 예: 금주 그룹이 S:V로 병합되면 T/U/V 열의 상단 셀은 빈값입니다.
+  // 따라서 같은 상단 행에서 왼쪽으로 거슬러 올라가 가장 가까운 그룹명을 찾습니다.
   for (let r = headerRow - 1; r >= 0 && r >= headerRow - 3; r--) {
-    const v = text(rows[r]?.[col]);
-    if (v) return v;
+    for (let c = col; c >= 0; c--) {
+      const v = text(rows[r]?.[c]);
+      if (v) return v;
+    }
   }
   return "";
 }
@@ -1754,9 +1765,12 @@ function parseWeeklyUnitPriceMap(rows: any[][]) {
     return gText.includes(normalizedHeader("금주")) && hText.includes(normalizedHeader("판매금액"));
   });
 
-  // 금주/전주 시트 표준 구조 fallback: T=금주 합계수량(0-base 19), U=금주 판매금액(0-base 20)
-  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 19;
-  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 20;
+  // 금주/전주 시트 표준 구조 fallback:
+  // 실제 시트는 S=금주 판매, T=금주 반품, U=금주 합계수량, V=금주 판매금액입니다.
+  // 과거 딕셔너리의 T/U 표기와 화면 열명이 어긋날 수 있으므로 헤더 탐색을 우선하고,
+  // 실패했을 때만 U/V(0-base 20/21)를 사용합니다.
+  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 20;
+  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 21;
 
   for (const row of rows.slice(headerRow + 1)) {
     const styleCode = text(row[styleCol]);
@@ -1962,7 +1976,9 @@ function applyDailyPerformance(rows: any[], dailyRows: any[], override?: Perform
     const beforeQty = row.category === "RT" ? before.qty : (Number(row.beforeQty || 0) || before.qty);
     const duringQty = row.category === "RT" ? during.qty : (Number(row.duringQty || 0) || during.qty);
     const weeklyUnitPrice = weeklyUnitPriceMap.get(text(row.styleCode)) || 0;
-    const unitPrice = row.category === "RT" ? (weeklyUnitPrice || Number(row.salePrice || 0) || (during.qty ? during.amount / during.qty : 0) || (before.qty ? before.amount / before.qty : 0)) : 0;
+    // RT 금액은 Daily_Sales_History의 금액/단가를 쓰지 않습니다.
+    // Daily는 실행 전/후 수량 추이만 담당하고, 단가는 금주/전주 시트(U/V 기준 평균판매가)에서 가져옵니다.
+    const unitPrice = row.category === "RT" ? (weeklyUnitPrice || Number(row.salePrice || 0) || 0) : 0;
     const beforeAmount = row.category === "RT"
       ? beforeQty * unitPrice
       : (Number(row.beforeAmount || 0) || before.amount);

@@ -1342,12 +1342,13 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
   const sizeCol = findCol(header, ["사이즈"], 4);
   const qtyCol = findCol(header, ["지시수량", "수량"], 5);
 
-  // MARK 4.91.4:
-  // RT_Result H열이 저장한 날짜 = 지시일입니다.
-  // 헤더명이 달라도 H열(0-base 7)을 우선 사용하고, 비어있을 때만 G열을 fallback으로 씁니다.
-  const headerDateCol = findCol(header, ["저장한날짜", "저장날짜", "지시일", "지시날짜", "다운로드날짜"], 7);
-  const dateCol = headerDateCol >= 0 ? headerDateCol : 7;
-  const fallbackDateCol = findCol(header, ["승인날짜", "제안날짜", "승인일"], 6);
+  // MARK 6.1.5:
+  // RT_Result 표준 헤더는 G=승인날짜, H=저장날짜입니다.
+  // 성과 시작일/필터 기준은 승인날짜를 우선 사용하고, 비어있을 때만 저장날짜를 fallback으로 씁니다.
+  const approvalDateCol = findCol(header, ["승인날짜", "제안날짜", "승인일"], 6);
+  const savedDateCol = findCol(header, ["저장한날짜", "저장날짜", "지시일", "지시날짜", "다운로드날짜"], 7);
+  const dateCol = approvalDateCol >= 0 ? approvalDateCol : 6;
+  const fallbackDateCol = savedDateCol >= 0 ? savedDateCol : 7;
 
   const grouped = new Map<string, any>();
 
@@ -1363,7 +1364,9 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
     const toStore = codeNameMap.get(rawTo) || displayStoreName(rawTo);
     const color = text(row[colorCol]);
     const size = text(row[sizeCol]);
-    const key = `${directiveDate}__${rawTo}__${styleCode}`;
+    // 여러 매장에서 같은 상품을 한 점포로 보낸 RT는 성과표에서 상품 1행으로 봅니다.
+    // 따라서 결과 그룹은 승인날짜 + 스타일 기준입니다.
+    const key = `${directiveDate}__${styleCode}`;
 
     if (!grouped.has(key)) {
       grouped.set(key, {
@@ -1385,6 +1388,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
         fromStore,
         fromStores: [] as string[],
         toStore,
+        toStores: [] as string[],
         beforeQty: 0,
         duringQty: 0,
         addedQty: 0,
@@ -1399,13 +1403,15 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
     const item = grouped.get(key);
     item.rtQty += qty;
     if (fromStore && !item.fromStores.includes(fromStore)) item.fromStores.push(fromStore);
+    if (toStore && !item.toStores.includes(toStore)) item.toStores.push(toStore);
     item.fromStore = item.fromStores.join(", ");
+    item.toStore = item.toStores.join(", ") || item.toStore;
     if (color || size) item.colorSizeSummary.push(`${color || "-"} / ${size || "-"} ${qty.toLocaleString("ko-KR")}개`);
   }
 
   return Array.from(grouped.values()).map((item: any) => ({
     ...item,
-    note: item.colorSizeSummary.length ? `RT_Result H열 지시일 기준: ${item.colorSizeSummary.slice(0, 8).join(", ")}${item.colorSizeSummary.length > 8 ? " ..." : ""}` : "RT_Result H열 지시일 기준",
+    note: item.colorSizeSummary.length ? `RT_Result G열 승인날짜 기준: ${item.colorSizeSummary.slice(0, 8).join(", ")}${item.colorSizeSummary.length > 8 ? " ..." : ""}` : "RT_Result G열 승인날짜 기준",
   }));
 }
 
@@ -1461,8 +1467,8 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
     return {
       ...row,
       saleType: "RT",
-      // 같은 시작일/같은 상품은 여러 매장에서 같은 점포로 이동해도 성과표 1행으로 봅니다.
-      note: row.note || "RT_Result H열 지시일 기준 / 동일 상품 통합",
+      // 같은 승인날짜/같은 상품은 여러 매장에서 이동해도 성과표 1행으로 봅니다.
+      note: row.note || "RT_Result G열 승인날짜 기준 / 동일 상품 통합",
     };
   });
 }
@@ -1630,7 +1636,7 @@ function performancePeriods(row: any) {
     return {
       beforeDates: beforeWeek.dates,
       duringDates: duringWeek.dates,
-      basis: `RT 비교: RT_Result H열 지시일 기준 / 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
+      basis: `RT 비교: RT_Result G열 승인날짜 기준 / 실행전주 ${beforeWeek.start}~${beforeWeek.end} ↔ 실행주 ${duringWeek.start}~${duringWeek.end}`,
       beforeLabel: `${beforeWeek.start}~${beforeWeek.end}`,
       duringLabel: `${duringWeek.start}~${duringWeek.end}`,
     };

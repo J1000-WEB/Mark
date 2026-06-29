@@ -1363,7 +1363,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
     const toStore = codeNameMap.get(rawTo) || displayStoreName(rawTo);
     const color = text(row[colorCol]);
     const size = text(row[sizeCol]);
-    const key = `${directiveDate}__${rawFrom}__${rawTo}__${styleCode}`;
+    const key = `${directiveDate}__${rawTo}__${styleCode}`;
 
     if (!grouped.has(key)) {
       grouped.set(key, {
@@ -1383,6 +1383,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
         startDate: directiveDate,
         endDate: "",
         fromStore,
+        fromStores: [] as string[],
         toStore,
         beforeQty: 0,
         duringQty: 0,
@@ -1397,6 +1398,8 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 
     const item = grouped.get(key);
     item.rtQty += qty;
+    if (fromStore && !item.fromStores.includes(fromStore)) item.fromStores.push(fromStore);
+    item.fromStore = item.fromStores.join(", ");
     if (color || size) item.colorSizeSummary.push(`${color || "-"} / ${size || "-"} ${qty.toLocaleString("ko-KR")}개`);
   }
 
@@ -1407,7 +1410,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 }
 
 function mergeRtRows(performanceRows: any[], rtRows: any[]) {
-  const keyOf = (row: any) => `${row.startDate}__${normalizeStoreKey(row.fromStore)}__${normalizeStoreKey(row.toStore)}__${row.styleCode}`;
+  const keyOf = (row: any) => `${row.startDate}__${row.category || "RT"}__${normalizeStoreKey(row.toStore || row.channel || "")}__${row.styleCode}`;
   const map = new Map<string, any>();
 
   for (const row of performanceRows) {
@@ -1652,6 +1655,100 @@ function parseDailyHistoryRows(rows: any[][]) {
     .filter((r) => r.date && r.styleCode);
 }
 
+
+function parseWeeklyStoreHistoryRows(rows: any[][]) {
+  const header = rows[0] || [];
+  const basisCol = findCol(header, ["기준일"], 0);
+  const analysisStartCol = findCol(header, ["분석시작일"], 1);
+  const analysisEndCol = findCol(header, ["분석종료일"], 2);
+  const typeCol = findCol(header, ["구분"], 5);
+  const styleCol = findCol(header, ["스타일", "품번"], 6);
+  const productCol = findCol(header, ["스타일명", "품명"], 7);
+  const storeCol = findCol(header, ["점포명", "점포", "매장"], 11);
+  const currentQtyCol = findCol(header, ["금주판매수량"], 12);
+  const currentAmountCol = findCol(header, ["금주판매금액"], 13);
+  const prevQtyCol = findCol(header, ["전주판매수량"], 14);
+  const prevAmountCol = findCol(header, ["전주판매금액"], 15);
+
+  return rows.slice(1).map((row) => ({
+    basis: normalizeDateKey(row[basisCol]),
+    analysisStart: normalizeDateKey(row[analysisStartCol]),
+    analysisEnd: normalizeDateKey(row[analysisEndCol]),
+    typeLabel: text(row[typeCol]),
+    styleCode: text(row[styleCol]),
+    productName: text(row[productCol]),
+    storeName: displayStoreName(text(row[storeCol])),
+    storeKey: normalizeStoreKey(text(row[storeCol])),
+    currentQty: num(row[currentQtyCol]),
+    currentAmount: num(row[currentAmountCol]),
+    prevQty: num(row[prevQtyCol]),
+    prevAmount: num(row[prevAmountCol]),
+  })).filter((r) => r.basis && r.styleCode && r.storeName);
+}
+
+function sumWeeklyPerformance(weeklyStoreRows: any[], row: any) {
+  const startDate = row.startDate;
+  if (!startDate) return null;
+  const duringWeek = weekWindow(startDate, 0);
+  const basis = mondayAfterDate(duringWeek.end || startDate);
+  const targetStore = normalizeStoreKey(row.toStore || row.channel || "");
+  const styleCode = text(row.styleCode);
+  const matches = weeklyStoreRows.filter((r) => {
+    if (r.typeLabel && r.typeLabel !== "품번") return false;
+    if (r.styleCode !== styleCode) return false;
+    if (r.basis !== basis && !(r.analysisStart === duringWeek.start && r.analysisEnd === duringWeek.end)) return false;
+    if (!targetStore) return true;
+    return r.storeKey === targetStore || r.storeKey.includes(targetStore) || targetStore.includes(r.storeKey);
+  });
+  if (!matches.length) return null;
+  return matches.reduce((acc, r) => {
+    acc.beforeQty += Number(r.prevQty || 0);
+    acc.duringQty += Number(r.currentQty || 0);
+    acc.beforeAmount += Number(r.prevAmount || 0);
+    acc.duringAmount += Number(r.currentAmount || 0);
+    if (!acc.productName && r.productName) acc.productName = r.productName;
+    return acc;
+  }, { beforeQty: 0, duringQty: 0, beforeAmount: 0, duringAmount: 0, productName: "", basis, beforePeriodLabel: "", duringPeriodLabel: "" });
+}
+
+function applyWeeklyPerformance(rows: any[], weeklyStoreRows: any[], override?: PerformanceOverride) {
+  if (!weeklyStoreRows.length || override?.beforeStart || override?.beforeEnd || override?.duringStart || override?.duringEnd) return rows;
+  return rows.map((row: any) => {
+    const weekly = row.category === "RT" ? sumWeeklyPerformance(weeklyStoreRows, row) : null;
+    if (!weekly) return row;
+    const periods = performancePeriods(row);
+    const beforeQty = Number(row.beforeQty || 0) || weekly.beforeQty;
+    const duringQty = Number(row.duringQty || 0) || weekly.duringQty;
+    const beforeAmount = Number(row.beforeAmount || 0) || weekly.beforeAmount;
+    const duringAmount = Number(row.duringAmount || 0) || weekly.duringAmount;
+    const addedQty = duringQty - beforeQty;
+    const addedAmount = duringAmount - beforeAmount;
+    const rtQty = row.category === "RT" ? extractRtQty(row) : 0;
+    const depletionRate = row.category === "RT" && rtQty ? (duringQty / rtQty) * 100 : 0;
+    return {
+      ...row,
+      productName: row.productName || weekly.productName || "",
+      rtQty,
+      depletionRate,
+      rtGrade: row.category === "RT" && rtQty ? rtGrade(depletionRate) : "",
+      beforeQty,
+      duringQty,
+      addedQty,
+      beforeAmount,
+      duringAmount,
+      addedAmount,
+      changeRate: beforeAmount ? ((duringAmount - beforeAmount) / beforeAmount) * 100 : duringAmount ? 100 : 0,
+      result: addedAmount > 0 ? "성공" : addedAmount < 0 ? "부진" : "관찰",
+      compareBasis: `RT 비교: Weekly_Store_History 기준 / 실행전주 ${periods.beforeLabel} ↔ 실행주 ${periods.duringLabel}`,
+      beforePeriodLabel: periods.beforeLabel || "",
+      duringPeriodLabel: periods.duringLabel || "",
+      beforeDates: periods.beforeDates,
+      duringDates: periods.duringDates,
+      performanceSource: "Weekly_Store_History",
+    };
+  });
+}
+
 type PerformanceOverride = {
   categoryFilter?: "ALL" | "RT" | "PROMOTION";
   selectedDate?: string;
@@ -1831,6 +1928,10 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
 
     const dailyRows = parseDailyHistoryRows(dailyValues || []);
 
+    const weeklyStoreSheetName = historyTitles.includes("Weekly_Store_History") ? "Weekly_Store_History" : "";
+    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(historyId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
+    const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
+
     for (const row of dailyRows as any[]) {
       const style = text(row.styleCode);
       const productName = text(row.productName);
@@ -1856,7 +1957,8 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
       performanceRows = performanceRows.filter((row: any) => row.category === override.categoryFilter);
     }
 
-    const rows = applyDailyPerformance(performanceRows, dailyRows, override);
+    const weeklyApplied = applyWeeklyPerformance(performanceRows, weeklyStoreRows, override);
+    const rows = applyDailyPerformance(weeklyApplied, dailyRows, override);
     const summary = buildPerformanceSummary(rows);
 
     return {
@@ -1871,6 +1973,8 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
         mergedRows: performanceRows.length,
         dailyRows: dailyRows.length,
         dailySource,
+        weeklyStoreSheetName,
+        weeklyStoreRows: weeklyStoreRows.length,
       },
     };
   } catch (error: any) {

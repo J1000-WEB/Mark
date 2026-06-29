@@ -1314,18 +1314,48 @@ function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
 
 
 
+function looksLikeStoreName(value: string) {
+  const s = String(value || "").trim();
+  if (!s || /^\d+$/.test(s)) return false;
+  return /(점|플래그십|아울렛|백화점|몰|현대|롯데|신세계|LF|타임스퀘어|성수|신사|한남|센텀|용산|광주|송도|김포|잠실|강남|대전|평촌|광양|운정)/i.test(s);
+}
+
 function buildChannelCodeNameMap(rows: any[][]): Map<string, string> {
   const map = new Map<string, string>();
+  const setMap = (code: string, name: string) => {
+    const c = text(code);
+    const n = displayStoreName(text(name));
+    if (!c || !n || !/^\d+$/.test(c)) return;
+    map.set(c, n);
+    map.set(normalizeStoreKey(c), n);
+    map.set(normalizeStoreKey(n), n);
+  };
+
   for (const row of rows.slice(1)) {
-    // 객_전주 기준: C=채널코드, D=점포명인 경우가 많습니다.
-    const codeCandidates = [text(row[2]), text(row[0]), text(row[1])].filter(Boolean);
-    const nameCandidates = [text(row[3]), text(row[4]), text(row[1])].filter(Boolean);
-    const name = nameCandidates.find((x) => x && !/^\d+$/.test(x)) || nameCandidates[0] || "";
-    if (!name) continue;
-    for (const code of codeCandidates) {
-      if (code) map.set(code, displayStoreName(name));
+    // 표준 객_전주: C=채널코드, D=점포명 우선
+    setMap(text(row[2]), text(row[3]));
+    // 일부 파일은 A/B/C/D가 다르게 들어오므로 같은 행의 숫자 코드와 점포명 후보를 전부 연결합니다.
+    const codes = row.map(text).filter((v) => /^\d{4,6}$/.test(v));
+    const names = row.map(text).filter(looksLikeStoreName);
+    for (const code of codes) {
+      for (const name of names) setMap(code, name);
     }
-    map.set(normalizeStoreKey(name), displayStoreName(name));
+  }
+
+  // 자주 쓰는 점포 코드는 객_전주 매핑 실패 시에도 RT 화면이 깨지지 않도록 최소 fallback을 둡니다.
+  const fallback: Record<string, string> = {
+    "21030": "성수 플래그십",
+    "21034": "서울숲 플래그십",
+    "21003": "신세계 대전점",
+    "21007": "신세계 광주점",
+    "21011": "신사 플래그십",
+    "21012": "한남 플래그십",
+    "21016": "포시즌 아울렛 신사",
+    "21001": "현대아울렛 송도점",
+    "42004": "현대아울렛 송도점",
+  };
+  for (const [code, name] of Object.entries(fallback)) {
+    if (!map.has(code)) setMap(code, name);
   }
   return map;
 }
@@ -1360,8 +1390,8 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
 
     const rawFrom = text(row[fromCol]);
     const rawTo = text(row[toCol]);
-    const fromStore = codeNameMap.get(rawFrom) || displayStoreName(rawFrom);
-    const toStore = codeNameMap.get(rawTo) || displayStoreName(rawTo);
+    const fromStore = codeNameMap.get(rawFrom) || codeNameMap.get(normalizeStoreKey(rawFrom)) || displayStoreName(rawFrom);
+    const toStore = codeNameMap.get(rawTo) || codeNameMap.get(normalizeStoreKey(rawTo)) || displayStoreName(rawTo);
     const color = text(row[colorCol]);
     const size = text(row[sizeCol]);
     // 여러 매장에서 같은 상품을 한 점포로 보낸 RT는 성과표에서 상품 1행으로 봅니다.
@@ -1387,8 +1417,10 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
         endDate: "",
         fromStore,
         fromStores: [] as string[],
+        fromCodes: [] as string[],
         toStore,
         toStores: [] as string[],
+        toCodes: [] as string[],
         beforeQty: 0,
         duringQty: 0,
         addedQty: 0,
@@ -1404,6 +1436,8 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
     item.rtQty += qty;
     if (fromStore && !item.fromStores.includes(fromStore)) item.fromStores.push(fromStore);
     if (toStore && !item.toStores.includes(toStore)) item.toStores.push(toStore);
+    if (rawFrom && !item.fromCodes.includes(rawFrom)) item.fromCodes.push(rawFrom);
+    if (rawTo && !item.toCodes.includes(rawTo)) item.toCodes.push(rawTo);
     item.fromStore = item.fromStores.join(", ");
     item.toStore = item.toStores.join(", ") || item.toStore;
     if (color || size) item.colorSizeSummary.push(`${color || "-"} / ${size || "-"} ${qty.toLocaleString("ko-KR")}개`);
@@ -1436,6 +1470,7 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
       rtQty: Number(existing.rtQty || 0) + Number(row.rtQty || 0),
       fromStores: Array.from(fromStores),
       fromStore: Array.from(fromStores).join(", "),
+      toStores: Array.from(new Set([...(existing.toStores || []), row.toStore].filter(Boolean))),
       note: [existing.note, row.note].filter(Boolean).join(" / "),
     });
   }
@@ -1454,6 +1489,7 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
         rtQty: Number(existing.rtQty || 0) + Number(rt.rtQty || 0),
         fromStores: Array.from(fromStores),
         fromStore: Array.from(fromStores).join(", "),
+        toStores: Array.from(new Set([...(existing.toStores || []), ...(rt.toStores || []), existing.toStore, rt.toStore].filter(Boolean))),
         note: [existing.note, rt.note].filter(Boolean).join(" / "),
         source: `${existing.source || "Promotion_Performance"}+RT_Result`,
       });
@@ -1718,9 +1754,9 @@ function parseWeeklyUnitPriceMap(rows: any[][]) {
     return gText.includes(normalizedHeader("금주")) && hText.includes(normalizedHeader("판매금액"));
   });
 
-  // 금주/전주 시트 표준 구조 fallback: U=금주 합계(0-base 20), V=금주 판매금액(0-base 21)
-  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 20;
-  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 21;
+  // 금주/전주 시트 표준 구조 fallback: T=금주 합계수량(0-base 19), U=금주 판매금액(0-base 20)
+  const qtyCol = currentQtyCol >= 0 ? currentQtyCol : 19;
+  const amountCol = currentAmountCol >= 0 ? currentAmountCol : 20;
 
   for (const row of rows.slice(headerRow + 1)) {
     const styleCode = text(row[styleCol]);
@@ -1863,25 +1899,54 @@ function overridePeriods(row: any, override?: PerformanceOverride) {
   };
 }
 
+function targetStoreKeys(row: any) {
+  const rawTargets: string[] = [];
+  if (Array.isArray(row.toStores)) rawTargets.push(...row.toStores);
+  if (row.toStore) rawTargets.push(...String(row.toStore).split(/[,/]/g));
+  if (row.channel) rawTargets.push(String(row.channel));
+  return [...new Set(rawTargets.map((v) => normalizeStoreKey(v)).filter(Boolean))];
+}
+
+function storeMatchesTarget(storeName: string, targets: string[]) {
+  if (!targets.length) return true;
+  const key = normalizeStoreKey(storeName);
+  return targets.some((target) => key === target || key.includes(target) || target.includes(key));
+}
+
 function sumDailyPerformance(dailyRows: any[], row: any, dates: string[]) {
   const dateSet = new Set(dates);
-  const targetStore = normalizeStoreKey(row.toStore || row.channel || "");
-  const hasStoreFilter = Boolean(targetStore);
+  const targets = targetStoreKeys(row);
   const styleCode = text(row.styleCode);
   const isPromotion = row.category === "PROMOTION";
 
-  return dailyRows
+  const strict = dailyRows
     .filter((r) => dateSet.has(r.date))
     .filter((r) => !styleCode || r.styleCode === styleCode)
     // 프로모션은 오프라인 핵심매장만 집계합니다. 온라인/위탁은 제외합니다.
     .filter((r) => !isPromotion || isCoreOfflineSalesStore(r.storeName))
-    // RT는 받는점포 기준으로 성과를 확인합니다.
-    .filter((r) => !hasStoreFilter || r.storeKey === targetStore || normalizeStoreKey(r.storeName).includes(targetStore) || targetStore.includes(r.storeKey))
+    // RT는 받는점포 기준으로 성과를 확인합니다. 여러 출고점에서 한 점포로 보낸 경우에도 받는점포만 봅니다.
+    .filter((r) => row.category !== "RT" || storeMatchesTarget(r.storeName, targets))
     .reduce((acc, r) => {
       acc.qty += Number(r.qty || 0);
       acc.amount += Number(r.amount || 0);
       return acc;
     }, { qty: 0, amount: 0 });
+
+  // 점포명 매핑 실패로 받는점포가 숫자 코드로 남으면 0이 될 수 있습니다.
+  // 이 경우 화면을 0으로 죽이지 않고 스타일 기준 일별 수량을 보조로 사용하되, source에서 확인 가능하게 합니다.
+  if (row.category === "RT" && targets.length && !strict.qty && !strict.amount) {
+    const fallback = dailyRows
+      .filter((r) => dateSet.has(r.date))
+      .filter((r) => !styleCode || r.styleCode === styleCode)
+      .reduce((acc, r) => {
+        acc.qty += Number(r.qty || 0);
+        acc.amount += Number(r.amount || 0);
+        return acc;
+      }, { qty: 0, amount: 0, fallback: true });
+    return fallback;
+  }
+
+  return strict;
 }
 
 function applyDailyPerformance(rows: any[], dailyRows: any[], override?: PerformanceOverride, weeklyUnitPriceMap = new Map<string, number>()) {
@@ -1929,7 +1994,7 @@ function applyDailyPerformance(rows: any[], dailyRows: any[], override?: Perform
       duringPeriodLabel: periods.duringLabel || "",
       beforeDates: periods.beforeDates,
       duringDates: periods.duringDates,
-      performanceSource: before.amount || during.amount || before.qty || during.qty ? "Daily_Sales_History" : "Manual/Empty",
+      performanceSource: (before as any).fallback || (during as any).fallback ? "Daily_Sales_History(style fallback)" : (before.amount || during.amount || before.qty || during.qty ? "Daily_Sales_History" : "Manual/Empty"),
     };
   });
 }

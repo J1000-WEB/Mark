@@ -1,0 +1,1120 @@
+import {
+  appendValuesById,
+  ensureSheetExistsById,
+  getDbSheetId,
+  getHistorySheetId,
+  getSheetId,
+  getSheetValuesById,
+  getSpreadsheetTitlesById,
+  updateValuesById,
+} from "@/lib/googleSheets";
+
+type SalesType = "style" | "color";
+type Row = any[];
+
+type ProductMaster = {
+  year?: string;
+  season?: string;
+  gender?: string;
+  itemGroup?: string;
+  category?: string;
+  item?: string;
+  line?: string;
+  className?: string;
+  style: string;
+  styleName?: string;
+  color?: string;
+  colorName?: string;
+  cost?: number;
+  tagPrice?: number;
+  salePrice?: number;
+  whStock?: number;
+  onlineStock?: number;
+  offlineStock?: number;
+  totalStock?: number;
+  storeStock?: number;
+  cumulativeSalesQty?: number;
+  cumulativeSalesAmount?: number;
+};
+
+type SalesAgg = {
+  amount: number;
+  qty: number;
+  byStore: Record<string, number>;
+  byStoreStock: Record<string, number>;
+  byStoreAmount: Record<string, number>;
+};
+
+type WeekInfo = {
+  week: string;
+  label: string;
+  sheetLabel: string;
+  analysisLabel: string;
+  compareLabel: string;
+  analysisStart: string;
+  analysisEnd: string;
+  compareStart: string;
+  compareEnd: string;
+};
+
+function text(v: any) {
+  return String(v ?? "").trim();
+}
+
+function compact(v: any) {
+  return text(v).replace(/[\s\/_\-·.()]/g, "");
+}
+
+function num(v: any) {
+  if (v === null || v === undefined || v === "") return 0;
+  const n = Number(String(v).replace(/,/g, "").replace(/%/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function excelSerialToDate(serial: number) {
+  return new Date(Math.round((serial - 25569) * 86400 * 1000));
+}
+
+function parseDate(v: any): Date | null {
+  if (v instanceof Date) return v;
+  if (typeof v === "number") return excelSerialToDate(v);
+  const s = text(v);
+  if (!s) return null;
+  const n = Number(s);
+  if (Number.isFinite(n) && n > 30000 && n < 70000) return excelSerialToDate(n);
+  const m = s.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const md = s.match(/(\d{1,2})[/.](\d{1,2})/);
+  if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2]));
+  return null;
+}
+
+function isoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(d: Date, days: number) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + days);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+function mondayOfWeek(d: Date) {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  const day = out.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return addDays(out, diff);
+}
+
+function formatMD(d: Date) {
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function formatWeekRange(start: Date, end: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(start.getMonth() + 1)}.${pad(start.getDate())}~${pad(end.getMonth() + 1)}.${pad(end.getDate())}`;
+}
+
+function parseSelectedMonday(value: string) {
+  const d = parseDate(value);
+  return d ? mondayOfWeek(d) : null;
+}
+
+function salesKey(style: string, color?: string, type: SalesType = "style") {
+  return type === "color" ? `${style}__${color || ""}` : style;
+}
+
+function isOfflineStore(store: string) {
+  const s = text(store);
+  if (!s) return false;
+  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_") || s.startsWith("오프라인_")) return false;
+  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류") || s.includes("위탁샵") || s.includes("위탁")) return false;
+  return true;
+}
+
+function pickHeaderIndex(header: string[], candidates: string[]) {
+  const normalized = header.map((x) => compact(x));
+  for (const c of candidates) {
+    const target = c.replace(/\s/g, "");
+    const idx = normalized.findIndex((h) => h === target || h.includes(target));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function emptyAgg(): SalesAgg {
+  return { amount: 0, qty: 0, byStore: {}, byStoreStock: {}, byStoreAmount: {} };
+}
+
+function addAggValue(map: Map<string, SalesAgg>, key: string, patch: Partial<SalesAgg>) {
+  const agg = map.get(key) || emptyAgg();
+  agg.amount += patch.amount || 0;
+  agg.qty += patch.qty || 0;
+  for (const [store, v] of Object.entries(patch.byStore || {})) agg.byStore[store] = (agg.byStore[store] || 0) + v;
+  for (const [store, v] of Object.entries(patch.byStoreAmount || {})) agg.byStoreAmount[store] = (agg.byStoreAmount[store] || 0) + v;
+  for (const [store, v] of Object.entries(patch.byStoreStock || {})) agg.byStoreStock[store] = (agg.byStoreStock[store] || 0) + v;
+  map.set(key, agg);
+}
+
+function buildProductMaster(rows: Row[]) {
+  const byStyle = new Map<string, ProductMaster>();
+  const byColor = new Map<string, ProductMaster>();
+  if (!rows?.length) return { byStyle, byColor };
+
+  // 스타일별 채널별 입고판매재고현황은 2~3행이 다단 헤더이고 실제 데이터는 4행부터입니다.
+  for (const r of rows.slice(3)) {
+    const style = text(r[13]);
+    if (!style) continue;
+    const color = text(r[15]);
+    const base: ProductMaster = {
+      year: text(r[3]),
+      season: text(r[4]),
+      gender: text(r[5]),
+      itemGroup: text(r[6]),
+      category: text(r[7]),
+      item: text(r[8]),
+      line: text(r[9]),
+      className: text(r[10]),
+      style,
+      styleName: text(r[14]),
+      color,
+      colorName: text(r[16]),
+      cost: num(r[17]),
+      tagPrice: num(r[18]),
+      salePrice: num(r[19]),
+      whStock: num(r[24]),
+      totalStock: num(r[27]),
+      onlineStock: num(r[31]),
+      offlineStock: num(r[35]),
+      cumulativeSalesQty: num(r[25]),
+      cumulativeSalesAmount: num(r[34]) + num(r[30]) + num(r[38]),
+    };
+
+    const existing = byStyle.get(style);
+    if (existing) {
+      existing.whStock = (existing.whStock || 0) + (base.whStock || 0);
+      existing.totalStock = (existing.totalStock || 0) + (base.totalStock || 0);
+      existing.onlineStock = (existing.onlineStock || 0) + (base.onlineStock || 0);
+      existing.offlineStock = (existing.offlineStock || 0) + (base.offlineStock || 0);
+      existing.cumulativeSalesQty = (existing.cumulativeSalesQty || 0) + (base.cumulativeSalesQty || 0);
+      existing.cumulativeSalesAmount = (existing.cumulativeSalesAmount || 0) + (base.cumulativeSalesAmount || 0);
+    } else {
+      byStyle.set(style, { ...base, color: "", colorName: "" });
+    }
+    if (color) byColor.set(salesKey(style, color, "color"), base);
+  }
+  return { byStyle, byColor };
+}
+
+function mergeOnOffStock(rows: Row[], maps: { byStyle: Map<string, ProductMaster>; byColor: Map<string, ProductMaster> }) {
+  if (!rows?.length) return;
+  const header = (rows[0] || []).map(text);
+  const idxStyle = pickHeaderIndex(header, ["스타일", "품번"]);
+  const idxStyleName = pickHeaderIndex(header, ["스타일명", "품명"]);
+  const idxColor = pickHeaderIndex(header, ["칼라", "컬러"]);
+  const idxColorName = pickHeaderIndex(header, ["칼라명", "컬러명"]);
+  const idxCost = pickHeaderIndex(header, ["원가"]);
+  const idxTag = pickHeaderIndex(header, ["Tag가", "TAG가", "소비자가"]);
+  const idxSale = pickHeaderIndex(header, ["실판매가", "판매가"]);
+  const idxStock = pickHeaderIndex(header, ["재고"]);
+  const idxOnline = pickHeaderIndex(header, ["가용(온)", "가용온"]);
+  const idxOffline = pickHeaderIndex(header, ["가용(오프)", "가용오프"]);
+  const idxTotal = pickHeaderIndex(header, ["가용(합계)", "가용합계"]);
+  const idxYear = pickHeaderIndex(header, ["년도"]);
+  const idxSeason = pickHeaderIndex(header, ["시즌"]);
+  const idxItemGroup = pickHeaderIndex(header, ["품목"]);
+  const idxCategory = pickHeaderIndex(header, ["복종"]);
+  const idxItem = pickHeaderIndex(header, ["아이템"]);
+
+  for (const r of rows.slice(1)) {
+    const style = text(r[idxStyle]);
+    if (!style) continue;
+    const color = text(r[idxColor]);
+    const key = salesKey(style, color, "color");
+    const colorEntry = maps.byColor.get(key) || ({
+      style,
+      color,
+      styleName: text(r[idxStyleName]),
+      colorName: text(r[idxColorName]),
+    } as ProductMaster);
+    colorEntry.year ||= text(r[idxYear]);
+    colorEntry.season ||= text(r[idxSeason]);
+    colorEntry.itemGroup ||= text(r[idxItemGroup]);
+    colorEntry.category ||= text(r[idxCategory]);
+    colorEntry.item ||= text(r[idxItem]);
+    colorEntry.cost ||= num(r[idxCost]);
+    colorEntry.tagPrice ||= num(r[idxTag]);
+    colorEntry.salePrice ||= num(r[idxSale]);
+    colorEntry.totalStock = (colorEntry.totalStock || 0) + (idxTotal >= 0 ? num(r[idxTotal]) : num(r[idxStock]));
+    colorEntry.onlineStock = (colorEntry.onlineStock || 0) + (idxOnline >= 0 ? num(r[idxOnline]) : 0);
+    colorEntry.offlineStock = (colorEntry.offlineStock || 0) + (idxOffline >= 0 ? num(r[idxOffline]) : 0);
+    colorEntry.storeStock = colorEntry.offlineStock || 0;
+    maps.byColor.set(key, colorEntry);
+
+    const styleEntry = maps.byStyle.get(style) || ({ style, styleName: text(r[idxStyleName]) } as ProductMaster);
+    styleEntry.year ||= colorEntry.year;
+    styleEntry.season ||= colorEntry.season;
+    styleEntry.itemGroup ||= colorEntry.itemGroup;
+    styleEntry.category ||= colorEntry.category;
+    styleEntry.item ||= colorEntry.item;
+    styleEntry.cost ||= colorEntry.cost;
+    styleEntry.tagPrice ||= colorEntry.tagPrice;
+    styleEntry.salePrice ||= colorEntry.salePrice;
+    styleEntry.totalStock = (styleEntry.totalStock || 0) + (idxTotal >= 0 ? num(r[idxTotal]) : num(r[idxStock]));
+    styleEntry.onlineStock = (styleEntry.onlineStock || 0) + (idxOnline >= 0 ? num(r[idxOnline]) : 0);
+    styleEntry.offlineStock = (styleEntry.offlineStock || 0) + (idxOffline >= 0 ? num(r[idxOffline]) : 0);
+    styleEntry.storeStock = styleEntry.offlineStock || 0;
+    maps.byStyle.set(style, styleEntry);
+  }
+}
+
+function aggregateSalesQtyOnly(rows: Row[], start: Date, end: Date, type: SalesType) {
+  const map = new Map<string, SalesAgg>();
+  const stores = new Set<string>();
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+
+  for (const r of rows.slice(1)) {
+    const d = parseDate(r[0]);
+    if (!d) continue;
+    const ts = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    if (ts < startMs || ts > endMs) continue;
+
+    const store = text(r[1]);
+    if (!isOfflineStore(store)) continue;
+    const style = text(r[2]);
+    const color = text(r[4]);
+    if (!style) continue;
+    const qty = num(r[7]);
+    const key = salesKey(style, color, type);
+    addAggValue(map, key, { qty, byStore: { [store]: qty } });
+    stores.add(store);
+  }
+  return { map, stores };
+}
+
+function findGroupColumn(rows: Row[], groupName: string, headerName: string, fallback: number) {
+  const groupRow = (rows[1] || []).map(text);
+  const headerRow = (rows[2] || []).map(text);
+  const groupStart = groupRow.findIndex((x) => compact(x) === compact(groupName));
+  if (groupStart >= 0) {
+    let groupEnd = headerRow.length;
+    for (let i = groupStart + 1; i < groupRow.length; i++) {
+      if (text(groupRow[i])) {
+        groupEnd = i;
+        break;
+      }
+    }
+    const target = compact(headerName);
+    for (let i = groupStart; i < groupEnd; i++) {
+      if (compact(headerRow[i]) === target || compact(headerRow[i]).includes(target)) return i;
+    }
+  }
+  return fallback;
+}
+
+function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
+  const current = new Map<string, SalesAgg>();
+  const previous = new Map<string, SalesAgg>();
+  const stores = new Set<string>();
+  if (!rows?.length) return { current, previous, stores, columns: {} };
+
+  const curQtyCol = findGroupColumn(rows, "금주", "합계", 20);
+  const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 21);
+  const prevQtyCol = findGroupColumn(rows, "전주", "합계", 24);
+  const prevAmountCol = findGroupColumn(rows, "전주", "판매금액", 25);
+  const stockCol = 7;
+
+  for (const r of rows.slice(3)) {
+    const channelName = text(r[1]);
+    if (!isOfflineStore(channelName)) continue;
+    const style = text(r[2]);
+    const color = text(r[4]);
+    if (!style) continue;
+    const key = salesKey(style, color, type);
+    const stock = num(r[stockCol]);
+
+    // 금주/전주 시트는 원본 붙여넣기 영역(I/J)에 수량/금액이 있고,
+    // 우측 금주/전주 계산영역(S:Z)은 수식 재계산 상태에 따라 0 또는 빈값으로 내려올 수 있습니다.
+    // 따라서 계산영역 값이 없으면 원본 수량/금액(I/J)을 금주 판매값으로 사용합니다.
+    const rawQty = num(r[8]);
+    const rawAmount = num(r[9]);
+    const currentQty = num(r[curQtyCol]) || rawQty;
+    const currentAmount = num(r[curAmountCol]) || rawAmount;
+    const prevQty = num(r[prevQtyCol]);
+    const prevAmount = num(r[prevAmountCol]);
+
+    addAggValue(current, key, {
+      qty: currentQty,
+      amount: currentAmount,
+      byStore: { [channelName]: currentQty },
+      byStoreAmount: { [channelName]: currentAmount },
+      byStoreStock: { [channelName]: stock },
+    });
+    addAggValue(previous, key, {
+      qty: prevQty,
+      amount: prevAmount,
+      byStore: { [channelName]: prevQty },
+      byStoreAmount: { [channelName]: prevAmount },
+      byStoreStock: { [channelName]: stock },
+    });
+    stores.add(channelName);
+  }
+  return { current, previous, stores, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
+}
+
+function preferQtyFromDailyAndAmountFromPrice(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
+  const out = new Map<string, SalesAgg>();
+  for (const key of new Set([...daily.keys(), ...price.keys()])) {
+    const d = daily.get(key) || emptyAgg();
+    const p = price.get(key) || emptyAgg();
+    const merged = emptyAgg();
+    merged.qty = d.qty || p.qty;
+    merged.amount = p.amount; // 판매금액/가격은 금주전주 시트 기준. Daily 금액은 상품 가격 계산에 사용하지 않음.
+    merged.byStore = Object.keys(p.byStore).length ? { ...p.byStore } : { ...d.byStore };
+    merged.byStoreAmount = { ...p.byStoreAmount };
+    merged.byStoreStock = { ...p.byStoreStock };
+    out.set(key, merged);
+  }
+  return out;
+}
+
+function makeWeeks(salesRows: Row[]) {
+  const dates = salesRows.slice(1).map((r) => parseDate(r[0])).filter(Boolean) as Date[];
+  const latest = dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : new Date();
+  const base = mondayOfWeek(latest);
+  return Array.from({ length: 12 }).map((_, i) => {
+    const monday = addDays(base, -7 * i);
+    const analysisStart = addDays(monday, -7);
+    const analysisEnd = addDays(monday, -1);
+    const compareStart = addDays(monday, -14);
+    const compareEnd = addDays(monday, -8);
+    return {
+      week: isoDate(monday),
+      label: `${formatMD(monday)} 월요일 기준`,
+      sheetLabel: formatWeekRange(analysisStart, analysisEnd),
+      analysisLabel: `${formatMD(analysisStart)}~${formatMD(analysisEnd)}`,
+      compareLabel: `${formatMD(compareStart)}~${formatMD(compareEnd)}`,
+      analysisStart: isoDate(analysisStart),
+      analysisEnd: isoDate(analysisEnd),
+      compareStart: isoDate(compareStart),
+      compareEnd: isoDate(compareEnd),
+    } satisfies WeekInfo;
+  });
+}
+
+function rankMap(aggs: Map<string, SalesAgg>) {
+  const sorted = [...aggs.entries()]
+    .filter(([, a]) => (a.amount || 0) !== 0)
+    .sort((a, b) => (b[1].amount || 0) - (a[1].amount || 0));
+  const out = new Map<string, number>();
+  let rank = 0;
+  let lastAmount: number | null = null;
+  sorted.forEach(([key, agg], idx) => {
+    if (lastAmount === null || agg.amount !== lastAmount) rank = idx + 1;
+    lastAmount = agg.amount;
+    out.set(key, rank);
+  });
+  return out;
+}
+
+function ratio(n: number, d: number) {
+  return d ? n / d : 0;
+}
+
+function priceByAmountQty(amount: number, qty: number) {
+  return qty ? Math.round(amount / qty) : "";
+}
+
+function buildExcelLikeRows(args: {
+  type: SalesType;
+  selected: WeekInfo;
+  current: Map<string, SalesAgg>;
+  prev1: Map<string, SalesAgg>;
+  prev2: Map<string, SalesAgg>;
+  prev3: Map<string, SalesAgg>;
+  productMap: Map<string, ProductMaster>;
+  stores: string[];
+}) {
+  const { type, selected, current, prev1, prev2, prev3, productMap, stores } = args;
+  const totalAmount = [...current.values()].reduce((sum, x) => sum + x.amount, 0);
+  const totalQty = [...current.values()].reduce((sum, x) => sum + x.qty, 0);
+  const currentRank = rankMap(current);
+  const prevRank = rankMap(prev1);
+
+  const dataKeys = new Set<string>([...productMap.keys(), ...current.keys(), ...prev1.keys(), ...prev2.keys(), ...prev3.keys()]);
+  const keys = [...dataKeys].filter((key) => {
+    const c = current.get(key);
+    const p = productMap.get(key);
+    return (c?.amount || 0) || (c?.qty || 0) || (p?.totalStock || 0) || (p?.offlineStock || 0) || (p?.onlineStock || 0);
+  }).sort((a, b) => (current.get(b)?.amount || 0) - (current.get(a)?.amount || 0));
+
+  const prefix = type === "color"
+    ? ["품번+컬러", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업", "연출강화", "품번", "컬러", "컬러명", "품명", "STY", "COL", "원가", "TAG가", "실판매가", "주간평균가", "전주평균가", "평균가등락", "할인율"]
+    : ["", "년도", "시즌", "품목", "복종", "아이템", "재런칭", "품번", "품명", "STY", "COL", "원가", "TAG가", "실판매가", "주간평균가", "전주평균가", "평균가등락", "할인율"];
+  const lifecycle = ["기획", "입고%", "입고", "판매", "재고", "판매%", "초입고", "초출고"];
+  const ranking = ["주간", "2주전", "등락"];
+  const amount = ["주간", "2주전", "비중"];
+  const qty = ["주간", "2주전", "3주전", "4주전", "증감"];
+  const stock = ["총재고", "물류", "물류(온)", "물류(오프)", "점포"];
+  const storeHeaders = stores.flatMap((store) => [`${store} 판매`, `${store} 재고`]);
+  const headers = ["순위", ...prefix, ...lifecycle, ...ranking, ...amount, ...qty, ...stock, ...storeHeaders];
+
+  const groupRow = Array(headers.length).fill("");
+  groupRow[1] = "카테고리";
+  groupRow[type === "color" ? 10 : 8] = "상품현황";
+  groupRow[type === "color" ? 16 : 13] = "가격";
+  groupRow[1 + prefix.length] = "제품라이프사이클";
+  groupRow[1 + prefix.length + lifecycle.length] = "랭킹";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length] = "금액판매";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length] = "수량판매";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = "재고";
+  groupRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + stock.length] = "점포별 판매/재고";
+
+  const summaryRow = Array(headers.length).fill("");
+  const offStockTotal = keys.reduce((sum, key) => sum + (productMap.get(key)?.offlineStock || 0), 0);
+  const onStockTotal = keys.reduce((sum, key) => sum + (productMap.get(key)?.onlineStock || 0), 0);
+  const totalStock = keys.reduce((sum, key) => sum + (productMap.get(key)?.totalStock || 0), 0);
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length] = totalAmount;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length] = totalQty;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length] = totalStock;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 2] = onStockTotal;
+  summaryRow[1 + prefix.length + lifecycle.length + ranking.length + amount.length + qty.length + 3] = offStockTotal;
+
+  const titleRow = Array(headers.length).fill("");
+  titleRow[1] = `Top Item Sales (Store/WK) · MARK 6.0.5 자동생성`;
+  titleRow[8] = selected.sheetLabel;
+  titleRow[headers.length - 1] = keys.length;
+
+  const periodRow = Array(headers.length).fill("");
+  periodRow[0] = `${selected.label} / 분석 ${selected.analysisLabel} / 비교 ${selected.compareLabel}`;
+
+  const rows: Row[] = [
+    titleRow,
+    periodRow,
+    groupRow,
+    headers,
+    Array(headers.length).fill(""),
+    summaryRow,
+    Array(headers.length).fill(""),
+  ];
+
+  for (const key of keys) {
+    const p = productMap.get(key) || ({ style: type === "color" ? key.split("__")[0] : key } as ProductMaster);
+    const c = current.get(key) || emptyAgg();
+    const p1 = prev1.get(key) || emptyAgg();
+    const p2 = prev2.get(key) || emptyAgg();
+    const p3 = prev3.get(key) || emptyAgg();
+    const rank = currentRank.get(key) || "";
+    const oldRank = prevRank.get(key) || "";
+    const diff = rank && oldRank ? Number(oldRank) - Number(rank) : "";
+    const stockTotal = p.totalStock || (p.onlineStock || 0) + (p.offlineStock || 0) + (p.whStock || 0);
+    const soldCume = p.cumulativeSalesAmount || 0;
+    const avgSalePrice = priceByAmountQty(c.amount, c.qty);
+    const prevAvgSalePrice = priceByAmountQty(p1.amount, p1.qty);
+    const avgPriceDelta = avgSalePrice && prevAvgSalePrice ? Number(avgSalePrice) - Number(prevAvgSalePrice) : "";
+    const displaySalePrice = p.salePrice || avgSalePrice || "";
+    const planned = soldCume + stockTotal * (Number(avgSalePrice) || p.salePrice || 0);
+    const saleRate = ratio(c.qty, c.qty + stockTotal);
+    const markdown = avgSalePrice && p.tagPrice ? 1 - Number(avgSalePrice) / p.tagPrice : "";
+    const row: Row = [rank || ""];
+
+    if (type === "color") {
+      row.push(
+        `${p.style || ""}${p.color || ""}`,
+        p.year || "",
+        p.season || "",
+        p.itemGroup || "",
+        p.category || "",
+        p.item || "",
+        p.className === "재런칭" ? "재런칭" : "",
+        p.line || "",
+        "",
+        p.style || "",
+        p.color || "",
+        p.colorName || "",
+        p.styleName || "",
+        p.style ? 1 : 0,
+        p.color ? 1 : 0,
+        p.cost || "",
+        p.tagPrice || "",
+        displaySalePrice,
+        avgSalePrice,
+        prevAvgSalePrice,
+        avgPriceDelta,
+        markdown
+      );
+    } else {
+      row.push(
+        "",
+        p.year || "",
+        p.season || "",
+        p.itemGroup || "",
+        p.category || "",
+        p.item || "",
+        p.className === "재런칭" ? "재런칭" : "",
+        p.style || "",
+        p.styleName || "",
+        p.style ? 1 : 0,
+        "",
+        p.cost || "",
+        p.tagPrice || "",
+        displaySalePrice,
+        avgSalePrice,
+        prevAvgSalePrice,
+        avgPriceDelta,
+        markdown
+      );
+    }
+
+    row.push(planned || "", saleRate || "", soldCume || "", c.qty || "", stockTotal || "", saleRate || "", "", "");
+    row.push(rank, oldRank, diff);
+    row.push(c.amount || "", p1.amount || "", ratio(c.amount, totalAmount));
+    row.push(c.qty || "", p1.qty || "", p2.qty || "", p3.qty || "", c.qty - p1.qty || "");
+    row.push(stockTotal || "", p.whStock || "", p.onlineStock || "", p.offlineStock || "", p.storeStock || p.offlineStock || "");
+    for (const store of stores) row.push(c.byStore[store] || "", c.byStoreStock[store] || "");
+    rows.push(row);
+  }
+  return { rows, rowCount: keys.length, colCount: headers.length };
+}
+
+async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string) {
+  for (const spreadsheetId of ids) {
+    const titles = await getSpreadsheetTitlesById(spreadsheetId).catch(() => []);
+    const found = titles.find((title) => candidates.includes(title)) || titles.find((title) => candidates.some((c) => compact(title).includes(compact(c))));
+    if (found) {
+      const rows = await getSheetValuesById(spreadsheetId, found, range).catch(() => []);
+      return { spreadsheetId, sheetName: found, rows };
+    }
+  }
+  return { spreadsheetId: "", sheetName: "", rows: [] as Row[] };
+}
+
+
+export type WeeklyProviderPayload = {
+  ok: boolean;
+  mode: string;
+  version: string;
+  type: SalesType;
+  weeks: WeekInfo[];
+  selectedWeek: string;
+  selectedWeekLabel: string;
+  analysisLabel: string;
+  compareLabel: string;
+  sheetName: string;
+  rows: Row[];
+  rowCount: number;
+  colCount: number;
+  stores: string[];
+  sources: Record<string, any>;
+  error?: string;
+};
+
+export const WEEKLY_HISTORY_SHEET = "Weekly_History";
+export const WEEKLY_HISTORY_VERSION = "MARK 6.1 WEEKLY_PROVIDER";
+
+export const WEEKLY_HISTORY_HEADER = [
+  "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
+  "스타일", "스타일명", "칼라", "칼라명", "사이즈", "브랜드", "시즌", "성별", "품목", "복종", "라인", "클래스",
+  "Tag가", "실판매가", "금주판매수량", "금주판매금액", "전주판매수량", "전주판매금액",
+  "평균판매가", "전주평균판매가", "판매수량증감", "판매금액증감", "판매수량증감률", "판매금액증감률",
+  "온재고", "오프재고", "총가용재고", "판매율", "순위", "점포별판매수량JSON", "점포별판매금액JSON", "점포별전주판매금액JSON", "점포별재고JSON", "Snapshot일시", "SnapshotVersion"
+];
+
+function columnLetter(n: number) {
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function nowKST() {
+  return new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+}
+
+function parseJsonObject(value: any): Record<string, number> {
+  try {
+    const parsed = JSON.parse(text(value));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(parsed)) out[k] = num(v);
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function mapByHeader(header: Row) {
+  const out = new Map<string, number>();
+  header.forEach((h, i) => {
+    const key = text(h);
+    if (key && !out.has(key)) out.set(key, i);
+  });
+  return out;
+}
+
+async function ensureWeeklyHistorySheet(historyId: string) {
+  await ensureSheetExistsById(historyId, WEEKLY_HISTORY_SHEET);
+  const endCol = columnLetter(WEEKLY_HISTORY_HEADER.length);
+  await updateValuesById(historyId, `'${WEEKLY_HISTORY_SHEET}'!A1:${endCol}1`, [WEEKLY_HISTORY_HEADER]);
+}
+
+function latestByKey<T extends { snapshotAt?: string }>(items: T[], keyFn: (x: T) => string) {
+  const map = new Map<string, T>();
+  for (const item of items) {
+    const key = keyFn(item);
+    const prev = map.get(key);
+    if (!prev || text(item.snapshotAt) >= text(prev.snapshotAt)) map.set(key, item);
+  }
+  return [...map.values()];
+}
+
+function weeklyHistoryRecordFromRow(header: Row, r: Row) {
+  const h = mapByHeader(header);
+  const get = (name: string) => r[h.get(name) ?? -1];
+  const basis = isoDate(parseDate(get("기준일")) || new Date(text(get("기준일"))));
+  return {
+    basis,
+    analysisStart: text(get("분석시작일")),
+    analysisEnd: text(get("분석종료일")),
+    compareStart: text(get("비교시작일")),
+    compareEnd: text(get("비교종료일")),
+    typeLabel: text(get("구분")),
+    style: text(get("스타일")),
+    styleName: text(get("스타일명")),
+    color: text(get("칼라")),
+    colorName: text(get("칼라명")),
+    season: text(get("시즌")),
+    gender: text(get("성별")),
+    itemGroup: text(get("품목")),
+    category: text(get("복종")),
+    line: text(get("라인")),
+    className: text(get("클래스")),
+    tagPrice: num(get("Tag가")),
+    salePrice: num(get("실판매가")),
+    currentQty: num(get("금주판매수량")),
+    currentAmount: num(get("금주판매금액")),
+    prevQty: num(get("전주판매수량")),
+    prevAmount: num(get("전주판매금액")),
+    onlineStock: num(get("온재고")),
+    offlineStock: num(get("오프재고")),
+    totalStock: num(get("총가용재고")),
+    rank: num(get("순위")),
+    byStore: parseJsonObject(get("점포별판매수량JSON") || get("점포별판매JSON")),
+    byStoreAmount: parseJsonObject(get("점포별판매금액JSON")),
+    prevByStoreAmount: parseJsonObject(get("점포별전주판매금액JSON")),
+    byStoreStock: parseJsonObject(get("점포별재고JSON")),
+    snapshotAt: text(get("Snapshot일시")),
+  };
+}
+
+async function readWeeklyHistoryRows(historyId: string) {
+  await ensureWeeklyHistorySheet(historyId);
+  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:AZ").catch(() => [] as Row[]);
+  const header = rows[0] || WEEKLY_HISTORY_HEADER;
+  return rows.slice(1).filter((r) => text(r[0]) && text(r[5])).map((r) => weeklyHistoryRecordFromRow(header, r));
+}
+
+function weekInfoFromMonday(monday: Date): WeekInfo {
+  const analysisStart = addDays(monday, -7);
+  const analysisEnd = addDays(monday, -1);
+  const compareStart = addDays(monday, -14);
+  const compareEnd = addDays(monday, -8);
+  return {
+    week: isoDate(monday),
+    label: `${formatMD(monday)} 월요일 기준`,
+    sheetLabel: formatWeekRange(analysisStart, analysisEnd),
+    analysisLabel: `${formatMD(analysisStart)}~${formatMD(analysisEnd)}`,
+    compareLabel: `${formatMD(compareStart)}~${formatMD(compareEnd)}`,
+    analysisStart: isoDate(analysisStart),
+    analysisEnd: isoDate(analysisEnd),
+    compareStart: isoDate(compareStart),
+    compareEnd: isoDate(compareEnd),
+  };
+}
+
+function makeWeeksFromBases(basisDates: string[], fallbackSalesRows: Row[], currentBasis?: string) {
+  const set = new Set<string>();
+  basisDates.forEach((d) => { const parsed = parseSelectedMonday(d); if (parsed) set.add(isoDate(parsed)); });
+  if (currentBasis) { const parsed = parseSelectedMonday(currentBasis); if (parsed) set.add(isoDate(parsed)); }
+  if (!set.size) return makeWeeks(fallbackSalesRows);
+  return [...set].sort((a, b) => b.localeCompare(a)).map((d) => weekInfoFromMonday(parseSelectedMonday(d) || new Date(d)));
+}
+
+function makeWeeklyHistoryRows(args: {
+  type: SalesType;
+  selected: WeekInfo;
+  current: Map<string, SalesAgg>;
+  prev1: Map<string, SalesAgg>;
+  productMap: Map<string, ProductMaster>;
+}) {
+  const { type, selected, current, prev1, productMap } = args;
+  const ranks = rankMap(current);
+  const snapshotAt = nowKST();
+  const keys = [...new Set([...current.keys(), ...prev1.keys(), ...productMap.keys()])].filter((key) => {
+    const c = current.get(key);
+    const p = productMap.get(key);
+    return (c?.amount || 0) || (c?.qty || 0) || (p?.totalStock || 0) || (p?.offlineStock || 0) || (p?.onlineStock || 0);
+  }).sort((a, b) => (current.get(b)?.amount || 0) - (current.get(a)?.amount || 0));
+
+  return keys.map((key) => {
+    const p = productMap.get(key) || ({ style: type === "color" ? key.split("__")[0] : key } as ProductMaster);
+    const c = current.get(key) || emptyAgg();
+    const old = prev1.get(key) || emptyAgg();
+    const avgPrice = priceByAmountQty(c.amount, c.qty);
+    const prevAvgPrice = priceByAmountQty(old.amount, old.qty);
+    const qtyDelta = c.qty - old.qty;
+    const amountDelta = c.amount - old.amount;
+    const totalStock = p.totalStock || (p.onlineStock || 0) + (p.offlineStock || 0) + (p.whStock || 0);
+    return [
+      selected.week,
+      selected.analysisStart,
+      selected.analysisEnd,
+      selected.compareStart,
+      selected.compareEnd,
+      type === "color" ? "컬러" : "품번",
+      p.style || "",
+      p.styleName || "",
+      type === "color" ? (p.color || key.split("__")[1] || "") : "",
+      type === "color" ? (p.colorName || "") : "",
+      "",
+      "",
+      p.season || "",
+      p.gender || "",
+      p.itemGroup || "",
+      p.category || "",
+      p.line || "",
+      p.className || "",
+      p.tagPrice || "",
+      p.salePrice || avgPrice || "",
+      c.qty || 0,
+      c.amount || 0,
+      old.qty || 0,
+      old.amount || 0,
+      avgPrice || "",
+      prevAvgPrice || "",
+      qtyDelta || 0,
+      amountDelta || 0,
+      ratio(qtyDelta, old.qty),
+      ratio(amountDelta, old.amount),
+      p.onlineStock || 0,
+      p.offlineStock || 0,
+      totalStock || 0,
+      ratio(c.qty, c.qty + totalStock),
+      ranks.get(key) || "",
+      JSON.stringify(c.byStore || {}),
+      JSON.stringify(c.byStoreAmount || {}),
+      JSON.stringify(old.byStoreAmount || {}),
+      JSON.stringify(c.byStoreStock || {}),
+      snapshotAt,
+      WEEKLY_HISTORY_VERSION,
+    ];
+  });
+}
+
+async function appendWeeklyHistorySnapshot(args: {
+  historyId: string;
+  selected: WeekInfo;
+  styleCurrent: Map<string, SalesAgg>;
+  stylePrev: Map<string, SalesAgg>;
+  colorCurrent: Map<string, SalesAgg>;
+  colorPrev: Map<string, SalesAgg>;
+  productMaps: { byStyle: Map<string, ProductMaster>; byColor: Map<string, ProductMaster> };
+}) {
+  await ensureWeeklyHistorySheet(args.historyId);
+  const styleRows = makeWeeklyHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
+  const colorRows = makeWeeklyHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
+  const values = [...styleRows, ...colorRows];
+  if (values.length) await appendValuesById(args.historyId, `'${WEEKLY_HISTORY_SHEET}'!A:AZ`, values);
+  return values.length;
+}
+
+function historyRecordsToMaps(records: any[], basis: string, type: SalesType) {
+  const typeLabel = type === "color" ? "컬러" : "품번";
+  const selectedRows = latestByKey(records.filter((r) => r.basis === basis && r.typeLabel === typeLabel), (r) => salesKey(r.style, r.color, type));
+  const current = new Map<string, SalesAgg>();
+  const prev1 = new Map<string, SalesAgg>();
+  const productMap = new Map<string, ProductMaster>();
+  const stores = new Set<string>();
+
+  for (const r of selectedRows) {
+    const key = salesKey(r.style, r.color, type);
+    current.set(key, { amount: r.currentAmount, qty: r.currentQty, byStore: r.byStore || {}, byStoreAmount: r.byStoreAmount || {}, byStoreStock: r.byStoreStock || {} });
+    prev1.set(key, { amount: r.prevAmount, qty: r.prevQty, byStore: {}, byStoreAmount: {}, byStoreStock: {} });
+    productMap.set(key, {
+      style: r.style,
+      styleName: r.styleName,
+      color: r.color,
+      colorName: r.colorName,
+      season: r.season,
+      gender: r.gender,
+      itemGroup: r.itemGroup,
+      category: r.category,
+      line: r.line,
+      className: r.className,
+      tagPrice: r.tagPrice,
+      salePrice: r.salePrice,
+      onlineStock: r.onlineStock,
+      offlineStock: r.offlineStock,
+      totalStock: r.totalStock,
+      storeStock: r.offlineStock,
+    });
+    Object.keys(r.byStore || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
+    Object.keys(r.byStoreAmount || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
+    Object.keys(r.byStoreStock || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
+  }
+
+  const prev2Basis = isoDate(addDays(parseSelectedMonday(basis) || new Date(basis), -7));
+  const prev3Basis = isoDate(addDays(parseSelectedMonday(basis) || new Date(basis), -14));
+  const prev2 = new Map<string, SalesAgg>();
+  const prev3 = new Map<string, SalesAgg>();
+  for (const r of latestByKey(records.filter((r) => r.basis === prev2Basis && r.typeLabel === typeLabel), (r) => salesKey(r.style, r.color, type))) {
+    prev2.set(salesKey(r.style, r.color, type), { amount: r.currentAmount, qty: r.currentQty, byStore: {}, byStoreAmount: {}, byStoreStock: {} });
+  }
+  for (const r of latestByKey(records.filter((r) => r.basis === prev3Basis && r.typeLabel === typeLabel), (r) => salesKey(r.style, r.color, type))) {
+    prev3.set(salesKey(r.style, r.color, type), { amount: r.currentAmount, qty: r.currentQty, byStore: {}, byStoreAmount: {}, byStoreStock: {} });
+  }
+
+  return { current, prev1, prev2, prev3, productMap, stores: [...stores].sort((a, b) => a.localeCompare(b, "ko")), rowCount: selectedRows.length };
+}
+
+async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; historyId: string; dbId: string; mainId: string }) {
+  const { selected, historyId, dbId, mainId } = args;
+  const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
+  const productRaw = await readFirstAvailableSheet(ids, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
+  const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
+  const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const productMaps = buildProductMaster(productRaw.rows);
+  mergeOnOffStock(stockRaw.rows, productMaps);
+  const styleAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "style");
+  const colorAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "color");
+  const appended = await appendWeeklyHistorySnapshot({
+    historyId,
+    selected,
+    styleCurrent: styleAgg.current,
+    stylePrev: styleAgg.previous,
+    colorCurrent: colorAgg.current,
+    colorPrev: colorAgg.previous,
+    productMaps,
+  });
+  return { appended, weeklyPriceRaw, productRaw, stockRaw };
+}
+
+export async function getSalesDataPayload(type: SalesType, requestedWeek = "", options: { refresh?: boolean } = {}): Promise<WeeklyProviderPayload> {
+  const historyId = getHistorySheetId();
+  const dbId = getDbSheetId();
+  const mainId = getSheetId();
+
+  const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
+  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
+  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  let historyRecords = await readWeeklyHistoryRows(historyId);
+  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
+  let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+
+  const selectedTypeLabel = type === "color" ? "컬러" : "품번";
+  const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === selectedTypeLabel);
+  if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
+    await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
+    historyRecords = await readWeeklyHistoryRows(historyId);
+    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
+    selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
+  }
+
+  const mapped = historyRecordsToMaps(historyRecords, selected.week, type);
+  const built = buildExcelLikeRows({
+    type,
+    selected,
+    current: mapped.current,
+    prev1: mapped.prev1,
+    prev2: mapped.prev2,
+    prev3: mapped.prev3,
+    productMap: mapped.productMap,
+    stores: mapped.stores,
+  });
+
+  return {
+    ok: true,
+    mode: "weekly-history",
+    version: WEEKLY_HISTORY_VERSION,
+    type,
+    weeks,
+    selectedWeek: selected.week,
+    selectedWeekLabel: selected.label,
+    analysisLabel: selected.analysisLabel,
+    compareLabel: selected.compareLabel,
+    sheetName: `${selected.sheetLabel}(${type === "color" ? "컬러" : "품번"})`,
+    rows: built.rows,
+    rowCount: built.rowCount,
+    colCount: built.colCount,
+    stores: mapped.stores,
+    sources: {
+      primary: "MARK_HISTORY / Weekly_History",
+      fallback: "금주/전주 시트 → Weekly_History 자동 Snapshot",
+      currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
+      basisCell: "금주/전주!B2",
+      historySheet: WEEKLY_HISTORY_SHEET,
+    },
+  };
+}
+
+
+function percentChange(current: number, previous: number) {
+  if (!previous) return current ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+}
+
+function storeSummaryFromRecords(records: any[], basis: string) {
+  const styleRows = latestByKey(records.filter((r) => r.basis === basis && r.typeLabel === "품번"), (r) => salesKey(r.style, r.color, "style"));
+  const storeCurrent: Record<string, number> = {};
+  const storePrevious: Record<string, number> = {};
+  const storeTopProducts: Record<string, any[]> = {};
+
+  for (const r of styleRows) {
+    for (const [store, value] of Object.entries(r.byStoreAmount || {})) {
+      if (!isOfflineStore(store)) continue;
+      const amount = num(value);
+      storeCurrent[store] = (storeCurrent[store] || 0) + amount;
+      if (!storeTopProducts[store]) storeTopProducts[store] = [];
+      storeTopProducts[store].push({
+        styleCode: r.style,
+        productName: r.styleName,
+        weekAmount: amount,
+        prevAmount: num((r.prevByStoreAmount || {})[store]),
+        amountChangeRate: percentChange(amount, num((r.prevByStoreAmount || {})[store])),
+      });
+    }
+    for (const [store, value] of Object.entries(r.prevByStoreAmount || {})) {
+      if (!isOfflineStore(store)) continue;
+      storePrevious[store] = (storePrevious[store] || 0) + num(value);
+    }
+  }
+
+  const storeNames = [...new Set([...Object.keys(storeCurrent), ...Object.keys(storePrevious)])].sort((a, b) => a.localeCompare(b, "ko"));
+  const current = storeNames.map((storeName) => ({
+    storeName,
+    weekSales: storeCurrent[storeName] || 0,
+    compareWeekSales: storePrevious[storeName] || 0,
+    weekChangeRate: percentChange(storeCurrent[storeName] || 0, storePrevious[storeName] || 0),
+    weekTarget: 0,
+    weekRate: 0,
+    monthSales: 0,
+    monthTarget: 0,
+    monthRate: 0,
+  })).sort((a, b) => b.weekSales - a.weekSales);
+  const compare = storeNames.map((storeName) => ({
+    storeName,
+    weekSales: storePrevious[storeName] || 0,
+  }));
+
+  Object.keys(storeTopProducts).forEach((store) => {
+    storeTopProducts[store] = storeTopProducts[store]
+      .sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0))
+      .slice(0, 20);
+  });
+
+  const companyTopProducts = styleRows
+    .map((r) => ({
+      styleCode: r.style,
+      productName: r.styleName,
+      weekAmount: r.currentAmount,
+      prevAmount: r.prevAmount,
+      amountChangeRate: percentChange(r.currentAmount, r.prevAmount),
+      currentRank: r.rank || 0,
+      previousRank: 0,
+    }))
+    .sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0))
+    .slice(0, 20);
+
+  return { current, compare, companyTopProducts, storeTopProducts, productStoreNames: storeNames };
+}
+
+export async function getWeeklyDashboardPayload(requestedWeek = "", options: { refresh?: boolean } = {}) {
+  const historyId = getHistorySheetId();
+  const dbId = getDbSheetId();
+  const mainId = getSheetId();
+  const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
+  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
+  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  let historyRecords = await readWeeklyHistoryRows(historyId);
+  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
+  let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+
+  const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === "품번");
+  if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
+    await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
+    historyRecords = await readWeeklyHistoryRows(historyId);
+    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
+    selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
+  }
+
+  const summary = storeSummaryFromRecords(historyRecords, selected.week);
+  return {
+    ok: true,
+    mode: "weekly-history",
+    selectedWeek: selected.week,
+    selectedWeekLabel: selected.label,
+    weeks,
+    weekly: {
+      periodLabel: `선택주차: ${selected.label} / 분석기간: ${selected.analysisLabel} / 비교기간: ${selected.compareLabel}`,
+      anchorMonday: selected.week,
+      selectedWeek: selected.week,
+      currentPeriod: { start: selected.analysisStart, end: selected.analysisEnd },
+      comparePeriod: { start: selected.compareStart, end: selected.compareEnd },
+      current: summary.current,
+      compare: summary.compare,
+      companyTopProducts: summary.companyTopProducts,
+      storeTopProducts: summary.storeTopProducts,
+      productStoreNames: summary.productStoreNames,
+      top10Concentration: (() => {
+        const total = summary.current.reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
+        const top10 = summary.current.slice(0, 10).reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
+        return total ? top10 / total : 0;
+      })(),
+      newTop10Entrants: [],
+      aiBriefing: [
+        `Weekly_History 기준 ${selected.analysisLabel} 주간 매출을 조회했습니다.`,
+        `주간 데이터는 금주/전주 시트 B2 기준으로 저장된 Snapshot을 우선 사용합니다.`,
+      ],
+    },
+    inventory: {},
+    sources: {
+      primary: "MARK_HISTORY / Weekly_History",
+      fallback: "금주/전주 시트 → Weekly_History 자동 Snapshot",
+      currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
+      basisCell: "금주/전주!B2",
+    },
+  };
+}
+
+export async function getWeeklyDashboardBase(requestedWeek = "", options: { refresh?: boolean } = {}) {
+  const dashboard = await getWeeklyDashboardPayload(requestedWeek, options);
+  const payload = await getSalesDataPayload("style", requestedWeek, options);
+  const header = payload.rows[3] || [];
+  const amountCol = header.findIndex((x) => text(x) === "주간");
+  const qtyGroupStart = (payload.rows[2] || []).findIndex((x) => text(x) === "수량판매");
+  const rows = payload.rows.slice(7);
+  const totalAmount = rows.reduce((sum, r) => sum + num(r[amountCol]), 0);
+  const totalQty = rows.reduce((sum, r) => sum + num(r[qtyGroupStart]), 0);
+  return {
+    ok: true,
+    selectedWeek: payload.selectedWeek,
+    selectedWeekLabel: payload.selectedWeekLabel,
+    analysisLabel: payload.analysisLabel,
+    compareLabel: payload.compareLabel,
+    totalAmount,
+    totalQty,
+    rows,
+    sources: payload.sources,
+  };
+}

@@ -396,6 +396,19 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
 
   async function loadDashboard() {
     if (active === "weekly") {
+      try {
+        const weeklyRes = await fetch("/api/weekly-history?dashboard=1", { cache: "no-store" });
+        const weeklyPayload = await weeklyRes.json();
+        if (weeklyPayload?.ok && weeklyPayload?.weekly) {
+          setDashboardData(normalizeWeeklyPayload({ weekly: weeklyPayload.weekly, inventory: weeklyPayload.inventory || {} }, { source: "Weekly_History", selectedWeek: weeklyPayload.selectedWeek }));
+          setDataStatus("Weekly_History 기준 데이터");
+          setWeeklyMode("snapshot");
+          setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
+          const first = weeklyPayload.weekly?.productStoreNames?.[0] || weeklyPayload.weekly?.current?.[0]?.storeName || "";
+          if (first && (!store || !(weeklyPayload.weekly?.productStoreNames || []).includes(store))) setStore(first);
+          return;
+        }
+      } catch {}
       const loaded = await loadWeeklySnapshot();
       if (loaded) return;
     }

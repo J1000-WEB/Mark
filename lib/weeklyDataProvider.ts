@@ -324,10 +324,10 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
   const stores = new Set<string>();
   if (!rows?.length) return { current, previous, stores, columns: {} };
 
-  const curQtyCol = findGroupColumn(rows, "금주", "합계", 20);
-  const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 21);
-  const prevQtyCol = findGroupColumn(rows, "전주", "합계", 24);
-  const prevAmountCol = findGroupColumn(rows, "전주", "판매금액", 25);
+  const curQtyCol = findGroupColumn(rows, "금주", "합계", 19); // T열: 금주 합계수량
+  const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 20); // U열: 금주 판매금액
+  const prevQtyCol = findGroupColumn(rows, "전주", "합계", 24); // Y열: 전주 합계수량
+  const prevAmountCol = findGroupColumn(rows, "전주", "판매금액", 25); // Z열: 전주 판매금액
   const stockCol = 7;
 
   for (const r of rows.slice(3)) {
@@ -339,9 +339,9 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     const key = salesKey(style, color, type);
     const stock = num(r[stockCol]);
 
-    // 금주/전주 시트는 원본 붙여넣기 영역(I/J)에 수량/금액이 있고,
-    // 우측 금주/전주 계산영역(S:Z)은 수식 재계산 상태에 따라 0 또는 빈값으로 내려올 수 있습니다.
-    // 따라서 계산영역 값이 없으면 원본 수량/금액(I/J)을 금주 판매값으로 사용합니다.
+    // 주간 데이터는 회사 검증 기준인 금주/전주 시트의 집계영역을 Source of Truth로 사용합니다.
+    // T/U = 금주 합계수량/판매금액, Y/Z = 전주 합계수량/판매금액.
+    // 집계영역이 비어있는 임시 데이터에서만 원본 I/J를 금주 보조값으로 사용합니다.
     const rawQty = num(r[8]);
     const rawAmount = num(r[9]);
     const currentQty = num(r[curQtyCol]) || rawQty;
@@ -616,14 +616,21 @@ export type WeeklyProviderPayload = {
 };
 
 export const WEEKLY_HISTORY_SHEET = "Weekly_History";
-export const WEEKLY_HISTORY_VERSION = "MARK 6.1 WEEKLY_PROVIDER";
+export const WEEKLY_STORE_HISTORY_SHEET = "Weekly_Store_History";
+export const WEEKLY_HISTORY_VERSION = "MARK 6.1.1 WEEKLY_LIGHT_SNAPSHOT";
 
 export const WEEKLY_HISTORY_HEADER = [
   "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
   "스타일", "스타일명", "칼라", "칼라명", "사이즈", "브랜드", "시즌", "성별", "품목", "복종", "라인", "클래스",
   "Tag가", "실판매가", "금주판매수량", "금주판매금액", "전주판매수량", "전주판매금액",
   "평균판매가", "전주평균판매가", "판매수량증감", "판매금액증감", "판매수량증감률", "판매금액증감률",
-  "온재고", "오프재고", "총가용재고", "판매율", "순위", "점포별판매수량JSON", "점포별판매금액JSON", "점포별전주판매금액JSON", "점포별재고JSON", "Snapshot일시", "SnapshotVersion"
+  "온재고", "오프재고", "총가용재고", "판매율", "순위", "Snapshot일시", "SnapshotVersion"
+];
+
+export const WEEKLY_STORE_HISTORY_HEADER = [
+  "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
+  "스타일", "스타일명", "칼라", "칼라명", "사이즈", "점포명",
+  "금주판매수량", "금주판매금액", "전주판매수량", "전주판매금액", "재고", "Snapshot일시", "SnapshotVersion"
 ];
 
 function columnLetter(n: number) {
@@ -667,6 +674,12 @@ async function ensureWeeklyHistorySheet(historyId: string) {
   await updateValuesById(historyId, `'${WEEKLY_HISTORY_SHEET}'!A1:${endCol}1`, [WEEKLY_HISTORY_HEADER]);
 }
 
+async function ensureWeeklyStoreHistorySheet(historyId: string) {
+  await ensureSheetExistsById(historyId, WEEKLY_STORE_HISTORY_SHEET);
+  const endCol = columnLetter(WEEKLY_STORE_HISTORY_HEADER.length);
+  await updateValuesById(historyId, `'${WEEKLY_STORE_HISTORY_SHEET}'!A1:${endCol}1`, [WEEKLY_STORE_HISTORY_HEADER]);
+}
+
 function latestByKey<T extends { snapshotAt?: string }>(items: T[], keyFn: (x: T) => string) {
   const map = new Map<string, T>();
   for (const item of items) {
@@ -708,19 +721,47 @@ function weeklyHistoryRecordFromRow(header: Row, r: Row) {
     offlineStock: num(get("오프재고")),
     totalStock: num(get("총가용재고")),
     rank: num(get("순위")),
-    byStore: parseJsonObject(get("점포별판매수량JSON") || get("점포별판매JSON")),
-    byStoreAmount: parseJsonObject(get("점포별판매금액JSON")),
-    prevByStoreAmount: parseJsonObject(get("점포별전주판매금액JSON")),
-    byStoreStock: parseJsonObject(get("점포별재고JSON")),
+    byStore: {},
+    byStoreAmount: {},
+    prevByStoreAmount: {},
+    byStoreStock: {},
     snapshotAt: text(get("Snapshot일시")),
   };
 }
 
 async function readWeeklyHistoryRows(historyId: string) {
   await ensureWeeklyHistorySheet(historyId);
-  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:AZ").catch(() => [] as Row[]);
+  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:AK").catch(() => [] as Row[]);
   const header = rows[0] || WEEKLY_HISTORY_HEADER;
   return rows.slice(1).filter((r) => text(r[0]) && text(r[5])).map((r) => weeklyHistoryRecordFromRow(header, r));
+}
+
+function weeklyStoreRecordFromRow(header: Row, r: Row) {
+  const h = mapByHeader(header);
+  const get = (name: string) => r[h.get(name) ?? -1];
+  return {
+    basis: isoDate(parseDate(get("기준일")) || new Date(text(get("기준일")))),
+    typeLabel: text(get("구분")),
+    style: text(get("스타일")),
+    styleName: text(get("스타일명")),
+    color: text(get("칼라")),
+    colorName: text(get("칼라명")),
+    size: text(get("사이즈")),
+    store: text(get("점포명")),
+    currentQty: num(get("금주판매수량")),
+    currentAmount: num(get("금주판매금액")),
+    prevQty: num(get("전주판매수량")),
+    prevAmount: num(get("전주판매금액")),
+    stock: num(get("재고")),
+    snapshotAt: text(get("Snapshot일시")),
+  };
+}
+
+async function readWeeklyStoreHistoryRows(historyId: string) {
+  await ensureWeeklyStoreHistorySheet(historyId);
+  const rows = await getSheetValuesById(historyId, WEEKLY_STORE_HISTORY_SHEET, "A:S").catch(() => [] as Row[]);
+  const header = rows[0] || WEEKLY_STORE_HISTORY_HEADER;
+  return rows.slice(1).filter((r) => text(r[0]) && text(r[5]) && text(r[11])).map((r) => weeklyStoreRecordFromRow(header, r));
 }
 
 function weekInfoFromMonday(monday: Date): WeekInfo {
@@ -810,14 +851,57 @@ function makeWeeklyHistoryRows(args: {
       totalStock || 0,
       ratio(c.qty, c.qty + totalStock),
       ranks.get(key) || "",
-      JSON.stringify(c.byStore || {}),
-      JSON.stringify(c.byStoreAmount || {}),
-      JSON.stringify(old.byStoreAmount || {}),
-      JSON.stringify(c.byStoreStock || {}),
       snapshotAt,
       WEEKLY_HISTORY_VERSION,
     ];
   });
+}
+
+function makeWeeklyStoreHistoryRows(args: {
+  type: SalesType;
+  selected: WeekInfo;
+  current: Map<string, SalesAgg>;
+  prev1: Map<string, SalesAgg>;
+  productMap: Map<string, ProductMaster>;
+}) {
+  const { type, selected, current, prev1, productMap } = args;
+  const snapshotAt = nowKST();
+  const rows: Row[] = [];
+  for (const [key, c] of current.entries()) {
+    const p = productMap.get(key) || ({ style: type === "color" ? key.split("__")[0] : key } as ProductMaster);
+    const old = prev1.get(key) || emptyAgg();
+    const stores = new Set([...Object.keys(c.byStore || {}), ...Object.keys(c.byStoreAmount || {}), ...Object.keys(c.byStoreStock || {}), ...Object.keys(old.byStore || {}), ...Object.keys(old.byStoreAmount || {})]);
+    for (const store of [...stores].filter(isOfflineStore).sort((a, b) => a.localeCompare(b, "ko"))) {
+      const currentQty = num(c.byStore[store]);
+      const currentAmount = num(c.byStoreAmount[store]);
+      const prevQty = num(old.byStore[store]);
+      const prevAmount = num(old.byStoreAmount[store]);
+      const stock = num(c.byStoreStock[store]);
+      if (!currentQty && !currentAmount && !prevQty && !prevAmount && !stock) continue;
+      rows.push([
+        selected.week,
+        selected.analysisStart,
+        selected.analysisEnd,
+        selected.compareStart,
+        selected.compareEnd,
+        type === "color" ? "컬러" : "품번",
+        p.style || "",
+        p.styleName || "",
+        type === "color" ? (p.color || key.split("__")[1] || "") : "",
+        type === "color" ? (p.colorName || "") : "",
+        "",
+        store,
+        currentQty || 0,
+        currentAmount || 0,
+        prevQty || 0,
+        prevAmount || 0,
+        stock || 0,
+        snapshotAt,
+        WEEKLY_HISTORY_VERSION,
+      ]);
+    }
+  }
+  return rows;
 }
 
 async function appendWeeklyHistorySnapshot(args: {
@@ -830,14 +914,20 @@ async function appendWeeklyHistorySnapshot(args: {
   productMaps: { byStyle: Map<string, ProductMaster>; byColor: Map<string, ProductMaster> };
 }) {
   await ensureWeeklyHistorySheet(args.historyId);
+  await ensureWeeklyStoreHistorySheet(args.historyId);
   const styleRows = makeWeeklyHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
   const colorRows = makeWeeklyHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
   const values = [...styleRows, ...colorRows];
-  if (values.length) await appendValuesById(args.historyId, `'${WEEKLY_HISTORY_SHEET}'!A:AZ`, values);
-  return values.length;
+  if (values.length) await appendValuesById(args.historyId, `'${WEEKLY_HISTORY_SHEET}'!A:AK`, values);
+
+  const styleStoreRows = makeWeeklyStoreHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
+  const colorStoreRows = makeWeeklyStoreHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
+  const storeValues = [...styleStoreRows, ...colorStoreRows];
+  if (storeValues.length) await appendValuesById(args.historyId, `'${WEEKLY_STORE_HISTORY_SHEET}'!A:S`, storeValues);
+  return values.length + storeValues.length;
 }
 
-function historyRecordsToMaps(records: any[], basis: string, type: SalesType) {
+function historyRecordsToMaps(records: any[], basis: string, type: SalesType, storeRecords: any[] = []) {
   const typeLabel = type === "color" ? "컬러" : "품번";
   const selectedRows = latestByKey(records.filter((r) => r.basis === basis && r.typeLabel === typeLabel), (r) => salesKey(r.style, r.color, type));
   const current = new Map<string, SalesAgg>();
@@ -867,9 +957,21 @@ function historyRecordsToMaps(records: any[], basis: string, type: SalesType) {
       totalStock: r.totalStock,
       storeStock: r.offlineStock,
     });
-    Object.keys(r.byStore || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
-    Object.keys(r.byStoreAmount || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
-    Object.keys(r.byStoreStock || {}).forEach((s) => { if (isOfflineStore(s)) stores.add(s); });
+  }
+
+  for (const sr of latestByKey(storeRecords.filter((r) => r.basis === basis && r.typeLabel === typeLabel), (r) => `${salesKey(r.style, r.color, type)}__${r.store}`)) {
+    if (!isOfflineStore(sr.store)) continue;
+    const key = salesKey(sr.style, sr.color, type);
+    const c = current.get(key) || emptyAgg();
+    const p = prev1.get(key) || emptyAgg();
+    c.byStore[sr.store] = (c.byStore[sr.store] || 0) + sr.currentQty;
+    c.byStoreAmount[sr.store] = (c.byStoreAmount[sr.store] || 0) + sr.currentAmount;
+    c.byStoreStock[sr.store] = (c.byStoreStock[sr.store] || 0) + sr.stock;
+    p.byStore[sr.store] = (p.byStore[sr.store] || 0) + sr.prevQty;
+    p.byStoreAmount[sr.store] = (p.byStoreAmount[sr.store] || 0) + sr.prevAmount;
+    current.set(key, c);
+    prev1.set(key, p);
+    stores.add(sr.store);
   }
 
   const prev2Basis = isoDate(addDays(parseSelectedMonday(basis) || new Date(basis), -7));
@@ -918,6 +1020,7 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
   const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
   let historyRecords = await readWeeklyHistoryRows(historyId);
+  let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
   let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
 
@@ -926,11 +1029,12 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
     await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
     historyRecords = await readWeeklyHistoryRows(historyId);
+    storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
     weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
     selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
-  const mapped = historyRecordsToMaps(historyRecords, selected.week, type);
+  const mapped = historyRecordsToMaps(historyRecords, selected.week, type, storeHistoryRecords);
   const built = buildExcelLikeRows({
     type,
     selected,
@@ -963,6 +1067,7 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
       currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
       basisCell: "금주/전주!B2",
       historySheet: WEEKLY_HISTORY_SHEET,
+      storeHistorySheet: WEEKLY_STORE_HISTORY_SHEET,
     },
   };
 }
@@ -973,30 +1078,27 @@ function percentChange(current: number, previous: number) {
   return ((current - previous) / previous) * 100;
 }
 
-function storeSummaryFromRecords(records: any[], basis: string) {
+function storeSummaryFromRecords(records: any[], storeRecords: any[], basis: string) {
   const styleRows = latestByKey(records.filter((r) => r.basis === basis && r.typeLabel === "품번"), (r) => salesKey(r.style, r.color, "style"));
+  const styleByKey = new Map(styleRows.map((r) => [salesKey(r.style, r.color, "style"), r]));
+  const latestStoreRows = latestByKey(storeRecords.filter((r) => r.basis === basis && r.typeLabel === "품번"), (r) => `${salesKey(r.style, r.color, "style")}__${r.store}`);
   const storeCurrent: Record<string, number> = {};
   const storePrevious: Record<string, number> = {};
   const storeTopProducts: Record<string, any[]> = {};
 
-  for (const r of styleRows) {
-    for (const [store, value] of Object.entries(r.byStoreAmount || {})) {
-      if (!isOfflineStore(store)) continue;
-      const amount = num(value);
-      storeCurrent[store] = (storeCurrent[store] || 0) + amount;
-      if (!storeTopProducts[store]) storeTopProducts[store] = [];
-      storeTopProducts[store].push({
-        styleCode: r.style,
-        productName: r.styleName,
-        weekAmount: amount,
-        prevAmount: num((r.prevByStoreAmount || {})[store]),
-        amountChangeRate: percentChange(amount, num((r.prevByStoreAmount || {})[store])),
-      });
-    }
-    for (const [store, value] of Object.entries(r.prevByStoreAmount || {})) {
-      if (!isOfflineStore(store)) continue;
-      storePrevious[store] = (storePrevious[store] || 0) + num(value);
-    }
+  for (const sr of latestStoreRows) {
+    if (!isOfflineStore(sr.store)) continue;
+    storeCurrent[sr.store] = (storeCurrent[sr.store] || 0) + num(sr.currentAmount);
+    storePrevious[sr.store] = (storePrevious[sr.store] || 0) + num(sr.prevAmount);
+    if (!storeTopProducts[sr.store]) storeTopProducts[sr.store] = [];
+    const pr = styleByKey.get(salesKey(sr.style, sr.color, "style"));
+    storeTopProducts[sr.store].push({
+      styleCode: sr.style,
+      productName: sr.styleName || pr?.styleName || "",
+      weekAmount: num(sr.currentAmount),
+      prevAmount: num(sr.prevAmount),
+      amountChangeRate: percentChange(num(sr.currentAmount), num(sr.prevAmount)),
+    });
   }
 
   const storeNames = [...new Set([...Object.keys(storeCurrent), ...Object.keys(storePrevious)])].sort((a, b) => a.localeCompare(b, "ko"));
@@ -1011,10 +1113,7 @@ function storeSummaryFromRecords(records: any[], basis: string) {
     monthTarget: 0,
     monthRate: 0,
   })).sort((a, b) => b.weekSales - a.weekSales);
-  const compare = storeNames.map((storeName) => ({
-    storeName,
-    weekSales: storePrevious[storeName] || 0,
-  }));
+  const compare = storeNames.map((storeName) => ({ storeName, weekSales: storePrevious[storeName] || 0 }));
 
   Object.keys(storeTopProducts).forEach((store) => {
     storeTopProducts[store] = storeTopProducts[store]
@@ -1047,6 +1146,7 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
   const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
   let historyRecords = await readWeeklyHistoryRows(historyId);
+  let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
   let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
 
@@ -1054,11 +1154,12 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
     await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
     historyRecords = await readWeeklyHistoryRows(historyId);
+    storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
     weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
     selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
-  const summary = storeSummaryFromRecords(historyRecords, selected.week);
+  const summary = storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
   return {
     ok: true,
     mode: "weekly-history",

@@ -2571,7 +2571,22 @@ export async function buildDashboardDataFromGoogleSheet() {
   // 점포별 일/주/월 매출은 MARK_DB의 `일간매출(26년)` 시트를 우선 사용합니다.
   // 왼쪽 A~G 합산 영역은 제외하고 H열 이후의 `오프라인팀` 채널만 집계합니다.
   const productValues = values[productSheet] || [];
-  const weeklyAnchorFromB2 = weeklyAnchorFromWeeklySheet(productValues);
+
+  // MARK 6.2.3:
+  // 주간 매출대시보드의 기준주차는 상품 시트가 아니라 금주/전주 계열 시트의 B2를 기준으로 잡습니다.
+  // 금주/전주 시트가 없고 차주(0628) 같은 시트명만 있는 경우에는 시트명 날짜의 다음 월요일을 기준주차로 보정합니다.
+  const weeklySourceSheet = pickNormalizedTitle(titles, ["금주전주", "금주/전주", "금주 전주", "차주", "금주"], "");
+  const weeklySourceValues = weeklySourceSheet ? await getSheetValuesById(getSheetId(), weeklySourceSheet, "A:AZ").catch(() => [] as any[][]) : [];
+  let weeklyAnchorFromB2 = weeklyAnchorFromWeeklySheet(weeklySourceValues);
+  if (!weeklyAnchorFromB2 && weeklySourceSheet) {
+    const m = String(weeklySourceSheet).match(/(\d{2})(\d{2})/);
+    if (m) {
+      const y = new Date().getFullYear();
+      const end = new Date(y, Number(m[1]) - 1, Number(m[2]));
+      weeklyAnchorFromB2 = dateAddDays(ymdLocalDate(end), 1);
+    }
+  }
+
   const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
   const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
   const currentDate = latestStoreSalesDate(dailyStoreRows) || latestHistoryDate(historyRows);

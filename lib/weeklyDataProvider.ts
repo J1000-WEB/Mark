@@ -789,6 +789,20 @@ async function readFirstAvailableSheet(ids: string[], candidates: string[], rang
   return { spreadsheetId: "", sheetName: "", rows: [] as Row[] };
 }
 
+function basisFromWeeklySheetName(sheetName: string) {
+  const m = String(sheetName || "").match(/(\d{2})(\d{2})/);
+  if (!m) return "";
+  const y = new Date().getFullYear();
+  const end = new Date(y, Number(m[1]) - 1, Number(m[2]));
+  return isoDate(addDays(end, 1));
+}
+
+function basisFromWeeklyRowsOrName(rows: Row[], sheetName: string) {
+  const b2 = parseDate(rows?.[1]?.[1]);
+  if (b2) return isoDate(mondayOfWeek(b2));
+  return basisFromWeeklySheetName(sheetName);
+}
+
 
 export type WeeklyProviderPayload = {
   ok: boolean;
@@ -1187,7 +1201,7 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
   const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
   const productRaw = await readFirstAvailableSheet(ids, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
   const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
-  const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주", "차주", "금주"], "A:AZ");
   const productMaps = buildProductMaster(productRaw.rows);
   mergeOnOffStock(stockRaw.rows, productMaps);
   const styleAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "style");
@@ -1210,9 +1224,8 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const mainId = getSheetId();
 
   const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
-  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
-  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
-  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주", "차주", "금주"], "A:AZ");
+  const currentBasis = basisFromWeeklyRowsOrName(currentWeeklyRaw.rows || [], currentWeeklyRaw.sheetName || "");
   let historyRecords = await readWeeklyHistoryRows(historyId);
   let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
@@ -1336,9 +1349,8 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const dbId = getDbSheetId();
   const mainId = getSheetId();
   const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
-  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
-  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
-  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주", "차주", "금주"], "A:AZ");
+  const currentBasis = basisFromWeeklyRowsOrName(currentWeeklyRaw.rows || [], currentWeeklyRaw.sheetName || "");
   let historyRecords = await readWeeklyHistoryRows(historyId);
   let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);

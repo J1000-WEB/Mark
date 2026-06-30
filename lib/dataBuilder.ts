@@ -2457,16 +2457,33 @@ function latestStoreSalesDate(rows: any[]) {
   return [...new Set(rows.map((r: any) => r.date).filter(Boolean))].sort().pop() || "";
 }
 
+function normalizeAnchorMondayFromValue(value: any) {
+  const d = parseDate(normalizeDateKey(value) || value);
+  if (!d) return "";
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  const day = out.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  out.setDate(out.getDate() + diffToMonday);
+  return ymdLocalDate(out);
+}
+
+function weeklyAnchorFromWeeklySheet(rows: any[][]) {
+  // 금주/전주 시트 B2는 주간 대시보드 기준 월요일입니다.
+  // 예: B2=2026-06-29 → 분석기간 2026-06-22~2026-06-28.
+  return normalizeAnchorMondayFromValue(rows?.[1]?.[1]);
+}
+
 function sumStoreSalesRows(rows: any[], storeName: string, dates: Set<string>) {
   return rows
     .filter((r: any) => r.storeName === storeName && dates.has(r.date))
     .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
 }
 
-function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "") {
+function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "", weeklyAnchorOverride = "") {
   if (!currentDate) return null as any;
 
-  const weeklyAnchorMonday = mondayAfterDate(currentDate);
+  const weeklyAnchorMonday = weeklyAnchorOverride || mondayAfterDate(currentDate);
   const currentWeek = weekWindowBeforeMonday(weeklyAnchorMonday, 0);
   const prevWeek = weekWindowBeforeMonday(weeklyAnchorMonday, -1);
   const currentMonthStart = firstDayOfMonth(currentDate);
@@ -2553,12 +2570,14 @@ export async function buildDashboardDataFromGoogleSheet() {
   // MARK 5.0 final:
   // 점포별 일/주/월 매출은 MARK_DB의 `일간매출(26년)` 시트를 우선 사용합니다.
   // 왼쪽 A~G 합산 영역은 제외하고 H열 이후의 `오프라인팀` 채널만 집계합니다.
+  const productValues = values[productSheet] || [];
+  const weeklyAnchorFromB2 = weeklyAnchorFromWeeklySheet(productValues);
   const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
   const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
   const currentDate = latestStoreSalesDate(dailyStoreRows) || latestHistoryDate(historyRows);
 
   const historyStores = dailyStoreRows.length
-    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate)
+    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, "", weeklyAnchorFromB2)
     : buildHistoryStoreRows(historyRows, currentDate);
   const dailyCur = historyStores?.dailyCur || [];
   const dailyCmp = historyStores?.dailyCmp || [];
@@ -2569,7 +2588,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const monthYear = historyStores?.monthYear || [];
 
   // 상품/재고CTRL은 실재고와 제안 로직 때문에 현재 ERP 보조 데이터를 유지합니다.
-  const productRowsRaw = parseProducts(values[productSheet] || []);
+  const productRowsRaw = parseProducts(productValues);
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
@@ -2639,12 +2658,12 @@ export async function buildDashboardDataFromGoogleSheet() {
       top10Concentration,
       newTop10Entrants: entrants,
       aiBriefing: [
-        `Daily_Sales_History 기준 위탁 포함 오프라인 주간 매출은 ${Math.round(totalOfflineWeekSales).toLocaleString("ko-KR")}원이며 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
+        `일간매출(26년) 기준 오프라인 주간 매출은 ${Math.round(totalOfflineWeekSales).toLocaleString("ko-KR")}원이며 전주 대비 ${weeklyChange >= 0 ? "+" : ""}${weeklyChange.toFixed(1)}% 흐름입니다.`,
         `호조 매장은 ${good.map((r) => r.storeName).join(", ") || "데이터 없음"} 중심으로 확인됩니다.`,
         `부진 매장은 ${bad.map((r) => r.storeName).join(", ") || "데이터 없음"}이며 상품 구성과 재고 보강 점검이 필요합니다.`,
         `핵심 오프라인 TOP 상품은 ${topProduct?.productName || "데이터 없음"}이며 TOP10 상품 매출 비중은 ${top10Concentration.toFixed(1)}%입니다.`,
         ...performanceBriefing,
-        "대시보드는 Daily_Sales_History 누적 데이터로 집계되며 원본 ERP 직접 조회를 최소화합니다.",
+        "주간 매장 매출은 MARK_DB 일간매출(26년)의 날짜 범위 합산으로 집계합니다.",
       ],
     },
     monthly: {

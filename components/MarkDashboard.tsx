@@ -451,20 +451,15 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function createWeeklySnapshot() {
     setRefreshing(true);
     try {
-      const liveRes = await fetch("/api/weekly-history?dashboard=1&refresh=1", { cache: "no-store" });
-      const weeklyPayload = await liveRes.json();
-      const live = {
-        weekly: weeklyPayload.weekly || dashboardData.weekly || {},
-        inventory: weeklyPayload.inventory || dashboardData.inventory || {},
-        savedAt: new Date().toISOString(),
-      };
+      const liveRes = await fetch("/api/data", { cache: "no-store" });
+      const live = await liveRes.json();
       const saveRes = await fetch("/api/weekly-snapshots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
           periodLabel: live.weekly?.periodLabel || "주간 스냅샷",
-          memo: "manual-weekly-snapshot-overwrite",
+          memo: "manual-weekly-snapshot",
           payload: live,
         }),
       });
@@ -545,7 +540,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                   disabled={refreshing}
                   className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
                 >
-                  {refreshing ? "저장중..." : "주간 스냅샷 저장"}
+                  {refreshing ? "저장중..." : "실시간 갱신+스냅샷"}
                 </button>
                 <button
                   type="button"
@@ -578,7 +573,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm font-black text-slate-800">주차 확인</p>
-                <p className="mt-1 text-xs font-semibold text-blue-600">저장된 Weekly_Snapshot을 기준으로 빠르게 전환합니다. 같은 기준주차 저장 시 기존 스냅샷을 새 값으로 교체합니다.</p>
+                <p className="mt-1 text-xs font-semibold text-blue-600">저장된 Weekly_Snapshot을 기준으로 빠르게 전환합니다.</p>
               </div>
               <p className="text-xs font-black text-blue-600">{weeklySnapshots.length}개 · {weeklyMode === "snapshot" ? "스냅샷" : "실시간"}</p>
             </div>

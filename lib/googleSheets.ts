@@ -80,33 +80,6 @@ export async function updateValuesById(spreadsheetId: string, range: string, val
   });
 }
 
-export async function deleteSheetRowsById(spreadsheetId: string, title: string, rowNumbers: number[]) {
-  const cleanRows = [...new Set(rowNumbers)]
-    .filter((n) => Number.isFinite(n) && n >= 2)
-    .sort((a, b) => b - a);
-  if (!cleanRows.length) return null;
-  const sheets = await getSheetsClient();
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const sheet = (meta.data.sheets || []).find((s) => s.properties?.title === title);
-  const sheetId = sheet?.properties?.sheetId;
-  if (sheetId === undefined || sheetId === null) return null;
-  return sheets.spreadsheets.batchUpdate({
-    spreadsheetId,
-    requestBody: {
-      requests: cleanRows.map((rowNumber) => ({
-        deleteDimension: {
-          range: {
-            sheetId,
-            dimension: "ROWS",
-            startIndex: rowNumber - 1,
-            endIndex: rowNumber,
-          },
-        },
-      })),
-    },
-  });
-}
-
 export async function ensureSheetExistsById(spreadsheetId: string, title: string, header?: any[]) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendValuesById, ensureSheetExistsById, getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
+import { appendValuesById, deleteSheetRowsById, ensureSheetExistsById, getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -70,6 +70,20 @@ function joinPayloadChunks(row: any[]) {
   return row.slice(5).map(text).join("");
 }
 
+function extractAnchorMondayFromPayload(payload: any) {
+  const weekly = payload?.weekly || {};
+  return text(weekly.anchorMonday || weekly.selectedWeek || "");
+}
+
+function stableWeeklySnapshotId(anchorMonday: string) {
+  return anchorMonday ? `WEEKLY-${anchorMonday}` : makeId();
+}
+
+function rowAnchor(row: any) {
+  const payload = safeJsonParse(joinPayloadChunks(row));
+  return extractAnchorMondayFromPayload(payload);
+}
+
 function shrinkWeeklyPayload(payload: any) {
   const weekly = payload?.weekly || {};
 
@@ -111,7 +125,7 @@ export async function GET(req: Request) {
     const id = text(url.searchParams.get("id"));
 
     const rows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:AZ").catch(() => []);
-    const records = rows.slice(1)
+    const rawRecords = rows.slice(1)
       .map((row: any[]) => ({
         snapshotId: text(row[0]),
         createdAt: text(row[1]),
@@ -122,6 +136,16 @@ export async function GET(req: Request) {
       }))
       .filter((row: any) => row.snapshotId)
       .sort((a: any, b: any) => parseDateText(b.createdAt) - parseDateText(a.createdAt));
+
+    const seen = new Set<string>();
+    const records = rawRecords.filter((record: any) => {
+      const payload = safeJsonParse(record.payloadJson);
+      const anchor = extractAnchorMondayFromPayload(payload);
+      const key = anchor || record.snapshotId;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     if (id) {
       const found = records.find((row: any) => row.snapshotId === id) || null;
@@ -153,12 +177,13 @@ export async function POST(req: Request) {
     const spreadsheetId = getHistorySheetId();
     await ensureWeeklySnapshotSheet(spreadsheetId);
 
-    const snapshotId = text(body.snapshotId) || makeId();
     const createdAt = nowKST();
     const periodLabel = text(body.periodLabel) || text(body?.payload?.weekly?.periodLabel) || "주간 스냅샷";
     const memo = text(body.memo);
 
     const payload = shrinkWeeklyPayload(body.payload || {});
+    const anchorMonday = extractAnchorMondayFromPayload(payload);
+    const snapshotId = text(body.snapshotId) || stableWeeklySnapshotId(anchorMonday);
 
     if (!payload?.weekly) {
       return NextResponse.json({
@@ -169,6 +194,17 @@ export async function POST(req: Request) {
 
     const payloadJson = JSON.stringify(payload);
     const chunks = chunkText(payloadJson);
+
+    // 같은 기준주차는 누적 저장하지 않고 기존 행을 제거한 뒤 새 스냅샷으로 교체한다.
+    const existingRows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:AZ").catch(() => []);
+    const duplicateRowNumbers: number[] = [];
+    existingRows.slice(1).forEach((row: any[], idx: number) => {
+      const rowNumber = idx + 2;
+      const sameId = text(row[0]) === snapshotId;
+      const sameAnchor = anchorMonday && rowAnchor(row) === anchorMonday;
+      if (sameId || sameAnchor) duplicateRowNumbers.push(rowNumber);
+    });
+    if (duplicateRowNumbers.length) await deleteSheetRowsById(spreadsheetId, SHEET_NAME, duplicateRowNumbers);
 
     await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:AZ`, [[
       snapshotId,

@@ -317,6 +317,24 @@ function buildStoreSummaryFromDailySales(rows: DailyStoreSaleRecord[], selected:
   return { current, compare, productStoreNames: current.map((r) => r.storeName) };
 }
 
+
+function latestRecordDateFromDailyStoreRows(rows: DailyStoreSaleRecord[]) {
+  const dates = rows.map((r) => parseDate(r.date)).filter(Boolean) as Date[];
+  return dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null;
+}
+
+function effectiveWeeklyBasisFromB2(b2Basis: string, latestDataDate: Date | null) {
+  // B2가 다음 주차로 미리 세팅되어 있어도, 일간매출 데이터가 아직 그 주차를 커버하지 못하면
+  // 실제 조회 가능한 최신 완료 주차(일간매출 최신일자의 월요일)를 사용한다.
+  if (!b2Basis) return "";
+  if (!latestDataDate) return b2Basis;
+  const availableBasis = isoDate(mondayOfWeek(latestDataDate));
+  const b2 = parseSelectedMonday(b2Basis);
+  const available = parseSelectedMonday(availableBasis);
+  if (b2 && available && b2.getTime() > available.getTime()) return availableBasis;
+  return b2Basis;
+}
+
 function pickHeaderIndex(header: string[], candidates: string[]) {
   const normalized = header.map((x) => compact(x));
   for (const c of candidates) {
@@ -811,7 +829,7 @@ export type WeeklyProviderPayload = {
 
 export const WEEKLY_HISTORY_SHEET = "Weekly_History";
 export const WEEKLY_STORE_HISTORY_SHEET = "Weekly_Store_History";
-export const WEEKLY_HISTORY_VERSION = "MARK 6.2 HEADER_MAPPING_PROVIDER";
+export const WEEKLY_HISTORY_VERSION = "MARK 6.2.3 WEEKLY_DASHBOARD_EFFECTIVE_BASIS";
 
 export const WEEKLY_HISTORY_HEADER = [
   "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
@@ -1337,8 +1355,14 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const mainId = getSheetId();
   const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
   const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const dailyStoreRaw = await readFirstAvailableSheet([dbId, mainId, historyId].filter(Boolean), ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "A:ZZ");
+  const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
+
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
-  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  const b2Basis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  const latestDailyStoreDate = latestRecordDateFromDailyStoreRows(dailyStoreRows);
+  const currentBasis = effectiveWeeklyBasisFromB2(b2Basis, latestDailyStoreDate);
+
   let historyRecords = await readWeeklyHistoryRows(historyId);
   let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
@@ -1355,10 +1379,8 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
 
   const summaryFromWeeklyHistory = storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
 
-  // MARK 6.2.1: 주간 매장별 매출은 MARK_DB의 `일간매출(26년)` 시트를 기준으로 재집계합니다.
-  // `금주전주`는 SKU/가격/상품 기준으로 유지하고, 매장 랭킹/호조·부진은 검산 가능한 일간 매출 원장을 사용합니다.
-  const dailyStoreRaw = await readFirstAvailableSheet([dbId, mainId, historyId].filter(Boolean), ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "A:ZZ");
-  const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
+  // MARK 6.2.3: 주간 매장별 매출은 MARK_DB의 `일간매출(26년)` 시트를 기준으로 재집계한다.
+  // B2가 다음 주차로 선세팅된 경우에는 일간매출 최신일자 기준으로 실제 조회 가능한 주차를 선택한다.
   const dailyStoreSummary = dailyStoreRows.length ? buildStoreSummaryFromDailySales(dailyStoreRows, selected) : null;
   const summary = dailyStoreSummary ? {
     ...summaryFromWeeklyHistory,
@@ -1390,21 +1412,25 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
       })(),
       newTop10Entrants: [],
       aiBriefing: [
-        `Weekly_History 기준 ${selected.analysisLabel} 주간 매출을 조회했습니다.`,
-        `주간 데이터는 금주/전주 시트 B2 기준으로 저장된 Snapshot을 우선 사용합니다.`,
+        `일간매출(26년) 기준 ${selected.analysisLabel} 오프라인 주간 매출을 조회했습니다.`,
+        `기준주차는 금주/전주 B2와 일간매출 최신일자를 함께 검증해 선택합니다.`,
       ],
     },
     inventory: {},
     sources: {
-      primary: "MARK_HISTORY / Weekly_History",
-      fallback: "금주/전주 시트 → Weekly_History 자동 Snapshot",
+      primary: "MARK_DB / 일간매출(26년)",
+      fallback: "Weekly_Store_History",
       currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
       dailyStoreSalesSheet: dailyStoreRaw.sheetName || "not found",
       storeDashboardSource: dailyStoreSummary ? "MARK_DB / 일간매출(26년)" : "Weekly_Store_History fallback",
       basisCell: "금주/전주!B2",
+      b2Basis,
+      effectiveBasis: currentBasis,
+      latestDailyStoreDate: latestDailyStoreDate ? isoDate(latestDailyStoreDate) : "",
     },
   };
 }
+
 
 export async function getWeeklyDashboardBase(requestedWeek = "", options: { refresh?: boolean } = {}) {
   const dashboard = await getWeeklyDashboardPayload(requestedWeek, options);

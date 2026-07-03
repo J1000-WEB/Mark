@@ -218,10 +218,24 @@ export default function ScheduleDashboard() {
   const [hiddenSchedule, setHiddenSchedule] = useState(true);
   const [weatherData, setWeatherData] = useState<any[]>([]);
 
+  function weatherApiUrl() {
+    // 판매전체상 날씨는 브라우저 기준 하루 1회만 OpenWeather를 갱신합니다.
+    // 같은 날 다시 열면 Weather_History만 읽어서 API 호출을 줄입니다.
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    try {
+      const key = "mark_weather_refresh_day";
+      if (typeof window !== "undefined" && localStorage.getItem(key) !== today) {
+        localStorage.setItem(key, today);
+        return "/api/weather?refresh=1";
+      }
+    } catch {}
+    return "/api/weather";
+  }
+
   async function load() {
     const [scheduleRes, weatherRes] = await Promise.allSettled([
       fetch("/api/schedule", { cache: "no-store" }),
-      fetch("/api/weather", { cache: "no-store" }),
+      fetch(weatherApiUrl(), { cache: "no-store" }),
     ]);
 
     if (scheduleRes.status === "fulfilled" && scheduleRes.value.ok) {

@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -1881,12 +1881,12 @@ function applyWeeklyPerformance(rows: any[], weeklyStoreRows: any[], override?: 
       addedAmount,
       changeRate: beforeAmount ? ((duringAmount - beforeAmount) / beforeAmount) * 100 : duringAmount ? 100 : 0,
       result: addedAmount > 0 ? "성공" : addedAmount < 0 ? "부진" : "관찰",
-      compareBasis: `RT 비교: Weekly_Store_History 기준 / 실행전주 ${periods.beforeLabel} ↔ 실행주 ${periods.duringLabel}`,
+      compareBasis: `RT 비교: MARK_WEEKLY_HISTORY / Weekly_history 기준 / 실행전주 ${periods.beforeLabel} ↔ 실행주 ${periods.duringLabel}`,
       beforePeriodLabel: periods.beforeLabel || "",
       duringPeriodLabel: periods.duringLabel || "",
       beforeDates: periods.beforeDates,
       duringDates: periods.duringDates,
-      performanceSource: "Weekly_Store_History",
+      performanceSource: "MARK_WEEKLY_HISTORY / Weekly_history",
     };
   });
 }
@@ -2075,10 +2075,12 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
   try {
     const dbId = getDbSheetId();
     const historyId = getHistorySheetId();
+    const weeklyHistoryId = getWeeklyHistorySheetId();
     const mainId = getSheetId();
 
     const dbTitles = await getSpreadsheetTitlesById(dbId);
     const historyTitles = await getSpreadsheetTitlesById(historyId).catch(() => []);
+    const weeklyHistoryTitles = await getSpreadsheetTitlesById(weeklyHistoryId).catch(() => []);
     const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
 
     const performanceSheetName = pickNormalizedTitle(dbTitles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
@@ -2108,8 +2110,8 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
 
     const dailyRows = parseDailyHistoryRows(dailyValues || []);
 
-    const weeklyStoreSheetName = historyTitles.includes("Weekly_Store_History") ? "Weekly_Store_History" : "";
-    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(historyId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
+    const weeklyStoreSheetName = weeklyHistoryTitles.includes("Weekly_history") ? "Weekly_history" : "";
+    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(weeklyHistoryId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
     const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
 
     const weeklyPriceSheetName = pickNormalizedTitle(mainTitles, ["금주전주", "금주/전주", "금주 전주"], "금주전주");
@@ -2144,7 +2146,7 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     }
 
     // RT/프로모션 성과의 수량 추이는 Daily_Sales_History 기준으로 봅니다.
-    // Weekly_Store_History는 주간 대시보드/판매데이터용이며, RT 성과 수량에는 섞지 않습니다.
+    // MARK_WEEKLY_HISTORY / Weekly_history는 주간 대시보드·판매데이터용이며, RT 성과 수량에는 섞지 않습니다.
     const weeklyApplied = performanceRows;
     const rows = applyDailyPerformance(weeklyApplied, dailyRows, override, weeklyUnitPriceMap);
     const summary = buildPerformanceSummary(rows);

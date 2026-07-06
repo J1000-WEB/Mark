@@ -1,11 +1,11 @@
 import {
-  appendValuesById,
   ensureSheetExistsById,
   getDbSheetId,
   getHistorySheetId,
+  getWeeklyHistorySheetId,
   getSheetId,
   getSheetValuesById,
-  getSpreadsheetTitlesById,
+  replaceSheetValuesById,
   updateValuesById,
 } from "@/lib/googleSheets";
 
@@ -790,16 +790,48 @@ function buildExcelLikeRows(args: {
   return { rows, rowCount: keys.length, colCount: headers.length };
 }
 
-async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string) {
-  for (const spreadsheetId of ids) {
-    const titles = await getSpreadsheetTitlesById(spreadsheetId).catch(() => []);
-    const found = titles.find((title) => candidates.includes(title)) || titles.find((title) => candidates.some((c) => compact(title).includes(compact(c))));
-    if (found) {
-      const rows = await getSheetValuesById(spreadsheetId, found, range).catch(() => []);
-      return { spreadsheetId, sheetName: found, rows };
+type SheetReadResult = { spreadsheetId: string; sheetName: string; rows: Row[] };
+type SheetReadOptions = { refresh?: boolean; ttlMs?: number };
+
+// 주간 화면은 최초 진입·스냅샷 목록·버튼 클릭에서 같은 원본을 짧은 시간에 반복 조회할 수 있다.
+// 서버 인스턴스 내 45초 캐시 + in-flight 공유로 Sheets Read quota를 보호한다.
+const weeklySheetReadCache = new Map<string, { expiresAt: number; value: SheetReadResult }>();
+const weeklySheetReadInflight = new Map<string, Promise<SheetReadResult>>();
+
+async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string, options: SheetReadOptions = {}): Promise<SheetReadResult> {
+  const normalizedIds = [...new Set(ids.filter(Boolean))];
+  const key = `${normalizedIds.join("|")}::${candidates.join("|")}::${range}`;
+  const ttlMs = options.ttlMs ?? 45_000;
+  const now = Date.now();
+  const cached = weeklySheetReadCache.get(key);
+  if (!options.refresh && cached && cached.expiresAt > now) return cached.value;
+
+  const pending = weeklySheetReadInflight.get(key);
+  if (!options.refresh && pending) return pending;
+
+  const load = (async (): Promise<SheetReadResult> => {
+    // 예상 시트명부터 바로 조회한다. 이전처럼 매 요청마다 spreadsheets.get(메타데이터)를 먼저 호출하지 않는다.
+    for (const spreadsheetId of normalizedIds) {
+      for (const sheetName of candidates) {
+        const rows = await getSheetValuesById(spreadsheetId, sheetName, range).catch(() => [] as Row[]);
+        if (rows.length) {
+          const value = { spreadsheetId, sheetName, rows };
+          weeklySheetReadCache.set(key, { expiresAt: Date.now() + ttlMs, value });
+          return value;
+        }
+      }
     }
+    const value = { spreadsheetId: "", sheetName: "", rows: [] as Row[] };
+    weeklySheetReadCache.set(key, { expiresAt: Date.now() + Math.min(ttlMs, 10_000), value });
+    return value;
+  })();
+
+  if (!options.refresh) weeklySheetReadInflight.set(key, load);
+  try {
+    return await load;
+  } finally {
+    weeklySheetReadInflight.delete(key);
   }
-  return { spreadsheetId: "", sheetName: "", rows: [] as Row[] };
 }
 
 
@@ -822,19 +854,14 @@ export type WeeklyProviderPayload = {
   error?: string;
 };
 
-export const WEEKLY_HISTORY_SHEET = "Weekly_History";
-export const WEEKLY_STORE_HISTORY_SHEET = "Weekly_Store_History";
-export const WEEKLY_HISTORY_VERSION = "MARK 6.2.3 WEEKLY_DASHBOARD_EFFECTIVE_BASIS";
+export const WEEKLY_HISTORY_SHEET = "Weekly_history";
+export const WEEKLY_HISTORY_VERSION = "MARK 6.4 WEEKLY_HISTORY_ISOLATED";
 
+/**
+ * Dedicated weekly history workbook schema supplied by the operations team.
+ * One row represents a weekly style/color record at an offline store level.
+ */
 export const WEEKLY_HISTORY_HEADER = [
-  "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
-  "스타일", "스타일명", "칼라", "칼라명", "사이즈", "브랜드", "시즌", "성별", "품목", "복종", "라인", "클래스",
-  "Tag가", "실판매가", "금주판매수량", "금주판매금액", "전주판매수량", "전주판매금액",
-  "평균판매가", "전주평균판매가", "판매수량증감", "판매금액증감", "판매수량증감률", "판매금액증감률",
-  "온재고", "오프재고", "총가용재고", "판매율", "순위", "Snapshot일시", "SnapshotVersion"
-];
-
-export const WEEKLY_STORE_HISTORY_HEADER = [
   "기준일", "분석시작일", "분석종료일", "비교시작일", "비교종료일", "구분",
   "스타일", "스타일명", "칼라", "칼라명", "사이즈", "점포명",
   "금주판매수량", "금주판매금액", "전주판매수량", "전주판매금액", "재고", "Snapshot일시", "SnapshotVersion"
@@ -881,12 +908,6 @@ async function ensureWeeklyHistorySheet(historyId: string) {
   await updateValuesById(historyId, `'${WEEKLY_HISTORY_SHEET}'!A1:${endCol}1`, [WEEKLY_HISTORY_HEADER]);
 }
 
-async function ensureWeeklyStoreHistorySheet(historyId: string) {
-  await ensureSheetExistsById(historyId, WEEKLY_STORE_HISTORY_SHEET);
-  const endCol = columnLetter(WEEKLY_STORE_HISTORY_HEADER.length);
-  await updateValuesById(historyId, `'${WEEKLY_STORE_HISTORY_SHEET}'!A1:${endCol}1`, [WEEKLY_STORE_HISTORY_HEADER]);
-}
-
 function latestByKey<T extends { snapshotAt?: string }>(items: T[], keyFn: (x: T) => string) {
   const map = new Map<string, T>();
   for (const item of items) {
@@ -897,57 +918,15 @@ function latestByKey<T extends { snapshotAt?: string }>(items: T[], keyFn: (x: T
   return [...map.values()];
 }
 
-function weeklyHistoryRecordFromRow(header: Row, r: Row) {
-  const h = mapByHeader(header);
-  const get = (name: string) => r[h.get(name) ?? -1];
-  const basis = isoDate(parseDate(get("기준일")) || new Date(text(get("기준일"))));
-  return {
-    basis,
-    analysisStart: text(get("분석시작일")),
-    analysisEnd: text(get("분석종료일")),
-    compareStart: text(get("비교시작일")),
-    compareEnd: text(get("비교종료일")),
-    typeLabel: text(get("구분")),
-    style: text(get("스타일")),
-    styleName: text(get("스타일명")),
-    color: text(get("칼라")),
-    colorName: text(get("칼라명")),
-    season: text(get("시즌")),
-    gender: text(get("성별")),
-    itemGroup: text(get("품목")),
-    category: text(get("복종")),
-    line: text(get("라인")),
-    className: text(get("클래스")),
-    tagPrice: num(get("Tag가")),
-    salePrice: num(get("실판매가")),
-    currentQty: num(get("금주판매수량")),
-    currentAmount: num(get("금주판매금액")),
-    prevQty: num(get("전주판매수량")),
-    prevAmount: num(get("전주판매금액")),
-    onlineStock: num(get("온재고")),
-    offlineStock: num(get("오프재고")),
-    totalStock: num(get("총가용재고")),
-    rank: num(get("순위")),
-    byStore: {},
-    byStoreAmount: {},
-    prevByStoreAmount: {},
-    byStoreStock: {},
-    snapshotAt: text(get("Snapshot일시")),
-  };
-}
-
-async function readWeeklyHistoryRows(historyId: string) {
-  await ensureWeeklyHistorySheet(historyId);
-  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:AK").catch(() => [] as Row[]);
-  const header = rows[0] || WEEKLY_HISTORY_HEADER;
-  return rows.slice(1).filter((r) => text(r[0]) && text(r[5])).map((r) => weeklyHistoryRecordFromRow(header, r));
-}
-
 function weeklyStoreRecordFromRow(header: Row, r: Row) {
   const h = mapByHeader(header);
   const get = (name: string) => r[h.get(name) ?? -1];
   return {
     basis: isoDate(parseDate(get("기준일")) || new Date(text(get("기준일")))),
+    analysisStart: text(get("분석시작일")),
+    analysisEnd: text(get("분석종료일")),
+    compareStart: text(get("비교시작일")),
+    compareEnd: text(get("비교종료일")),
     typeLabel: text(get("구분")),
     style: text(get("스타일")),
     styleName: text(get("스타일명")),
@@ -964,11 +943,60 @@ function weeklyStoreRecordFromRow(header: Row, r: Row) {
   };
 }
 
-async function readWeeklyStoreHistoryRows(historyId: string) {
-  await ensureWeeklyStoreHistorySheet(historyId);
-  const rows = await getSheetValuesById(historyId, WEEKLY_STORE_HISTORY_SHEET, "A:S").catch(() => [] as Row[]);
-  const header = rows[0] || WEEKLY_STORE_HISTORY_HEADER;
-  return rows.slice(1).filter((r) => text(r[0]) && text(r[5]) && text(r[11])).map((r) => weeklyStoreRecordFromRow(header, r));
+function aggregateWeeklyStoreRecords(records: any[]) {
+  const grouped = new Map<string, any>();
+  for (const row of latestByKey(records, (r) => `${r.basis}__${r.typeLabel}__${r.style}__${r.color}__${r.size}__${r.store}`)) {
+    const key = `${row.basis}__${row.typeLabel}__${row.style}__${row.color}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        basis: row.basis,
+        analysisStart: row.analysisStart,
+        analysisEnd: row.analysisEnd,
+        compareStart: row.compareStart,
+        compareEnd: row.compareEnd,
+        typeLabel: row.typeLabel,
+        style: row.style,
+        styleName: row.styleName,
+        color: row.color,
+        colorName: row.colorName,
+        currentQty: 0,
+        currentAmount: 0,
+        prevQty: 0,
+        prevAmount: 0,
+        onlineStock: 0,
+        offlineStock: 0,
+        totalStock: 0,
+        rank: 0,
+        byStore: {},
+        byStoreAmount: {},
+        prevByStoreAmount: {},
+        byStoreStock: {},
+        snapshotAt: row.snapshotAt,
+      });
+    }
+    const out = grouped.get(key);
+    out.currentQty += num(row.currentQty);
+    out.currentAmount += num(row.currentAmount);
+    out.prevQty += num(row.prevQty);
+    out.prevAmount += num(row.prevAmount);
+    out.offlineStock += num(row.stock);
+    out.totalStock += num(row.stock);
+    if (text(row.snapshotAt) > text(out.snapshotAt)) out.snapshotAt = row.snapshotAt;
+  }
+  return [...grouped.values()];
+}
+
+async function readDedicatedWeeklyHistory(historyId: string) {
+  // 조회 중에는 시트를 새로 만들거나 헤더를 덮어쓰지 않는다.
+  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:S").catch(() => [] as Row[]);
+  const header = rows[0] || WEEKLY_HISTORY_HEADER;
+  const storeRecords = rows.slice(1)
+    .filter((r) => text(r[0]) && text(r[5]) && text(r[6]) && text(r[11]))
+    .map((r) => weeklyStoreRecordFromRow(header, r));
+  return {
+    storeRecords,
+    productRecords: aggregateWeeklyStoreRecords(storeRecords),
+  };
 }
 
 function weekInfoFromMonday(monday: Date): WeekInfo {
@@ -1082,7 +1110,9 @@ function makeWeeklyStoreHistoryRows(args: {
   const { type, selected, current, prev1, productMap } = args;
   const snapshotAt = nowKST();
   const rows: Row[] = [];
-  for (const [key, c] of current.entries()) {
+  const allKeys = [...new Set([...current.keys(), ...prev1.keys(), ...productMap.keys()])];
+  for (const key of allKeys) {
+    const c = current.get(key) || emptyAgg();
     const p = productMap.get(key) || ({ style: type === "color" ? key.split("__")[0] : key } as ProductMaster);
     const old = prev1.get(key) || emptyAgg();
     const stores = new Set([...Object.keys(c.byStore || {}), ...Object.keys(c.byStoreAmount || {}), ...Object.keys(c.byStoreStock || {}), ...Object.keys(old.byStore || {}), ...Object.keys(old.byStoreAmount || {})]);
@@ -1119,7 +1149,57 @@ function makeWeeklyStoreHistoryRows(args: {
   return rows;
 }
 
-async function appendWeeklyHistorySnapshot(args: {
+function historyBasisFromRow(header: Row, row: Row) {
+  const basisIndex = mapByHeader(header).get("기준일") ?? 0;
+  const parsed = parseDate(row[basisIndex]);
+  return parsed ? isoDate(parsed) : text(row[basisIndex]);
+}
+
+function latestHistoryRowsByKey(rows: Row[], header: Row, includeStore: boolean) {
+  const h = mapByHeader(header);
+  const basisIndex = h.get("기준일") ?? 0;
+  const typeIndex = h.get("구분") ?? 5;
+  const styleIndex = h.get("스타일") ?? 6;
+  const colorIndex = h.get("칼라") ?? 8;
+  const storeIndex = h.get("점포명") ?? -1;
+  const sizeIndex = h.get("사이즈") ?? -1;
+  const latest = new Map<string, { row: Row; index: number }>();
+
+  rows.forEach((row, index) => {
+    const basis = historyBasisFromRow(header, row);
+    const type = text(row[typeIndex]);
+    const style = text(row[styleIndex]);
+    const color = text(row[colorIndex]);
+    const size = sizeIndex >= 0 ? text(row[sizeIndex]) : "";
+    const store = includeStore && storeIndex >= 0 ? text(row[storeIndex]) : "";
+    // Empty/legacy rows are kept individually. Valid business rows use the latest physical row.
+    const key = basis && type && style ? `${basis}__${type}__${style}__${color}__${size}__${store}` : `__legacy_${index}`;
+    latest.set(key, { row, index });
+  });
+
+  return [...latest.values()].sort((a, b) => a.index - b.index).map((item) => item.row);
+}
+
+async function replaceHistoryBasisRows(args: {
+  historyId: string;
+  sheetName: string;
+  header: Row;
+  selectedBasis: string;
+  replacementRows: Row[];
+  clearRange: string;
+}) {
+  const existing = await getSheetValuesById(args.historyId, args.sheetName, args.clearRange).catch(() => [] as Row[]);
+  const header = existing[0]?.length ? existing[0] : args.header;
+  const kept = existing.slice(1).filter((row) => historyBasisFromRow(header, row) !== args.selectedBasis);
+  await replaceSheetValuesById(args.historyId, args.sheetName, [header, ...kept, ...args.replacementRows], args.clearRange);
+  return { keptRows: kept.length, writtenRows: args.replacementRows.length };
+}
+
+/**
+ * One 기준일 must have exactly one latest raw product snapshot. The old implementation
+ * appended every refresh and caused duplicate Weekly_History / Weekly_Store_History rows.
+ */
+async function upsertWeeklyHistorySnapshot(args: {
   historyId: string;
   selected: WeekInfo;
   styleCurrent: Map<string, SalesAgg>;
@@ -1129,17 +1209,33 @@ async function appendWeeklyHistorySnapshot(args: {
   productMaps: { byStyle: Map<string, ProductMaster>; byColor: Map<string, ProductMaster> };
 }) {
   await ensureWeeklyHistorySheet(args.historyId);
-  await ensureWeeklyStoreHistorySheet(args.historyId);
-  const styleRows = makeWeeklyHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
-  const colorRows = makeWeeklyHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
+  const styleRows = makeWeeklyStoreHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
+  const colorRows = makeWeeklyStoreHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
   const values = [...styleRows, ...colorRows];
-  if (values.length) await appendValuesById(args.historyId, `'${WEEKLY_HISTORY_SHEET}'!A:AK`, values);
 
-  const styleStoreRows = makeWeeklyStoreHistoryRows({ type: "style", selected: args.selected, current: args.styleCurrent, prev1: args.stylePrev, productMap: args.productMaps.byStyle });
-  const colorStoreRows = makeWeeklyStoreHistoryRows({ type: "color", selected: args.selected, current: args.colorCurrent, prev1: args.colorPrev, productMap: args.productMaps.byColor });
-  const storeValues = [...styleStoreRows, ...colorStoreRows];
-  if (storeValues.length) await appendValuesById(args.historyId, `'${WEEKLY_STORE_HISTORY_SHEET}'!A:S`, storeValues);
-  return values.length + storeValues.length;
+  // Dedicated Weekly_history keeps one latest complete snapshot per 기준일.
+  await replaceHistoryBasisRows({
+    historyId: args.historyId,
+    sheetName: WEEKLY_HISTORY_SHEET,
+    header: WEEKLY_HISTORY_HEADER,
+    selectedBasis: args.selected.week,
+    replacementRows: values,
+    clearRange: "A:S",
+  });
+  return values.length;
+}
+
+/** Keeps one latest business row per 주차/구분/스타일/컬러(/점포) across legacy duplicates. */
+export async function cleanupWeeklyHistoryDuplicates() {
+  const historyId = getWeeklyHistorySheetId();
+  await ensureWeeklyHistorySheet(historyId);
+  const existing = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:S").catch(() => [] as Row[]);
+  const header = existing[0]?.length ? existing[0] : WEEKLY_HISTORY_HEADER;
+  const sourceRows = existing.slice(1).filter((row) => row.some((cell) => text(cell)));
+  const compacted = latestHistoryRowsByKey(sourceRows, header, true);
+  await replaceSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, [header, ...compacted], "A:S");
+  const result = { beforeRows: sourceRows.length, afterRows: compacted.length, removedRows: sourceRows.length - compacted.length };
+  return { ok: true, history: result, product: result, store: result, removedRows: result.removedRows };
 }
 
 function historyRecordsToMaps(records: any[], basis: string, type: SalesType, storeRecords: any[] = []) {
@@ -1174,7 +1270,7 @@ function historyRecordsToMaps(records: any[], basis: string, type: SalesType, st
     });
   }
 
-  for (const sr of latestByKey(storeRecords.filter((r) => r.basis === basis && r.typeLabel === typeLabel), (r) => `${salesKey(r.style, r.color, type)}__${r.store}`)) {
+  for (const sr of latestByKey(storeRecords.filter((r) => r.basis === basis && r.typeLabel === typeLabel), (r) => `${salesKey(r.style, r.color, type)}__${r.size || ""}__${r.store}`)) {
     if (!isOfflineStore(sr.store)) continue;
     const key = salesKey(sr.style, sr.color, type);
     const c = current.get(key) || emptyAgg();
@@ -1213,7 +1309,7 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
   mergeOnOffStock(stockRaw.rows, productMaps);
   const styleAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "style");
   const colorAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "color");
-  const appended = await appendWeeklyHistorySnapshot({
+  const appended = await upsertWeeklyHistorySnapshot({
     historyId,
     selected,
     styleCurrent: styleAgg.current,
@@ -1226,17 +1322,19 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
 }
 
 export async function getSalesDataPayload(type: SalesType, requestedWeek = "", options: { refresh?: boolean } = {}): Promise<WeeklyProviderPayload> {
-  const historyId = getHistorySheetId();
+  const weeklyHistoryId = getWeeklyHistorySheetId();
+  const legacyHistoryId = getHistorySheetId();
   const dbId = getDbSheetId();
   const mainId = getSheetId();
 
-  const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
-  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
+  const salesRows = await getSheetValuesById(legacyHistoryId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
+  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, legacyHistoryId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
   const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
   const requested = explicitWeekInfo(requestedWeek);
-  let historyRecords = await readWeeklyHistoryRows(historyId);
-  let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
+  let historyBundle = await readDedicatedWeeklyHistory(weeklyHistoryId);
+  let historyRecords = historyBundle.productRecords;
+  let storeHistoryRecords = historyBundle.storeRecords;
   let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
   // 스냅샷에서 7/6 같은 특정 주차를 선택해 갱신하면, B2의 현재 주차와 무관하게 그 선택 주차를 우선한다.
   let selected = requested || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
@@ -1244,9 +1342,10 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const selectedTypeLabel = type === "color" ? "컬러" : "품번";
   const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === selectedTypeLabel);
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
-    await buildCurrentWeeklySnapshotFromSource({ selected, historyId, dbId, mainId });
-    historyRecords = await readWeeklyHistoryRows(historyId);
-    storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
+    await buildCurrentWeeklySnapshotFromSource({ selected, historyId: weeklyHistoryId, dbId, mainId });
+    historyBundle = await readDedicatedWeeklyHistory(weeklyHistoryId);
+    historyRecords = historyBundle.productRecords;
+    storeHistoryRecords = historyBundle.storeRecords;
     weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
     selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
   }
@@ -1279,12 +1378,12 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
     colCount: built.colCount,
     stores: mapped.stores,
     sources: {
-      primary: "MARK_HISTORY / Weekly_History",
-      fallback: "금주/전주 시트 → Weekly_History 자동 Snapshot",
+      primary: "MARK_WEEKLY_HISTORY / Weekly_history",
+      fallback: "금주/전주 시트 → 전용 Weekly_history 자동 Snapshot",
       currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
       basisCell: "금주/전주!B2",
       historySheet: WEEKLY_HISTORY_SHEET,
-      storeHistorySheet: WEEKLY_STORE_HISTORY_SHEET,
+      historyWorkbook: "MARK_WEEKLY_HISTORY",
     },
   };
 }
@@ -1354,105 +1453,145 @@ function storeSummaryFromRecords(records: any[], storeRecords: any[], basis: str
   return { current, compare, companyTopProducts, storeTopProducts, productStoreNames: storeNames };
 }
 
+/**
+ * 주간 대시보드의 상품 TOP은 현재 금주/전주 시트에서만 읽는다.
+ * 화면 조회가 Weekly_History를 다시 쓰거나 대용량 점포 상세 시트를 읽지 않도록 분리한다.
+ */
+function productSummaryFromWeeklyPrice(rows: Row[]) {
+  const aggregate = aggregateWeeklyPriceSheet(rows, "style");
+  const current = aggregate.current;
+  const previous = aggregate.previous;
+  const companyTopProducts = [...current.entries()]
+    .map(([styleCode, currentAgg]) => {
+      const prevAgg = previous.get(styleCode) || emptyAgg();
+      return {
+        styleCode,
+        productName: styleCode,
+        weekAmount: num(currentAgg.amount),
+        prevAmount: num(prevAgg.amount),
+        amountChangeRate: percentChange(num(currentAgg.amount), num(prevAgg.amount)),
+      };
+    })
+    .filter((row) => row.weekAmount || row.prevAmount)
+    .sort((a, b) => b.weekAmount - a.weekAmount)
+    .slice(0, 20);
+
+  const storeTopProducts: Record<string, any[]> = {};
+  for (const [styleCode, currentAgg] of current.entries()) {
+    const prevAgg = previous.get(styleCode) || emptyAgg();
+    const storeKeys = new Set([
+      ...Object.keys(currentAgg.byStoreAmount || {}),
+      ...Object.keys(prevAgg.byStoreAmount || {}),
+    ]);
+    for (const rawStore of storeKeys) {
+      if (!isOfflineStore(rawStore)) continue;
+      const storeName = displayDailyStoreName(rawStore);
+      const weekAmount = num(currentAgg.byStoreAmount?.[rawStore]);
+      const prevAmount = num(prevAgg.byStoreAmount?.[rawStore]);
+      if (!weekAmount && !prevAmount) continue;
+      if (!storeTopProducts[storeName]) storeTopProducts[storeName] = [];
+      storeTopProducts[storeName].push({
+        styleCode,
+        productName: styleCode,
+        weekAmount,
+        prevAmount,
+        amountChangeRate: percentChange(weekAmount, prevAmount),
+      });
+    }
+  }
+  Object.values(storeTopProducts).forEach((items) => items.sort((a, b) => b.weekAmount - a.weekAmount).splice(20));
+  return { companyTopProducts, storeTopProducts };
+}
+
 export async function getWeeklyDashboardPayload(requestedWeek = "", options: { refresh?: boolean } = {}) {
-  const historyId = getHistorySheetId();
   const dbId = getDbSheetId();
   const mainId = getSheetId();
-  const salesRows = await getSheetValuesById(historyId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
-  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
-  const dailyStoreRaw = await readFirstAvailableSheet([dbId, mainId, historyId].filter(Boolean), ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "A:ZZ");
-  const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
+  const historyId = getHistorySheetId();
+  const requested = explicitWeekInfo(requestedWeek);
 
+  // B2 기준일과 상품 TOP은 금주/전주 시트에서 한 번만 읽는다.
+  // 45초 캐시가 동일 화면의 중복 요청을 막고, 실시간 갱신(refresh) 때만 원본을 강제 재조회한다.
+  const currentWeeklyRaw = await readFirstAvailableSheet(
+    [mainId, dbId, historyId].filter(Boolean),
+    ["금주전주", "금주/전주", "금주 전주"],
+    "A:AZ",
+    { refresh: options.refresh }
+  );
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
   const b2Basis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
-  const latestDailyStoreDate = latestRecordDateFromDailyStoreRows(dailyStoreRows);
-  const currentBasis = effectiveWeeklyBasisFromB2(b2Basis, latestDailyStoreDate);
 
-  const requested = explicitWeekInfo(requestedWeek);
-  let historyRecords = await readWeeklyHistoryRows(historyId);
-  let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
-  // 주차 선택값이 있으면 B2 기본값보다 우선한다. 그래야 7/6 스냅샷을 보고 있을 때 실시간 갱신도 7/6을 다시 집계한다.
-  let selected = requested || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+  const selected = requested || (b2Basis ? weekInfoFromMonday(parseSelectedMonday(b2Basis) || new Date(b2Basis)) : weekInfoFromMonday(mondayOfWeek(new Date())));
+  const dailyStoreRaw = await readFirstAvailableSheet(
+    [dbId, mainId, historyId].filter(Boolean),
+    ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"],
+    "A:ZZ",
+    { refresh: options.refresh }
+  );
+  const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
+  const dailyStoreSummary = dailyStoreRows.length ? buildStoreSummaryFromDailySales(dailyStoreRows, selected) : { current: [], compare: [], productStoreNames: [] as string[] };
 
-  const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === "품번");
-  if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
-    await buildCurrentWeeklySnapshotFromSource({ selected, historyId, dbId, mainId });
-    historyRecords = await readWeeklyHistoryRows(historyId);
-    storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
-    selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
-  }
-
-  const summaryFromWeeklyHistory = storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
-
-  // MARK 6.3.1: 주간 매장별 매출은 MARK_DB의 `일간매출(26년)` 시트를 기준으로 재집계한다.
-  // 기준주차는 금주/전주!B2의 월요일을 항상 사용한다.
-  const dailyStoreSummary = dailyStoreRows.length ? buildStoreSummaryFromDailySales(dailyStoreRows, selected) : null;
-  const summary = dailyStoreSummary ? {
-    ...summaryFromWeeklyHistory,
-    current: dailyStoreSummary.current,
-    compare: dailyStoreSummary.compare,
-    productStoreNames: dailyStoreSummary.productStoreNames,
-  } : summaryFromWeeklyHistory;
+  // 금주/전주 시트의 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다.
+  // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
+  const productSummary = !requested || requested.week === b2Basis
+    ? productSummaryFromWeeklyPrice(currentWeeklyRaw.rows || [])
+    : { companyTopProducts: [] as any[], storeTopProducts: {} as Record<string, any[]> };
   const aggregation = {
-    source: dailyStoreSummary ? "MARK_DB / 일간매출(26년)" : "Weekly_Store_History fallback",
+    source: "MARK_DB / 일간매출(26년)",
     requestedWeek: requested?.week || "",
     basisMonday: selected.week,
     analysisStart: selected.analysisStart,
     analysisEnd: selected.analysisEnd,
     compareStart: selected.compareStart,
     compareEnd: selected.compareEnd,
-    storeCount: summary.current.length,
-    weekSales: summary.current.reduce((sum, row) => sum + num(row.weekSales), 0),
-    compareWeekSales: summary.current.reduce((sum, row) => sum + num(row.compareWeekSales), 0),
-    monthSales: summary.current.reduce((sum, row) => sum + num(row.monthSales), 0),
+    storeCount: dailyStoreSummary.current.length,
+    weekSales: dailyStoreSummary.current.reduce((sum, row) => sum + num(row.weekSales), 0),
+    compareWeekSales: dailyStoreSummary.current.reduce((sum, row) => sum + num(row.compareWeekSales), 0),
+    monthSales: dailyStoreSummary.current.reduce((sum, row) => sum + num(row.monthSales), 0),
   };
   return {
     ok: true,
-    mode: "weekly-history",
+    mode: "weekly-live-dashboard",
     selectedWeek: selected.week,
     selectedWeekLabel: selected.label,
-    weeks,
+    weeks: [selected],
     weekly: {
       periodLabel: `선택주차: ${selected.label} / 분석기간: ${selected.analysisLabel} / 비교기간: ${selected.compareLabel}`,
       anchorMonday: selected.week,
       selectedWeek: selected.week,
       currentPeriod: { start: selected.analysisStart, end: selected.analysisEnd },
       comparePeriod: { start: selected.compareStart, end: selected.compareEnd },
-      current: summary.current,
-      compare: summary.compare,
-      companyTopProducts: summary.companyTopProducts,
-      storeTopProducts: summary.storeTopProducts,
-      productStoreNames: summary.productStoreNames,
+      current: dailyStoreSummary.current,
+      compare: dailyStoreSummary.compare,
+      companyTopProducts: productSummary.companyTopProducts,
+      storeTopProducts: productSummary.storeTopProducts,
+      productStoreNames: dailyStoreSummary.productStoreNames,
       top10Concentration: (() => {
-        const total = summary.current.reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
-        const top10 = summary.current.slice(0, 10).reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
+        const total = dailyStoreSummary.current.reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
+        const top10 = dailyStoreSummary.current.slice(0, 10).reduce((sum, x) => sum + Number(x.weekSales || 0), 0);
         return total ? top10 / total : 0;
       })(),
       newTop10Entrants: [],
       aiBriefing: [
         `일간매출(26년) 기준 ${selected.analysisLabel} 오프라인 주간 매출을 조회했습니다.`,
-        `기준주차는 금주/전주!B2의 월요일을 고정 사용하며, 일간매출 최신일자는 갱신상태 확인에만 사용합니다.`,
+        `실시간 갱신은 MARK_DB 원본 2개 시트만 다시 조회하며 Weekly_history에는 저장하지 않습니다.`,
       ],
     },
     inventory: {},
     sources: {
       primary: "MARK_DB / 일간매출(26년)",
-      fallback: "Weekly_Store_History",
-      currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
+      currentWeeklySheet: currentWeeklyRaw.sheetName || "선택 주차 직접 조회",
       dailyStoreSalesSheet: dailyStoreRaw.sheetName || "not found",
-      storeDashboardSource: dailyStoreSummary ? "MARK_DB / 일간매출(26년)" : "Weekly_Store_History fallback",
+      storeDashboardSource: "MARK_DB / 일간매출(26년)",
       basisCell: "금주/전주!B2",
-      basisRule: "금주/전주!B2 월요일 고정 (일간매출 최신일자로 대체하지 않음)",
+      basisRule: requested ? "선택한 기준 월요일 우선" : "금주/전주!B2 월요일 고정",
       b2Basis,
-      effectiveBasis: currentBasis,
-      latestDailyStoreDate: latestDailyStoreDate ? isoDate(latestDailyStoreDate) : "",
+      effectiveBasis: selected.week,
+      latestDailyStoreDate: latestRecordDateFromDailyStoreRows(dailyStoreRows) ? isoDate(latestRecordDateFromDailyStoreRows(dailyStoreRows)!) : "",
+      productTopSource: productSummary.companyTopProducts.length ? "금주/전주 현재 주차" : "과거 주차는 Weekly_Snapshot 저장본 사용",
       aggregation,
     },
   };
 }
-
 
 export async function getWeeklyDashboardBase(requestedWeek = "", options: { refresh?: boolean } = {}) {
   const dashboard = await getWeeklyDashboardPayload(requestedWeek, options);

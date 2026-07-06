@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendValuesById, ensureSheetExistsById, getHistorySheetId, getSheetValuesById, updateValuesById } from "@/lib/googleSheets";
+import { appendValuesById, ensureSheetExistsById, getSheetValuesById, getWeeklyHistorySheetId, updateValuesById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,6 +35,10 @@ type SnapshotRecord = {
   payloadJson: string;
   anchorMonday: string;
 };
+
+// 목록 조회와 특정 스냅샷 조회가 연속으로 발생하므로 짧은 서버 캐시를 둔다.
+// 저장 POST 직후에는 캐시를 비워 항상 최신 행을 다시 읽는다.
+let snapshotRecordCache: { spreadsheetId: string; expiresAt: number; records: SnapshotRecord[] } | null = null;
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -161,9 +165,12 @@ async function ensureWeeklySnapshotSheet(spreadsheetId: string) {
   await ensureSheetExistsById(spreadsheetId, SHEET_NAME, HEADER);
 }
 
-async function readSnapshotRecords(spreadsheetId: string) {
+async function readSnapshotRecords(spreadsheetId: string, force = false) {
+  if (!force && snapshotRecordCache?.spreadsheetId === spreadsheetId && snapshotRecordCache.expiresAt > Date.now()) {
+    return snapshotRecordCache.records;
+  }
   const rows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:AZ").catch(() => []);
-  return rows.slice(1)
+  const records = rows.slice(1)
     .map((row: any[], index: number): SnapshotRecord => {
       const payloadJson = joinPayloadChunks(row);
       return {
@@ -178,6 +185,8 @@ async function readSnapshotRecords(spreadsheetId: string) {
       };
     })
     .filter((row: SnapshotRecord) => row.snapshotId);
+  snapshotRecordCache = { spreadsheetId, expiresAt: Date.now() + 45_000, records };
+  return records;
 }
 
 function toListItem(record: SnapshotRecord) {
@@ -187,8 +196,7 @@ function toListItem(record: SnapshotRecord) {
 
 export async function GET(req: Request) {
   try {
-    const spreadsheetId = getHistorySheetId();
-    await ensureWeeklySnapshotSheet(spreadsheetId);
+    const spreadsheetId = getWeeklyHistorySheetId();
 
     const url = new URL(req.url);
     const id = text(url.searchParams.get("id"));
@@ -222,7 +230,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const spreadsheetId = getHistorySheetId();
+    const spreadsheetId = getWeeklyHistorySheetId();
     await ensureWeeklySnapshotSheet(spreadsheetId);
 
     if (!body?.payload?.weekly) {
@@ -239,7 +247,7 @@ export async function POST(req: Request) {
 
     // 같은 기준 월요일의 스냅샷은 새 행을 계속 쌓지 않고 최신 원본으로 교체한다.
     // 이렇게 해야 잘못 저장된 과거 payload가 7/6 같은 동일 주차 선택값으로 다시 노출되지 않는다.
-    const records = await readSnapshotRecords(spreadsheetId);
+    const records = await readSnapshotRecords(spreadsheetId, true);
     const existing = anchorMonday
       ? records
           .filter((record) => record.anchorMonday === anchorMonday)
@@ -264,6 +272,7 @@ export async function POST(req: Request) {
     } else {
       await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:O`, [rowValues]);
     }
+    snapshotRecordCache = null;
 
     return NextResponse.json({
       ok: true,

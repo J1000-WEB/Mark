@@ -475,9 +475,18 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function createWeeklySnapshot() {
     setRefreshing(true);
     try {
+      // 스냅샷 저장은 선택한 기준 월요일의 상품·점포 상세 Weekly_history도 먼저 교체한다.
+      // 실시간 갱신 버튼은 MARK_DB 점포 매출만 다시 계산하며 Weekly_history에는 쓰지 않는다.
+      const basis = activeWeeklyBasis();
+      const detailParams = new URLSearchParams({ type: "style", refresh: "1", _ts: String(Date.now()) });
+      if (basis) detailParams.set("week", basis);
+      const detailRes = await fetch(`/api/weekly-history?${detailParams.toString()}`, { cache: "no-store" });
+      const detail = await detailRes.json();
+      if (!detail?.ok) throw new Error(detail?.error || "Weekly_history 저장 실패");
+
       // 스냅샷에서 선택한 주차(예: 7/6)는 그대로 유지해 해당 주차 원본을 다시 계산한다.
       // 선택값이 없을 때만 금주/전주!B2의 월요일을 기본 주차로 사용한다.
-      const live = await requestLiveWeekly(activeWeeklyBasis(), true);
+      const live = await requestLiveWeekly(basis, true);
       applyLiveWeeklyPayload(live);
       const saveRes = await fetch("/api/weekly-snapshots", {
         method: "POST",
@@ -508,9 +517,30 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       // 그래서 7/6 스냅샷을 선택한 상태에서 누르면 6/29로 돌아가지 않는다.
       const live = await requestLiveWeekly(activeWeeklyBasis(), true);
       applyLiveWeeklyPayload(live);
-      await refreshWeeklySnapshotList().catch(() => []);
+      // 실시간 갱신은 스냅샷을 바꾸지 않으므로 목록을 다시 읽지 않는다.
     } catch (error: any) {
       setDataStatus(error?.message || "주간 실시간 갱신 실패");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+
+  async function cleanupWeeklyHistory() {
+    if (!window.confirm("MARK_WEEKLY_HISTORY / Weekly_history의 같은 주차·상품·점포 중복 행을 정리합니다. 각 키의 가장 마지막 저장본만 남깁니다.")) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/weekly-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "cleanup" }),
+      });
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || "Weekly_history 중복 정리 실패");
+      setDataStatus(`${json.message} · 이후 같은 주차는 덮어쓰기 저장`);
+    } catch (error: any) {
+      setDataStatus(error?.message || "Weekly_history 중복 정리 실패");
     } finally {
       setRefreshing(false);
     }
@@ -580,6 +610,14 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                   className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
                 >
                   {refreshing ? "저장중..." : "스냅샷 저장"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cleanupWeeklyHistory}
+                  disabled={refreshing}
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-black text-amber-800 disabled:opacity-40"
+                >
+                  히스토리 중복 정리
                 </button>
               </div>
             ) : (

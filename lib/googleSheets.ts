@@ -41,6 +41,20 @@ export function getHistorySheetId() {
   return id;
 }
 
+/**
+ * Weekly product/store history is intentionally isolated from the large MARK_HISTORY workbook.
+ * An environment variable can override the default so production deployments can change the
+ * dedicated workbook without touching source code.
+ */
+export function getWeeklyHistorySheetId() {
+  const id =
+    process.env.GOOGLE_SHEET_ID_WEEKLY_HISTORY ||
+    process.env.GOOGLE_WEEKLY_HISTORY_SHEET_ID ||
+    "19cSF8l67-qHl6s3MhEXwGzDaIFVQVg2WS6EWHLyB57A";
+  if (!id) throw new Error("GOOGLE_SHEET_ID_WEEKLY_HISTORY is not set");
+  return id;
+}
+
 export async function getSpreadsheetTitlesById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.get({ spreadsheetId });
@@ -75,6 +89,27 @@ export async function updateValuesById(spreadsheetId: string, range: string, val
   return sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values },
+  });
+}
+
+
+/**
+ * Replaces all values in a sheet range. Used for compacting append-only history sheets
+ * after keeping only the latest row for each business key.
+ */
+export async function replaceSheetValuesById(spreadsheetId: string, sheetName: string, values: any[][], clearRange = "A:AZ") {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `'${escaped}'!${clearRange}`,
+  });
+  if (!values.length) return null;
+  return sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${escaped}'!A1`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values },
   });

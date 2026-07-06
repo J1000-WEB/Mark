@@ -989,12 +989,20 @@ function weekInfoFromMonday(monday: Date): WeekInfo {
   };
 }
 
-function makeWeeksFromBases(basisDates: string[], fallbackSalesRows: Row[], currentBasis?: string) {
+function makeWeeksFromBases(basisDates: string[], fallbackSalesRows: Row[], currentBasis?: string, extraBases: string[] = []) {
   const set = new Set<string>();
   basisDates.forEach((d) => { const parsed = parseSelectedMonday(d); if (parsed) set.add(isoDate(parsed)); });
-  if (currentBasis) { const parsed = parseSelectedMonday(currentBasis); if (parsed) set.add(isoDate(parsed)); }
+  [currentBasis, ...extraBases].filter(Boolean).forEach((basis) => {
+    const parsed = parseSelectedMonday(basis);
+    if (parsed) set.add(isoDate(parsed));
+  });
   if (!set.size) return makeWeeks(fallbackSalesRows);
   return [...set].sort((a, b) => b.localeCompare(a)).map((d) => weekInfoFromMonday(parseSelectedMonday(d) || new Date(d)));
+}
+
+function explicitWeekInfo(requestedWeek = "") {
+  const monday = parseSelectedMonday(requestedWeek);
+  return monday ? weekInfoFromMonday(monday) : null;
 }
 
 function makeWeeklyHistoryRows(args: {
@@ -1226,19 +1234,21 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
   const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
   const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  const requested = explicitWeekInfo(requestedWeek);
   let historyRecords = await readWeeklyHistoryRows(historyId);
   let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
-  let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
+  // 스냅샷에서 7/6 같은 특정 주차를 선택해 갱신하면, B2의 현재 주차와 무관하게 그 선택 주차를 우선한다.
+  let selected = requested || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
 
   const selectedTypeLabel = type === "color" ? "컬러" : "품번";
   const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === selectedTypeLabel);
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
-    await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
+    await buildCurrentWeeklySnapshotFromSource({ selected, historyId, dbId, mainId });
     historyRecords = await readWeeklyHistoryRows(historyId);
     storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
-    selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
+    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
+    selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
   const mapped = historyRecordsToMaps(historyRecords, selected.week, type, storeHistoryRecords);
@@ -1358,18 +1368,20 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const latestDailyStoreDate = latestRecordDateFromDailyStoreRows(dailyStoreRows);
   const currentBasis = effectiveWeeklyBasisFromB2(b2Basis, latestDailyStoreDate);
 
+  const requested = explicitWeekInfo(requestedWeek);
   let historyRecords = await readWeeklyHistoryRows(historyId);
   let storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
-  let selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
+  // 주차 선택값이 있으면 B2 기본값보다 우선한다. 그래야 7/6 스냅샷을 보고 있을 때 실시간 갱신도 7/6을 다시 집계한다.
+  let selected = requested || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
 
   const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === "품번");
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
-    await buildCurrentWeeklySnapshotFromSource({ selected: currentBasis ? weekInfoFromMonday(parseSelectedMonday(currentBasis) || new Date()) : selected, historyId, dbId, mainId });
+    await buildCurrentWeeklySnapshotFromSource({ selected, historyId, dbId, mainId });
     historyRecords = await readWeeklyHistoryRows(historyId);
     storeHistoryRecords = await readWeeklyStoreHistoryRows(historyId);
-    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis);
-    selected = weeks.find((w) => w.week === requestedWeek) || weeks.find((w) => w.week === currentBasis) || selected;
+    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
+    selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
   const summaryFromWeeklyHistory = storeSummaryFromRecords(historyRecords, storeHistoryRecords, selected.week);
@@ -1385,6 +1397,7 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   } : summaryFromWeeklyHistory;
   const aggregation = {
     source: dailyStoreSummary ? "MARK_DB / 일간매출(26년)" : "Weekly_Store_History fallback",
+    requestedWeek: requested?.week || "",
     basisMonday: selected.week,
     analysisStart: selected.analysisStart,
     analysisEnd: selected.analysisEnd,

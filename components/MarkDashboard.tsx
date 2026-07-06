@@ -371,7 +371,8 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   function applyLiveWeeklyPayload(payload: any) {
     const source = payload?.sources?.storeDashboardSource || payload?.sources?.primary || "MARK_DB / 일간매출(26년)";
     setDashboardData(normalizeWeeklyPayload(payload));
-    setDataStatus(`${source} 실시간 집계`);
+    const basis = payload?.weekly?.anchorMonday || payload?.weekly?.selectedWeek || "";
+    setDataStatus(`${source} 실시간 집계${basis ? ` · ${formatMdLabel(basis)} 월요일 기준` : ""}`);
     setSelectedSnapshotId("");
     setWeeklyMode("live");
     setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
@@ -387,8 +388,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     return snapshots;
   }
 
+  function activeWeeklyBasis() {
+    return String(dashboardData?.weekly?.anchorMonday || dashboardData?.weekly?.selectedWeek || "").trim();
+  }
+
   async function requestLiveWeekly(week = "", refresh = false) {
-    const params = new URLSearchParams({ dashboard: "1" });
+    const params = new URLSearchParams({ dashboard: "1", _ts: String(Date.now()) });
     if (week) params.set("week", week);
     if (refresh) params.set("refresh", "1");
     const res = await fetch(`/api/weekly-history?${params.toString()}`, { cache: "no-store" });
@@ -470,8 +475,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function createWeeklySnapshot() {
     setRefreshing(true);
     try {
-      // 주간은 /api/data를 쓰지 않고, B2 + MARK_DB 일간매출(26년) 단일 로직으로만 다시 계산한다.
-      const live = await requestLiveWeekly("", true);
+      // 스냅샷에서 선택한 주차(예: 7/6)는 그대로 유지해 해당 주차 원본을 다시 계산한다.
+      // 선택값이 없을 때만 금주/전주!B2의 월요일을 기본 주차로 사용한다.
+      const live = await requestLiveWeekly(activeWeeklyBasis(), true);
       applyLiveWeeklyPayload(live);
       const saveRes = await fetch("/api/weekly-snapshots", {
         method: "POST",
@@ -498,7 +504,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function loadLiveWeekly() {
     setRefreshing(true);
     try {
-      const live = await requestLiveWeekly("", true);
+      // "실시간 갱신"은 현재 보고 있는 주차를 우선 갱신한다.
+      // 그래서 7/6 스냅샷을 선택한 상태에서 누르면 6/29로 돌아가지 않는다.
+      const live = await requestLiveWeekly(activeWeeklyBasis(), true);
       applyLiveWeeklyPayload(live);
       await refreshWeeklySnapshotList().catch(() => []);
     } catch (error: any) {
@@ -606,6 +614,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               <span>기준 셀: {dashboardData?.sources?.basisCell || "금주/전주!B2"}</span>
               <span>집계 원본: {dashboardData?.sources?.aggregation?.source || dashboardData?.sources?.storeDashboardSource || "MARK_DB / 일간매출(26년)"}</span>
               <span>집계 점포: {dashboardData?.sources?.aggregation?.storeCount ?? dashboardData?.weekly?.current?.length ?? 0}개</span>
+              <span>실제 집계 주차: {dashboardData?.sources?.aggregation?.basisMonday || dashboardData?.weekly?.anchorMonday || "-"}</span>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {weeklySnapshots.length === 0 ? (

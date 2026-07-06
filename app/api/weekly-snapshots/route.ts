@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendValuesById, ensureSheetExistsById, getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
+import { appendValuesById, ensureSheetExistsById, getHistorySheetId, getSheetValuesById, updateValuesById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -230,7 +230,6 @@ export async function POST(req: Request) {
     }
 
     const payload = shrinkWeeklyPayload(body.payload);
-    const snapshotId = text(body.snapshotId) || makeId();
     const createdAt = nowKST();
     const periodLabel = text(body.periodLabel) || text(payload.weekly?.periodLabel) || "주간 스냅샷";
     const memo = text(body.memo);
@@ -238,14 +237,33 @@ export async function POST(req: Request) {
     const chunks = chunkText(payloadJson);
     const anchorMonday = text(payload.weekly?.anchorMonday) || extractAnchorMonday(periodLabel, payloadJson);
 
-    await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:AZ`, [[
+    // 같은 기준 월요일의 스냅샷은 새 행을 계속 쌓지 않고 최신 원본으로 교체한다.
+    // 이렇게 해야 잘못 저장된 과거 payload가 7/6 같은 동일 주차 선택값으로 다시 노출되지 않는다.
+    const records = await readSnapshotRecords(spreadsheetId);
+    const existing = anchorMonday
+      ? records
+          .filter((record) => record.anchorMonday === anchorMonday)
+          .sort((a, b) => {
+            const time = parseDateText(b.createdAt) - parseDateText(a.createdAt);
+            return time || b.rowIndex - a.rowIndex;
+          })[0]
+      : null;
+    const snapshotId = text(body.snapshotId) || existing?.snapshotId || makeId();
+    const rowValues = [
       snapshotId,
       createdAt,
       "weekly",
       periodLabel,
       memo,
-      ...chunks,
-    ]]);
+      ...chunks.slice(0, HEADER.length - 5),
+    ];
+    while (rowValues.length < HEADER.length) rowValues.push("");
+
+    if (existing) {
+      await updateValuesById(spreadsheetId, `'${SHEET_NAME}'!A${existing.rowIndex}:O${existing.rowIndex}`, [rowValues]);
+    } else {
+      await appendValuesById(spreadsheetId, `'${SHEET_NAME}'!A:O`, [rowValues]);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -253,9 +271,10 @@ export async function POST(req: Request) {
       createdAt,
       periodLabel,
       anchorMonday,
+      replaced: Boolean(existing),
       chunkCount: chunks.length,
       payloadLength: payloadJson.length,
-      message: "Weekly Snapshot 저장 완료",
+      message: existing ? "Weekly Snapshot 최신 원본으로 교체 완료" : "Weekly Snapshot 저장 완료",
     }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("Weekly snapshot save failed:", error);

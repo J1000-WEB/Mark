@@ -387,9 +387,10 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     return snapshots;
   }
 
-  async function requestLiveWeekly(week = "") {
+  async function requestLiveWeekly(week = "", refresh = false) {
     const params = new URLSearchParams({ dashboard: "1" });
     if (week) params.set("week", week);
+    if (refresh) params.set("refresh", "1");
     const res = await fetch(`/api/weekly-history?${params.toString()}`, { cache: "no-store" });
     const payload = await res.json();
     if (!payload?.ok || !payload?.weekly) throw new Error(payload?.error || "주간 원본 데이터를 불러오지 못했습니다.");
@@ -470,7 +471,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     setRefreshing(true);
     try {
       // 주간은 /api/data를 쓰지 않고, B2 + MARK_DB 일간매출(26년) 단일 로직으로만 다시 계산한다.
-      const live = await requestLiveWeekly();
+      const live = await requestLiveWeekly("", true);
       applyLiveWeeklyPayload(live);
       const saveRes = await fetch("/api/weekly-snapshots", {
         method: "POST",
@@ -486,6 +487,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       if (!saved?.ok) throw new Error(saved?.error || "Weekly_Snapshot 저장 실패");
       const snapshots = await refreshWeeklySnapshotList();
       await loadWeeklySnapshot(saved.snapshotId, snapshots);
+      if (saved?.replaced) setDataStatus(`Weekly_Snapshot · ${snapshotButtonLabel({ anchorMonday: live.weekly?.anchorMonday })} 최신 원본으로 교체`);
     } catch (error: any) {
       setDataStatus(error?.message || "Weekly_Snapshot 저장 실패");
     } finally {
@@ -496,7 +498,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function loadLiveWeekly() {
     setRefreshing(true);
     try {
-      const live = await requestLiveWeekly();
+      const live = await requestLiveWeekly("", true);
       applyLiveWeeklyPayload(live);
       await refreshWeeklySnapshotList().catch(() => []);
     } catch (error: any) {

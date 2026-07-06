@@ -345,15 +345,14 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   const [reviewStore, setReviewStore] = useState("");
   const [weeklySnapshots, setWeeklySnapshots] = useState<any[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
-  const [weeklyMode, setWeeklyMode] = useState<"snapshot" | "live">("snapshot");
-
-
+  const [weeklyMode, setWeeklyMode] = useState<"snapshot" | "live">("live");
 
   function normalizeWeeklyPayload(payload: any, snapshotMeta?: any) {
     const next = { ...(markData as any), ...(payload || {}) };
     if (payload?.weekly) next.weekly = payload.weekly;
     if (payload?.inventory) next.inventory = { ...(markData as any).inventory, ...payload.inventory };
-    next.source = "weekly-snapshot";
+    if (payload?.sources) next.sources = payload.sources;
+    next.source = snapshotMeta ? "weekly-snapshot" : "weekly-live";
     next.snapshotMeta = snapshotMeta || {};
     return next;
   }
@@ -361,32 +360,57 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   function snapshotButtonLabel(snapshot: any) {
     const payload = snapshot?.payload || null;
     const weekly = payload?.weekly || {};
-    if (weekly?.anchorMonday) return `${formatMdLabel(weekly.anchorMonday)} 월요일 기준`;
-    const label = payload?.weekly?.periodLabel || snapshot?.periodLabel || "";
-    const m = label.match(/기준주차:\s*([^/]+)/);
+    const anchor = snapshot?.anchorMonday || weekly?.anchorMonday || weekly?.selectedWeek || "";
+    if (anchor) return `${formatMdLabel(anchor)} 월요일 기준`;
+    const label = snapshot?.periodLabel || weekly?.periodLabel || "";
+    const m = label.match(/(?:선택주차|기준주차|기준일)\s*:\s*([^/]+)/);
     if (m) return `${m[1].trim()} 기준`;
     return snapshot?.createdAt || snapshot?.snapshotId || "스냅샷";
   }
 
-  async function loadWeeklySnapshot(id?: string) {
+  function applyLiveWeeklyPayload(payload: any) {
+    const source = payload?.sources?.storeDashboardSource || payload?.sources?.primary || "MARK_DB / 일간매출(26년)";
+    setDashboardData(normalizeWeeklyPayload(payload));
+    setDataStatus(`${source} 실시간 집계`);
+    setSelectedSnapshotId("");
+    setWeeklyMode("live");
+    setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
+    const first = payload?.weekly?.productStoreNames?.[0] || payload?.weekly?.current?.[0]?.storeName || "";
+    if (first && (!store || !(payload?.weekly?.productStoreNames || []).includes(store))) setStore(first);
+  }
+
+  async function refreshWeeklySnapshotList() {
     const listRes = await fetch("/api/weekly-snapshots", { cache: "no-store" });
     const list = await listRes.json();
-    const snapshots = list.snapshots || [];
+    const snapshots = list?.ok ? (list.snapshots || []) : [];
     setWeeklySnapshots(snapshots);
+    return snapshots;
+  }
 
+  async function requestLiveWeekly(week = "") {
+    const params = new URLSearchParams({ dashboard: "1" });
+    if (week) params.set("week", week);
+    const res = await fetch(`/api/weekly-history?${params.toString()}`, { cache: "no-store" });
+    const payload = await res.json();
+    if (!payload?.ok || !payload?.weekly) throw new Error(payload?.error || "주간 원본 데이터를 불러오지 못했습니다.");
+    return payload;
+  }
+
+  async function loadWeeklySnapshot(id?: string, providedSnapshots?: any[]) {
+    const snapshots = providedSnapshots || await refreshWeeklySnapshotList();
     const targetId = id || selectedSnapshotId || snapshots[0]?.snapshotId || "";
     if (!targetId) {
-      setDataStatus("Weekly_Snapshot 없음 · 실시간 데이터 조회 필요");
+      setDataStatus("저장된 Weekly_Snapshot이 없습니다. 실시간 갱신 후 스냅샷을 저장하세요.");
       return false;
     }
 
     const res = await fetch(`/api/weekly-snapshots?id=${encodeURIComponent(targetId)}`, { cache: "no-store" });
     const data = await res.json();
-    if (!data?.snapshot?.payload) return false;
+    if (!data?.snapshot?.payload?.weekly) return false;
 
     setSelectedSnapshotId(targetId);
     setDashboardData(normalizeWeeklyPayload(data.snapshot.payload, data.snapshot));
-    setDataStatus("Weekly_Snapshot 기준 데이터");
+    setDataStatus(`Weekly_Snapshot · ${snapshotButtonLabel(data.snapshot)}`);
     setWeeklyMode("snapshot");
     setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
     const first = data.snapshot.payload?.weekly?.productStoreNames?.[0] || data.snapshot.payload?.weekly?.current?.[0]?.storeName || "";
@@ -397,20 +421,17 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function loadDashboard() {
     if (active === "weekly") {
       try {
-        const weeklyRes = await fetch("/api/weekly-history?dashboard=1", { cache: "no-store" });
-        const weeklyPayload = await weeklyRes.json();
-        if (weeklyPayload?.ok && weeklyPayload?.weekly) {
-          setDashboardData(normalizeWeeklyPayload({ weekly: weeklyPayload.weekly, inventory: weeklyPayload.inventory || {} }, { source: "Weekly_History", selectedWeek: weeklyPayload.selectedWeek }));
-          setDataStatus("Weekly_History 기준 데이터");
-          setWeeklyMode("snapshot");
-          setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
-          const first = weeklyPayload.weekly?.productStoreNames?.[0] || weeklyPayload.weekly?.current?.[0]?.storeName || "";
-          if (first && (!store || !(weeklyPayload.weekly?.productStoreNames || []).includes(store))) setStore(first);
-          return;
-        }
-      } catch {}
-      const loaded = await loadWeeklySnapshot();
-      if (loaded) return;
+        const [weeklyPayload] = await Promise.all([
+          requestLiveWeekly(),
+          refreshWeeklySnapshotList().catch(() => []),
+        ]);
+        applyLiveWeeklyPayload(weeklyPayload);
+        return;
+      } catch {
+        const snapshots = await refreshWeeklySnapshotList().catch(() => []);
+        if (snapshots.length && await loadWeeklySnapshot(snapshots[0]?.snapshotId, snapshots)) return;
+        throw new Error("주간 대시보드 원본과 저장 스냅샷을 모두 불러오지 못했습니다.");
+      }
     }
 
     const res = await fetch("/api/data", { cache: "no-store" });
@@ -425,7 +446,6 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           ? "구글시트 실시간 데이터"
           : "내장 데이터"
     );
-    setWeeklyMode(active === "weekly" ? "live" : weeklyMode);
     setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
     const first = d.weekly?.productStoreNames?.[0] || "";
     if (first && (!store || !(d.weekly?.productStoreNames || []).includes(store))) setStore(first);
@@ -446,13 +466,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     }
   }
 
-
-
   async function createWeeklySnapshot() {
     setRefreshing(true);
     try {
-      const liveRes = await fetch("/api/data", { cache: "no-store" });
-      const live = await liveRes.json();
+      // 주간은 /api/data를 쓰지 않고, B2 + MARK_DB 일간매출(26년) 단일 로직으로만 다시 계산한다.
+      const live = await requestLiveWeekly();
+      applyLiveWeeklyPayload(live);
       const saveRes = await fetch("/api/weekly-snapshots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -464,7 +483,11 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         }),
       });
       const saved = await saveRes.json();
-      await loadWeeklySnapshot(saved.snapshotId);
+      if (!saved?.ok) throw new Error(saved?.error || "Weekly_Snapshot 저장 실패");
+      const snapshots = await refreshWeeklySnapshotList();
+      await loadWeeklySnapshot(saved.snapshotId, snapshots);
+    } catch (error: any) {
+      setDataStatus(error?.message || "Weekly_Snapshot 저장 실패");
     } finally {
       setRefreshing(false);
     }
@@ -473,21 +496,19 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   async function loadLiveWeekly() {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/data", { cache: "no-store" });
-      const d = await res.json();
-      setDashboardData(d);
-      setWeeklyMode("live");
-      setDataStatus("실시간 조회 데이터 · 원본/History 재계산");
-      setLastRefreshedAt(new Date().toLocaleString("ko-KR"));
+      const live = await requestLiveWeekly();
+      applyLiveWeeklyPayload(live);
+      await refreshWeeklySnapshotList().catch(() => []);
+    } catch (error: any) {
+      setDataStatus(error?.message || "주간 실시간 갱신 실패");
     } finally {
       setRefreshing(false);
     }
   }
 
-
   useEffect(() => {
     loadDashboard().catch(() => setDataStatus("내장 데이터"));
-  }, []);
+  }, [active]);
 
   const pageData = dashboardData?.[active] || { current: [], compare: [], year: [], periodLabel: "" };
 
@@ -536,19 +557,19 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  onClick={createWeeklySnapshot}
-                  disabled={refreshing}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
-                >
-                  {refreshing ? "저장중..." : "실시간 갱신+스냅샷"}
-                </button>
-                <button
-                  type="button"
                   onClick={loadLiveWeekly}
                   disabled={refreshing}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
                 >
-                  실시간 확인
+                  {refreshing ? "갱신중..." : "실시간 갱신"}
+                </button>
+                <button
+                  type="button"
+                  onClick={createWeeklySnapshot}
+                  disabled={refreshing}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+                >
+                  {refreshing ? "저장중..." : "스냅샷 저장"}
                 </button>
               </div>
             ) : (
@@ -572,14 +593,21 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-black text-slate-800">주차 확인</p>
-                <p className="mt-1 text-xs font-semibold text-blue-600">저장된 Weekly_Snapshot을 기준으로 빠르게 전환합니다.</p>
+                <p className="text-sm font-black text-slate-800">주차 · 집계 기준</p>
+                <p className="mt-1 text-xs font-semibold text-blue-600">
+                  기준일은 금주/전주!B2의 월요일 고정 · 매출은 MARK_DB / 일간매출(26년) 날짜 범위 합산
+                </p>
               </div>
-              <p className="text-xs font-black text-blue-600">{weeklySnapshots.length}개 · {weeklyMode === "snapshot" ? "스냅샷" : "실시간"}</p>
+              <p className="text-xs font-black text-blue-600">{weeklySnapshots.length}개 저장 · {weeklyMode === "snapshot" ? "스냅샷 조회" : "실시간 조회"}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600">
+              <span>기준 셀: {dashboardData?.sources?.basisCell || "금주/전주!B2"}</span>
+              <span>집계 원본: {dashboardData?.sources?.aggregation?.source || dashboardData?.sources?.storeDashboardSource || "MARK_DB / 일간매출(26년)"}</span>
+              <span>집계 점포: {dashboardData?.sources?.aggregation?.storeCount ?? dashboardData?.weekly?.current?.length ?? 0}개</span>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {weeklySnapshots.length === 0 ? (
-                <span className="text-xs font-semibold text-slate-500">저장된 주간 스냅샷이 없습니다.</span>
+                <span className="text-xs font-semibold text-slate-500">저장된 주간 스냅샷이 없습니다. 실시간 갱신 후 기준주차를 확인하고 저장하세요.</span>
               ) : (
                 <label className="flex min-w-[320px] items-center gap-2 rounded-2xl border border-blue-100 bg-white px-3 py-2">
                   <span className="text-xs font-black text-blue-700">주차 선택</span>
@@ -588,6 +616,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
                     onChange={(e) => loadWeeklySnapshot(e.target.value)}
                     className="w-full bg-transparent text-xs font-black text-slate-900 outline-none"
                   >
+                    {!selectedSnapshotId && <option value="">저장 주차 선택</option>}
                     {weeklySnapshots.map((snapshot: any) => (
                       <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
                         {snapshotButtonLabel(snapshot)}

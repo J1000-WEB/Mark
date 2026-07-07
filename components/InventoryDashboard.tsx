@@ -812,6 +812,8 @@ function PerformanceTrackingSection({ data }: { data: any }) {
     duringAmount: visibleRows.reduce((s: number, r: any) => s + Number(r.duringAmount || 0), 0),
     addedAmount: visibleRows.reduce((s: number, r: any) => s + Number(r.addedAmount || 0), 0),
     successRate: visibleRows.length ? (successCount / visibleRows.length) * 100 : 0,
+    // MARK 6.7.2: RT로 실제 이동시킨 총 수량(추가판매와는 다른 지표 — "얼마나 옮겼는지").
+    totalMovedQty: visibleRows.reduce((s: number, r: any) => s + Number(r.rtQty || 0), 0),
   };
 
   const filterTabs: ["ALL" | "RT" | "PROMOTION", string][] = [
@@ -956,6 +958,28 @@ function PerformanceTrackingSection({ data }: { data: any }) {
           ))}
         </div>
       ) : (
+        <div className="space-y-4">
+          {categoryFilter === "RT" && (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl bg-indigo-600 p-5 text-white shadow-sm">
+                <p className="text-xs font-bold text-indigo-100">📦 총 이동수량</p>
+                <p className="mt-2 text-2xl font-black">{fmtNum(selected.totalMovedQty)}장</p>
+              </div>
+              <div className={`rounded-2xl p-5 text-white shadow-sm ${Number(selected.addedQty || 0) >= 0 ? "bg-blue-600" : "bg-rose-600"}`}>
+                <p className="text-xs font-bold text-white/80">📈 판매수량 증가</p>
+                <p className="mt-2 text-2xl font-black">{Number(selected.addedQty || 0) >= 0 ? "+" : ""}{fmtNum(selected.addedQty)}개</p>
+              </div>
+              <div className={`rounded-2xl p-5 text-white shadow-sm ${Number(selected.addedAmount || 0) >= 0 ? "bg-emerald-600" : "bg-rose-600"}`}>
+                <p className="text-xs font-bold text-white/80">💰 추가 확보매출</p>
+                <p className="mt-2 text-2xl font-black">{Number(selected.addedAmount || 0) >= 0 ? "+" : ""}{won(selected.addedAmount)}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-800 p-5 text-white shadow-sm">
+                <p className="text-xs font-bold text-slate-300">✅ 실행건수 · 성공률</p>
+                <p className="mt-2 text-2xl font-black">{fmtNum(selected.count)}건 · {Number(selected.successRate || 0).toFixed(0)}%</p>
+              </div>
+            </div>
+          )}
+
         <div className="overflow-hidden rounded-2xl bg-white">
           <div className="border-b border-slate-100 bg-slate-900 px-4 py-3 text-white">
             <p className="text-sm font-black">
@@ -1041,6 +1065,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
           </div>
 
           {!selected.rows?.length && <div className="p-6"><Empty /></div>}
+        </div>
         </div>
       )}
 

@@ -1,10 +1,10 @@
 import {
-  appendValuesById,
   ensureSheetExistsById,
   getDbSheetId,
   getHistorySheetId,
   getSheetValuesById,
   getSpreadsheetTitlesById,
+  replaceSheetValuesById,
 } from "@/lib/googleSheets";
 
 function text(v: any) {
@@ -258,21 +258,167 @@ export async function readDailySalesFromMarkDb() {
 }
 
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
+
+// MARK 6.6: 데이터 폭증 방지를 위해 "일자+점포"당 한 줄만 쓰고,
+// 품번/칼라/사이즈 상세는 JSON 문자열 하나에 몰아서 저장합니다.
+// 기존 방식(조합마다 한 줄, 하루 약 2만 셀)보다 셀 수가 대폭 줄어듭니다.
 const DAILY_HISTORY_HEADER = [
   "일자",
   "점포",
-  "스타일",
-  "스타일명",
-  "칼라",
-  "칼라명",
-  "사이즈",
-  "판매수량",
-  "판매금액",
-  "재고",
+  "품목수",
+  "총판매수량",
+  "총판매금액",
+  "총재고",
+  "상세JSON",
 ];
 
-function buildDailyHistoryRows(daily: any) {
-  const grouped = new Map<string, any>();
+type DailyDetailEntry = {
+  styleCode: string;
+  productName: string;
+  colorCode: string;
+  colorName: string;
+  size: string;
+  qty: number;
+  amount: number;
+  stock: number;
+};
+
+export type FlatDailyHistoryRow = {
+  date: string;
+  storeName: string;
+  styleCode: string;
+  productName: string;
+  colorCode: string;
+  colorName: string;
+  size: string;
+  qty: number;
+  amount: number;
+  stock: number;
+};
+
+function detailKey(date: string, storeName: string, item: { styleCode: string; colorCode: string; size: string }) {
+  return `${date}__${storeName}__${item.styleCode}__${item.colorCode}__${item.size}`;
+}
+
+// 기존(구형) 행 형식인지 압축(JSON) 형식인지 헤더로 판별합니다.
+export function isCompactDailyHistoryHeader(header: any[]) {
+  return (header || []).some((cell) => {
+    const n = normalize(text(cell));
+    return n.includes("상세json") || n === normalize("상세JSON") || n.includes("json");
+  });
+}
+
+// 압축(JSON) 형식 행 → 기존에 쓰던 것과 동일한 평면(flat) 행 구조로 펼칩니다.
+// 나머지 코드(RT 엔진, 성과분석, 대시보드)는 이 평면 구조만 알면 되므로 손댈 필요가 없습니다.
+export function expandCompactDailyHistoryRows(rows: any[][]): FlatDailyHistoryRow[] {
+  if (!rows.length) return [];
+  const header = rows[0] || [];
+  const dateCol = findCol(header, ["일자", "날짜"], 0);
+  const storeCol = findCol(header, ["점포", "점포명"], 1);
+  const jsonCol = findCol(header, ["상세json", "상세", "json"], 6);
+
+  const out: FlatDailyHistoryRow[] = [];
+  for (const row of rows.slice(1)) {
+    const date = text(row[dateCol]);
+    const storeName = text(row[storeCol]);
+    if (!date || !storeName) continue;
+
+    let items: any[] = [];
+    try {
+      const raw = text(row[jsonCol]);
+      items = raw ? JSON.parse(raw) : [];
+    } catch {
+      items = [];
+    }
+    if (!Array.isArray(items)) continue;
+
+    for (const item of items) {
+      out.push({
+        date,
+        storeName,
+        styleCode: text(item?.styleCode),
+        productName: text(item?.productName),
+        colorCode: text(item?.colorCode),
+        colorName: text(item?.colorName),
+        size: text(item?.size),
+        qty: num(item?.qty),
+        amount: num(item?.amount),
+        stock: num(item?.stock),
+      });
+    }
+  }
+  return out;
+}
+
+// 기존(구형, 조합마다 한 줄) 행 형식을 평면 행 구조로 변환합니다. (마이그레이션/하위호환용)
+function expandLegacyDailyHistoryRows(rows: any[][]): FlatDailyHistoryRow[] {
+  if (!rows.length) return [];
+  const header = rows[0] || [];
+  const dateCol = findCol(header, ["일자", "날짜"], 0);
+  const storeCol = findCol(header, ["점포", "점포명"], 1);
+  const styleCol = findCol(header, ["스타일", "품번"], 2);
+  const productCol = findCol(header, ["스타일명", "상품명"], 3);
+  const colorCol = findCol(header, ["칼라", "컬러"], 4);
+  const colorNameCol = findCol(header, ["칼라명", "컬러명"], 5);
+  const sizeCol = findCol(header, ["사이즈"], 6);
+  const qtyCol = findCol(header, ["판매수량", "수량"], 7);
+  const amountCol = findCol(header, ["판매금액", "금액"], 8);
+  const stockCol = findCol(header, ["재고"], 9);
+
+  return rows.slice(1)
+    .map((row) => ({
+      date: text(row[dateCol]),
+      storeName: text(row[storeCol]),
+      styleCode: text(row[styleCol]),
+      productName: text(row[productCol]),
+      colorCode: text(row[colorCol]),
+      colorName: text(row[colorNameCol]),
+      size: text(row[sizeCol]),
+      qty: num(row[qtyCol]),
+      amount: num(row[amountCol]),
+      stock: num(row[stockCol]),
+    }))
+    .filter((r) => r.date && r.storeName && r.styleCode);
+}
+
+// 시트에 이미 있는 행(구형이든 압축형이든)을 전부 평면 행으로 펼칩니다.
+export function expandAnyDailyHistoryRows(rows: any[][]): FlatDailyHistoryRow[] {
+  if (!rows.length) return [];
+  const header = rows[0] || [];
+  return isCompactDailyHistoryHeader(header) ? expandCompactDailyHistoryRows(rows) : expandLegacyDailyHistoryRows(rows);
+}
+
+// 평면 행 목록을 "일자+점포"당 한 줄인 압축 형식으로 다시 묶습니다.
+export function buildCompactDailyHistoryRows(flatRows: FlatDailyHistoryRow[]): any[][] {
+  const groups = new Map<string, { date: string; storeName: string; items: DailyDetailEntry[] }>();
+
+  for (const r of flatRows) {
+    const groupKey = `${r.date}__${r.storeName}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, { date: r.date, storeName: r.storeName, items: [] });
+    groups.get(groupKey)!.items.push({
+      styleCode: r.styleCode,
+      productName: r.productName,
+      colorCode: r.colorCode,
+      colorName: r.colorName,
+      size: r.size,
+      qty: r.qty,
+      amount: r.amount,
+      stock: r.stock,
+    });
+  }
+
+  return Array.from(groups.values())
+    .sort((a, b) => (a.date === b.date ? a.storeName.localeCompare(b.storeName) : a.date.localeCompare(b.date)))
+    .map((g) => {
+      const totalQty = g.items.reduce((s, i) => s + num(i.qty), 0);
+      const totalAmount = g.items.reduce((s, i) => s + num(i.amount), 0);
+      const totalStock = g.items.reduce((s, i) => s + num(i.stock), 0);
+      return [g.date, g.storeName, g.items.length, totalQty, totalAmount, totalStock, JSON.stringify(g.items)];
+    });
+}
+
+function buildDailyHistoryRows(daily: any): FlatDailyHistoryRow[] {
+  const grouped = new Map<string, FlatDailyHistoryRow>();
 
   for (const item of daily.items || []) {
     const qty = num(item.dailySales);
@@ -292,40 +438,18 @@ function buildDailyHistoryRows(daily: any) {
 
     if (!date || !storeName || !styleCode || !productName) continue;
 
-    const key = `${date}__${storeName}__${styleCode}__${colorCode}__${size}`;
+    const key = detailKey(date, storeName, { styleCode, colorCode, size });
     if (!grouped.has(key)) {
-      grouped.set(key, {
-        date,
-        storeName,
-        styleCode,
-        productName,
-        colorCode,
-        colorName,
-        size,
-        qty: 0,
-        amount: 0,
-        stock: 0,
-      });
+      grouped.set(key, { date, storeName, styleCode, productName, colorCode, colorName, size, qty: 0, amount: 0, stock: 0 });
     }
 
-    const row = grouped.get(key);
+    const row = grouped.get(key)!;
     row.qty += qty;
     row.amount += amount;
     row.stock += num(item.stock);
   }
 
-  return Array.from(grouped.values()).map((row) => [
-    row.date,
-    row.storeName,
-    row.styleCode,
-    row.productName,
-    row.colorCode,
-    row.colorName,
-    row.size,
-    row.qty,
-    row.amount,
-    row.stock,
-  ]);
+  return Array.from(grouped.values());
 }
 
 export async function saveDailySalesToHistory(data?: any, source = "manual") {
@@ -336,33 +460,35 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const saveId = makeDailySnapshotId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
   const snapshotDate = ymdKST();
-  const rows = buildDailyHistoryRows(daily);
+  const newFlatRows = buildDailyHistoryRows(daily);
 
-  // 중복 방지: 같은 일자/점포/스타일/칼라/사이즈는 다시 저장하지 않습니다.
-  const existing = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:G").catch(() => []);
-  const existingKeys = new Set(
-    existing.slice(1).map((row) => `${text(row?.[0])}__${text(row?.[1])}__${text(row?.[2])}__${text(row?.[4])}__${text(row?.[6])}`)
-  );
+  // 기존에 쌓여있던 데이터(구형이든 압축형이든)를 전부 평면 구조로 불러옵니다.
+  const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
+  const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
 
-  const rowsToAppend = rows.filter((row) => {
-    const key = `${text(row[0])}__${text(row[1])}__${text(row[2])}__${text(row[4])}__${text(row[6])}`;
-    return !existingKeys.has(key);
-  });
+  // 중복 방지: 같은 일자/점포/스타일/칼라/사이즈는 다시 저장하지 않습니다(기존 값 유지).
+  const existingKeys = new Set(existingFlatRows.map((r) => detailKey(r.date, r.storeName, r)));
+  const rowsToAdd = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
 
-  if (rowsToAppend.length) {
-    await appendValuesById(spreadsheetId, `'${DAILY_HISTORY_SHEET}'!A:J`, rowsToAppend);
-  }
+  const mergedFlatRows = [...existingFlatRows, ...rowsToAdd];
+  const compactRows = buildCompactDailyHistoryRows(mergedFlatRows);
+
+  // 항상 압축 형식으로 시트 전체를 다시 씁니다.
+  // 구형 데이터가 섞여 있어도 저장할 때마다 압축 형식으로 자동 정리(자가 치유)됩니다.
+  await replaceSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, [DAILY_HISTORY_HEADER, ...compactRows]);
 
   return {
     saveId,
     savedAt,
     snapshotDate,
     source,
-    mode: "sales-only-color-size",
-    parsedRows: rows.length,
-    rows: rowsToAppend.length,
-    skippedRows: rows.length - rowsToAppend.length,
+    mode: "sales-only-color-size-compact-json",
+    parsedRows: newFlatRows.length,
+    rows: rowsToAdd.length,
+    skippedRows: newFlatRows.length - rowsToAdd.length,
     totalDailySales: daily.totalDailySales || 0,
     totalDailyAmount: daily.totalDailyAmount || 0,
+    compactRowCount: compactRows.length,
+    flatRowCount: mergedFlatRows.length,
   };
 }

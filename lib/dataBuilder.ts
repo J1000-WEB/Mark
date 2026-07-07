@@ -1,5 +1,6 @@
 import fallback from "./mark-data.json";
 import { getDbSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -1715,6 +1716,25 @@ function performancePeriods(row: any) {
 }
 
 function parseDailyHistoryRows(rows: any[][]) {
+  // MARK 6.6: Daily_Sales_History가 "일자+점포당 한 줄 + 상세JSON" 압축 형식으로 바뀌었습니다.
+  // 압축 형식이면 JSON을 펼쳐서 기존과 동일한 평면 구조로 변환합니다.
+  // (헤더 탐색용 findHeaderRow는 데이터 안 상품명에 "스타일"이 포함될 수 있어 오탐 위험이 있으므로,
+  //  압축 형식 여부는 항상 0행을 직접 확인합니다.)
+  if (isCompactDailyHistoryHeader(rows[0] || [])) {
+    return expandCompactDailyHistoryRows(rows)
+      .map((r) => ({
+        date: normalizeDateKey(r.date),
+        storeName: displayStoreName(r.storeName),
+        storeKey: normalizeStoreKey(r.storeName),
+        styleCode: r.styleCode,
+        productName: r.productName,
+        qty: r.qty,
+        amount: r.amount,
+        unitPrice: r.qty ? r.amount / r.qty : 0,
+      }))
+      .filter((r) => r.date && r.styleCode);
+  }
+
   const headerRow = findHeaderRow(rows, ["스타일"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
   const startRow = headerRow >= 0 ? headerRow + 1 : 1;

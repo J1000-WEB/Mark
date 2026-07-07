@@ -1033,6 +1033,9 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   // 핵심 가중치: 상품 판매력 70% + 재고 부족도 20% + 점포 매출력 10%
   // MARK 6.5: RT 대상 품번을 전사 판매순위 TOP 20으로 고정합니다 (기존 TOP 50 → TOP 20).
   const RT_ELIGIBLE_RANK = 20;
+  // MARK 6.7: 호조상품 RT의 입고점 목표재고를 2주 → 3주로 늘립니다.
+  // (시뮬레이션 결과 이 값이 이동물량을 가장 크게 좌우하는 레버였습니다.)
+  const RT_TARGET_STOCK_WEEKS = 3;
   const byStyle = new Map<string, any[]>();
   const storeAmountMap = new Map<string, number>();
 
@@ -1091,7 +1094,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
         (Number(storeAmountMap.get(r.storeName) || 0) / maxStoreAmount) * 100
       );
 
-      const targetStock = Math.max(1, Math.ceil(weekNet * 2));
+      const targetStock = Math.max(1, Math.ceil(weekNet * RT_TARGET_STOCK_WEEKS));
       const shortageScore = weekNet > 0
         ? Math.max(0, Math.min(100, (1 - stock / targetStock) * 100))
         : 0;
@@ -1159,7 +1162,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
 
     for (const to of receivers.slice(0, 5)) {
       const toNeed = Math.max(0, Math.ceil(to.targetStock - to.stock));
-      const twoWeekCap = Math.max(1, Math.ceil(to.weekNet * 2));
+      const twoWeekCap = Math.max(1, Math.ceil(to.weekNet * RT_TARGET_STOCK_WEEKS));
       let remainingNeed = Math.max(0, Math.min(toNeed, twoWeekCap));
       if (!remainingNeed) continue;
 
@@ -1193,6 +1196,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
           "C";
 
         rtSuggestions.push({
+          moveType: "호조",
           styleCode,
           productName: to.productName,
           fromStore: from.storeName,
@@ -1230,6 +1234,110 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     }
   }
 
+  // MARK 6.7: 부진상품(TOP20 밖) 리밸런싱 엔진 — 신규.
+  // 목적: 과잉재고(잘 안 팔리는데 재고만 쌓인) 매장 → 그 상품 기준 상대적으로 잘 나가는 매장으로 이동.
+  // 호조 엔진과 반대 방향: 호조는 "재고주수를 늘려주는" 쪽, 부진은 "재고주수를 줄여주는" 쪽입니다.
+  const RT_UNDERPERFORM_SENDER_STOCK_WEEKS_MIN = 8;
+  const RT_UNDERPERFORM_SENDER_KEEP_UNITS = 2;
+  const RT_UNDERPERFORM_RECEIVER_PERCENTILE = 0.33;
+  const RT_UNDERPERFORM_FILL_TARGET_WEEKS = 3;
+
+  if (companyTopProducts.length) {
+    for (const [styleCode, rows] of byStyle.entries()) {
+      if (rows.length < 2) continue;
+      const companyRank = topProductRankMap.get(styleCode) || 9999;
+      if (companyRank <= RT_ELIGIBLE_RANK) continue; // 호조상품(TOP20)은 위 엔진에서 이미 처리
+
+      const rowsEnriched = rows.map((r: any) => {
+        const weekNet = Number(r.weekNet || 0);
+        const stock = Number(r.storeStock || 0);
+        const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
+        return { ...r, weekNet, stock, stockWeeks };
+      });
+
+      // 받는점포 후보: 그 품번을 실제로 팔고 있는 매장들 중,
+      // 재고주수가 상대적으로 짧은 편(하위 33%ile)인 매장만 봅니다.
+      // 부진상품은 원래 회전이 느려서, 절대 주수(예: 2~3주)로 거르면 후보가 거의 안 남습니다.
+      const selling = rowsEnriched.filter((r) => r.weekNet > 0);
+      if (!selling.length) continue;
+
+      const weeksSorted = selling.map((r) => r.stockWeeks).sort((a, b) => a - b);
+      const cutoffIdx = Math.max(0, Math.ceil(weeksSorted.length * RT_UNDERPERFORM_RECEIVER_PERCENTILE) - 1);
+      const cutoffWeeks = weeksSorted[cutoffIdx];
+
+      const receivers = selling
+        .filter((r) => r.stockWeeks <= cutoffWeeks)
+        .sort((a, b) => a.stockWeeks - b.stockWeeks);
+
+      // 보내는점포: 재고주수가 절대적으로 높은(=정체된) 매장. 진열 유지를 위해 최소수량은 남겨둡니다.
+      const senders = rowsEnriched
+        .filter((r) => r.stock > RT_UNDERPERFORM_SENDER_KEEP_UNITS && r.stockWeeks >= RT_UNDERPERFORM_SENDER_STOCK_WEEKS_MIN)
+        .sort((a, b) => b.stockWeeks - a.stockWeeks);
+
+      if (!receivers.length || !senders.length) continue;
+
+      const remainingSend = new Map<string, number>();
+      for (const s of senders) remainingSend.set(s.storeName, Math.max(0, s.stock - RT_UNDERPERFORM_SENDER_KEEP_UNITS));
+
+      for (const to of receivers) {
+        const targetStock = Math.max(1, Math.ceil(to.weekNet * RT_UNDERPERFORM_FILL_TARGET_WEEKS));
+        const initialNeed = Math.max(0, targetStock - to.stock);
+        let remainingNeed = initialNeed;
+        if (!remainingNeed) continue;
+
+        for (const from of senders) {
+          if (remainingNeed <= 0) break;
+          if (normalizeStoreKey(from.storeName) === normalizeStoreKey(to.storeName)) continue;
+
+          const available = Math.max(0, Math.floor(Number(remainingSend.get(from.storeName) || 0)));
+          if (!available) continue;
+
+          const suggestQty = Math.max(0, Math.min(remainingNeed, available));
+          if (!suggestQty) continue;
+
+          remainingSend.set(from.storeName, available - suggestQty);
+          remainingNeed -= suggestQty;
+
+          const received = initialNeed - remainingNeed;
+          const toAfterWeeks = to.weekNet > 0 ? (to.stock + received) / to.weekNet : 999;
+          const fromAfterStock = Math.max(0, from.stock - suggestQty);
+          const fromAfterWeeks = from.weekNet > 0 ? fromAfterStock / from.weekNet : 999;
+
+          const priority = from.stockWeeks >= 20 ? "A" : from.stockWeeks >= 12 ? "B" : "C";
+
+          rtSuggestions.push({
+            moveType: "부진",
+            styleCode,
+            productName: to.productName,
+            fromStore: from.storeName,
+            toStore: to.storeName,
+            fromStock: from.stock,
+            fromStockWeeks: from.stockWeeks,
+            fromAfterWeeks,
+            toStock: to.stock,
+            toStockWeeks: to.stockWeeks,
+            toAfterWeeks,
+            suggestQty,
+            priority,
+            stockoutDays: 0,
+            weekAmount: to.weekAmount,
+            rtScore: 0,
+            companyRank,
+            isNewProduct: false,
+            priorityStore: isPriorityStore(to.storeName),
+            reason: [
+              `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`}로 TOP${RT_ELIGIBLE_RANK} 밖 부진상품입니다.`,
+              `${from.storeName}은 이 상품 재고주수 ${from.stockWeeks >= 999 ? "판매없음(장기체화)" : `${from.stockWeeks.toFixed(1)}주`}로 과잉재고 상태입니다 (현재 재고 ${Math.round(from.stock).toLocaleString("ko-KR")}개).`,
+              `${to.storeName}은 이 상품 기준 재고주수 ${to.stockWeeks.toFixed(1)}주로, 같은 상품을 파는 다른 매장들 대비 상대적으로 회전이 빠른(하위 ${Math.round(RT_UNDERPERFORM_RECEIVER_PERCENTILE * 100)}% 이내) 매장입니다.`,
+              `과잉재고 매장에서 소화 가능한 매장으로 이동해 재고 소진과 판매 기회를 함께 노립니다. 이번 제안 수량은 ${Math.round(suggestQty).toLocaleString("ko-KR")}개입니다.`,
+              `출고점은 진열 유지를 위해 최소 ${RT_UNDERPERFORM_SENDER_KEEP_UNITS}개는 남겨두고 계산했습니다.`,
+            ].filter(Boolean).join("\n"),
+          });
+        }
+      }
+    }
+  }
+
   const recv: Record<string, any> = {};
   const send: Record<string, any> = {};
   for (const x of rtSuggestions) {
@@ -1252,7 +1360,8 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   );
   // MARK 6.5: 기존에는 결과를 10건으로 강제 컷했습니다.
   // TOP 20 품번 전체에서 나온 제안을 보여주되, 안전장치로만 넉넉한 상한(300건)을 둡니다.
-  const RT_SUGGESTION_SAFETY_CAP = 300;
+  // MARK 6.7: 부진 엔진이 추가되면서 건수가 늘어나 상한을 넉넉하게 올립니다.
+  const RT_SUGGESTION_SAFETY_CAP = 1000;
   const rtSuggestionProductCount = new Set(sortedRtSuggestions.map((s) => s.styleCode)).size;
 
   const consignmentTopProducts = aggregateProducts(consignmentProducts, undefined, 10);

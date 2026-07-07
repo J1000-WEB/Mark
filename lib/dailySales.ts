@@ -391,6 +391,30 @@ export function expandAnyDailyHistoryRows(rows: any[][]): FlatDailyHistoryRow[] 
 }
 
 // 평면 행 목록을 "일자+점포"당 한 줄인 압축 형식으로 다시 묶습니다.
+// 구글시트 셀 하나는 5만자 제한이 있습니다. 그 아래로 안전마진을 두고 자릅니다.
+const MAX_CELL_CHARS = 40000;
+
+// 한 그룹(날짜+점포)의 상세 항목을 JSON 문자열 길이 기준으로 여러 덩어리로 나눕니다.
+// (품목수가 아주 많은 매장에서도 셀 하나가 5만자를 넘지 않도록)
+function chunkDetailEntriesBySize(items: DailyDetailEntry[], maxChars = MAX_CELL_CHARS): DailyDetailEntry[][] {
+  const chunks: DailyDetailEntry[][] = [];
+  let current: DailyDetailEntry[] = [];
+  let currentLen = 2; // "[]"
+
+  for (const item of items) {
+    const addLen = JSON.stringify(item).length + 1; // +1 for comma separator
+    if (current.length && currentLen + addLen > maxChars) {
+      chunks.push(current);
+      current = [];
+      currentLen = 2;
+    }
+    current.push(item);
+    currentLen += addLen;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
 export function buildCompactDailyHistoryRows(flatRows: FlatDailyHistoryRow[]): any[][] {
   const groups = new Map<string, { date: string; storeName: string; items: DailyDetailEntry[] }>();
 
@@ -411,11 +435,17 @@ export function buildCompactDailyHistoryRows(flatRows: FlatDailyHistoryRow[]): a
 
   return Array.from(groups.values())
     .sort((a, b) => (a.date === b.date ? a.storeName.localeCompare(b.storeName) : a.date.localeCompare(b.date)))
-    .map((g) => {
-      const totalQty = g.items.reduce((s, i) => s + num(i.qty), 0);
-      const totalAmount = g.items.reduce((s, i) => s + num(i.amount), 0);
-      const totalStock = g.items.reduce((s, i) => s + num(i.stock), 0);
-      return [g.date, g.storeName, g.items.length, totalQty, totalAmount, totalStock, JSON.stringify(g.items)];
+    .flatMap((g) => {
+      // 날짜+점포당 원래는 한 줄이지만, 품목수가 많아 JSON이 너무 커지면
+      // 같은 날짜+점포로 여러 줄에 나눠 씁니다. 읽을 때(expandCompactDailyHistoryRows)는
+      // 어차피 날짜+점포별로 모든 줄의 항목을 합쳐서 펼치므로 여러 줄이어도 문제 없습니다.
+      const chunks = chunkDetailEntriesBySize(g.items);
+      return chunks.map((chunk) => {
+        const totalQty = chunk.reduce((s, i) => s + num(i.qty), 0);
+        const totalAmount = chunk.reduce((s, i) => s + num(i.amount), 0);
+        const totalStock = chunk.reduce((s, i) => s + num(i.stock), 0);
+        return [g.date, g.storeName, chunk.length, totalQty, totalAmount, totalStock, JSON.stringify(chunk)];
+      });
     });
 }
 

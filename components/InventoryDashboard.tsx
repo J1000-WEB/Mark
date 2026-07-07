@@ -52,6 +52,14 @@ function PriorityBadge({ value }: { value: string }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-black text-white ${color}`}>우선순위 {value}</span>;
 }
 
+function MoveTypeBadge({ value }: { value?: string }) {
+  if (!value) return null;
+  const isUnderperform = value === "부진";
+  const color = isUnderperform ? "bg-slate-500" : "bg-indigo-600";
+  const label = isUnderperform ? "부진 · 재고회전" : "호조 · 결품방지";
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${color}`}>{label}</span>;
+}
+
 function Briefing({ lines }: { lines: string[] }) {
   return (
     <Card title="💡 재고CTRL 브리핑" tone="purple">
@@ -121,11 +129,14 @@ function RTCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-bold text-slate-500">#{index + 1} · {it.styleCode}</p>
             <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusBadge(status)}`}>{statusLabel(status)}</span>
+            <MoveTypeBadge value={it.moveType} />
             <PriorityBadge value={it.priority || "C"} />
           </div>
           <p className="mt-1 truncate text-lg font-black">{it.productName}</p>
           <p className="mt-1 text-xs font-bold text-blue-600">
-            RT Score {Number(it.rtScore || 0).toFixed(1)} · 전사순위 {it.companyRank || "-"} · 제안 {fmtNum(it.suggestQty)}장
+            {it.moveType === "부진"
+              ? `과잉재고 회전 이동 · 전사순위 ${it.companyRank || "-"} · 제안 ${fmtNum(it.suggestQty)}장`
+              : `RT Score ${Number(it.rtScore || 0).toFixed(1)} · 전사순위 ${it.companyRank || "-"} · 제안 ${fmtNum(it.suggestQty)}장`}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -306,6 +317,8 @@ function RTSuggestionSection({
   const filtered = filter === "all" ? withIndex : withIndex.filter((x) => x.status === filter);
   const groups = groupRtItems(filtered);
   const productCount = new Set(withIndex.map((x) => x.item.styleCode || x.item.productName)).size;
+  const goodCount = withIndex.filter((x) => x.item.moveType !== "부진").length;
+  const underperformCount = withIndex.filter((x) => x.item.moveType === "부진").length;
 
   const tabs: [string, string, number][] = [
     ["all", "전체보기", counts.all],
@@ -358,6 +371,7 @@ function RTSuggestionSection({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 px-4 py-3">
         <p className="text-xs font-bold text-slate-600">
           전사 판매 TOP 20 품번 중 <span className="text-slate-900">{productCount}개 품번</span>에서 제안 발생 · 총 {counts.all}건
+          <span className="ml-2 text-indigo-600">(호조 {goodCount}건</span> · <span className="text-slate-500">부진 {underperformCount}건)</span>
         </p>
         <div className="flex gap-2">
           <button type="button" onClick={() => setAllOpen(true)} className="h-8 rounded-full bg-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-300">전체 펼치기</button>

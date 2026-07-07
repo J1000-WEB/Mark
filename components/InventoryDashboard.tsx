@@ -822,20 +822,6 @@ function PerformanceTrackingSection({ data }: { data: any }) {
 
   const singleMode = categoryFilter !== "ALL";
 
-  function amountShare(item: any, basis: "before" | "during") {
-    const base = basis === "before" ? selected.beforeAmount : selected.duringAmount;
-    const value = basis === "before" ? Number(item.beforeAmount || 0) : Number(item.duringAmount || 0);
-    return base ? (value / base) * 100 : 0;
-  }
-
-  function qtyShare(item: any, basis: "before" | "during") {
-    const base = basis === "before"
-      ? selected.rows.reduce((s: number, r: any) => s + Number(r.beforeQty || 0), 0)
-      : selected.rows.reduce((s: number, r: any) => s + Number(r.duringQty || 0), 0);
-    const value = basis === "before" ? Number(item.beforeQty || 0) : Number(item.duringQty || 0);
-    return base ? (value / base) * 100 : 0;
-  }
-
   return (
     <Card
       title="RT / 프로모션 성과 확인"
@@ -976,7 +962,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
               ■ 실행 성과 분석 ({selectedDate || "-"} 시작 · {categoryFilter === "RT" ? "RT" : "프로모션"})
             </p>
             <p className="mt-1 text-xs font-semibold text-slate-300">
-              실행 전 실적과 실행 후 실적을 같은 구조로 비교합니다. 수량/금액/비중/증감 기준입니다.
+              실행 전 실적과 실행 후 실적을 같은 구조로 비교합니다. 수량/매출/증감 기준입니다.
             </p>
             {selected.rows?.[0]?.beforePeriodLabel || selected.rows?.[0]?.duringPeriodLabel ? (
               <p className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white">
@@ -986,30 +972,26 @@ function PerformanceTrackingSection({ data }: { data: any }) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1080px] w-full border-collapse text-sm">
+            <table className="min-w-[880px] w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-50 text-xs font-black text-slate-600">
                   <th className="border border-slate-200 px-3 py-2 text-left">구분</th>
                   <th className="border border-slate-200 px-3 py-2 text-left">품번</th>
-                  <th className="border border-slate-200 px-3 py-2 text-left">모델명</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">판매가</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>실행 후</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>실행 전</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>성과</th>
+                  <th className="border border-slate-200 px-3 py-2 text-left">상품명</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={2}>실행전</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={2}>실행후</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right" colSpan={3}>증감</th>
                 </tr>
                 <tr className="bg-slate-50 text-xs font-black text-slate-600">
                   <th className="border border-slate-200 px-3 py-2" />
                   <th className="border border-slate-200 px-3 py-2" />
                   <th className="border border-slate-200 px-3 py-2" />
-                  <th className="border border-slate-200 px-3 py-2" />
                   <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">비중</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">매출</th>
                   <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">비중</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">매출</th>
                   <th className="border border-slate-200 px-3 py-2 text-right">수량</th>
-                  <th className="border border-slate-200 px-3 py-2 text-right">금액</th>
+                  <th className="border border-slate-200 px-3 py-2 text-right">매출</th>
                   <th className="border border-slate-200 px-3 py-2 text-right">증감률</th>
                 </tr>
               </thead>
@@ -1018,40 +1000,41 @@ function PerformanceTrackingSection({ data }: { data: any }) {
                   const growthRate = Number(item.beforeAmount || 0)
                     ? ((Number(item.duringAmount || 0) - Number(item.beforeAmount || 0)) / Number(item.beforeAmount || 0)) * 100
                     : Number(item.duringAmount || 0) ? 100 : 0;
-                  const groupLabel = item.saleType || item.channel || item.toStore || item.fromStore || item.category;
+                  const isPositive = growthRate >= 0;
                   return (
                     <tr key={`${item.category}-${item.styleCode}-${idx}`} className="hover:bg-slate-50">
-                      <td className="border border-slate-200 px-3 py-2 font-black text-slate-700">{groupLabel || "-"}</td>
+                      <td className="border border-slate-200 px-3 py-2">
+                        {item.category === "RT" ? (
+                          <MoveTypeBadge value={item.moveType} />
+                        ) : (
+                          <span className="font-black text-slate-700">{item.saleType || item.channel || item.toStore || item.fromStore || item.category || "-"}</span>
+                        )}
+                      </td>
                       <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-600">{item.styleCode}</td>
                       <td className="border border-slate-200 px-3 py-2 font-black">{item.productName}</td>
-                      <td className="border border-slate-200 px-3 py-2 text-right font-semibold">{item.salePrice ? won(item.salePrice) : "-"}</td>
 
-                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{fmtNum(item.duringQty)}</td>
-                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{won(item.duringAmount)}</td>
-                      <td className="border border-slate-200 px-3 py-2 text-right font-semibold">{Number(amountShare(item, "during")).toFixed(0)}%</td>
-
-                      <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(item.beforeQty)}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(item.beforeQty)}개</td>
                       <td className="border border-slate-200 px-3 py-2 text-right">{won(item.beforeAmount)}</td>
-                      <td className="border border-slate-200 px-3 py-2 text-right">{Number(amountShare(item, "before")).toFixed(0)}%</td>
 
-                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{fmtNum(item.addedQty)}</td>
-                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${Number(item.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(item.addedAmount)}</td>
-                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${growthRate >= 0 ? "text-blue-600" : "text-red-600"}`}>{growthRate >= 0 ? "+" : ""}{growthRate.toFixed(0)}%</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{fmtNum(item.duringQty)}개</td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-black">{won(item.duringAmount)}</td>
+
+                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${isPositive ? "text-blue-600" : "text-red-600"}`}>{isPositive ? "+" : ""}{fmtNum(item.addedQty)}개</td>
+                      <td className={`border border-slate-200 px-3 py-2 text-right font-black ${isPositive ? "text-blue-600" : "text-red-600"}`}>{isPositive ? "+" : ""}{won(item.addedAmount)}</td>
+                      <td className={`border border-slate-200 px-3 py-2 text-right text-base font-black ${isPositive ? "text-blue-600" : "text-red-600"}`}>{isPositive ? "+" : ""}{growthRate.toFixed(0)}%</td>
                     </tr>
                   );
                 })}
 
                 <tr className="bg-slate-100 font-black">
-                  <td className="border border-slate-200 px-3 py-2" colSpan={4}>합계</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.duringQty || 0), 0))}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{won(selected.duringAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">100%</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.beforeQty || 0), 0))}</td>
+                  <td className="border border-slate-200 px-3 py-2" colSpan={3}>합계</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.beforeQty || 0), 0))}개</td>
                   <td className="border border-slate-200 px-3 py-2 text-right">{won(selected.beforeAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">100%</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.addedQty)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.rows.reduce((s: number, r: any) => s + Number(r.duringQty || 0), 0))}개</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{won(selected.duringAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{fmtNum(selected.addedQty)}개</td>
                   <td className={`border border-slate-200 px-3 py-2 text-right ${Number(selected.addedAmount || 0) >= 0 ? "text-blue-600" : "text-red-600"}`}>{won(selected.addedAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{Number(selected.successRate || 0).toFixed(1)}%</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{Number(selected.beforeAmount || 0) ? `${(((selected.duringAmount - selected.beforeAmount) / selected.beforeAmount) * 100).toFixed(0)}%` : "-"}</td>
                 </tr>
               </tbody>
             </table>

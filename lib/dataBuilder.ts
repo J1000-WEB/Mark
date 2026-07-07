@@ -1535,7 +1535,7 @@ function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(
         colorName: "",
         tagPrice: 0,
         salePrice: 0,
-        saleType: "RT",
+        saleType: "",
         discountRate: 0,
         marginRate: 0,
         channel: "",
@@ -1620,6 +1620,9 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
         toStores: Array.from(new Set([...(existing.toStores || []), ...(rt.toStores || []), existing.toStore, rt.toStore].filter(Boolean))),
         note: [existing.note, rt.note].filter(Boolean).join(" / "),
         source: `${existing.source || "Promotion_Performance"}+RT_Result`,
+        // MARK 6.7: RT_Result에는 호조/부진 구분이 없으므로, Promotion_Performance 쪽에 이미
+        // 기록된 saleType(RT-호조/RT-부진)이 있으면 그걸 우선하고 없을 때만 rt 쪽 값을 씁니다.
+        saleType: existing.saleType || rt.saleType,
       });
     } else {
       map.set(key, rt);
@@ -1630,7 +1633,7 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
     if (row.category !== "RT") return row;
     return {
       ...row,
-      saleType: "RT",
+      saleType: row.saleType || "RT",
       // 같은 승인날짜/같은 상품은 여러 매장에서 이동해도 성과표 1행으로 봅니다.
       note: row.note || "RT_Result G열 승인날짜 기준 / 동일 상품 통합",
     };
@@ -2138,6 +2141,9 @@ function applyDailyPerformance(rows: any[], dailyRows: any[], override?: Perform
       rtQty,
       depletionRate,
       rtGrade: row.category === "RT" && rtQty ? rtGrade(depletionRate) : "",
+      // MARK 6.7: RT 호조/부진 엔진 구분(saleType=RT-호조/RT-부진)을 화면에서 쓰기 쉬운 필드로 노출합니다.
+      // (아래 result의 "부진"은 실행 결과 평가 라벨이라 의미가 다릅니다 — 헷갈리지 않게 별도 필드로 둡니다.)
+      moveType: row.category === "RT" ? (String(row.saleType || "").includes("부진") ? "부진" : "호조") : "",
       beforeQty,
       duringQty,
       addedQty,

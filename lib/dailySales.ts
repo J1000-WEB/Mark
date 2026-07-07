@@ -1,10 +1,12 @@
 import {
-  ensureSheetExistsById,
+  createSheetWithValuesById,
+  deleteSheetByTitleIfExistsById,
   getDbSheetId,
   getHistorySheetId,
+  getSheetPropsById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
-  replaceSheetValuesById,
+  renameSheetById,
 } from "@/lib/googleSheets";
 
 function text(v: any) {
@@ -452,17 +454,68 @@ function buildDailyHistoryRows(daily: any): FlatDailyHistoryRow[] {
   return Array.from(grouped.values());
 }
 
+// MARK 6.6.1: 안전한 교체(clear+write 대신 write-new + 검증 + 이름바꾸기).
+// 절대로 기존 Daily_Sales_History를 먼저 지우지 않습니다. 새 시트에 다 쓰고 나서
+// 수량/금액/건수를 검증한 뒤에만 이름을 바꿔서 교체합니다. 검증에 실패하면 원본은 그대로 남습니다.
+export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRows: FlatDailyHistoryRow[]) {
+  const compactRows = buildCompactDailyHistoryRows(flatRows);
+  const expectedRecordCount = flatRows.length;
+  const expectedQty = flatRows.reduce((s, r) => s + num(r.qty), 0);
+  const expectedAmount = flatRows.reduce((s, r) => s + num(r.amount), 0);
+
+  const stagingTitle = `${DAILY_HISTORY_SHEET}__staging_${Date.now()}`;
+  await deleteSheetByTitleIfExistsById(spreadsheetId, stagingTitle).catch(() => {});
+  await createSheetWithValuesById(spreadsheetId, stagingTitle, [DAILY_HISTORY_HEADER, ...compactRows]);
+
+  // 방금 새로 쓴 시트를 다시 읽어서 원본과 수량/금액/건수가 일치하는지 확인합니다.
+  const verifyRaw = await getSheetValuesById(spreadsheetId, stagingTitle, "A:ZZ").catch(() => []);
+  const verifyFlat = expandCompactDailyHistoryRows(verifyRaw);
+  const verifyQty = verifyFlat.reduce((s, r) => s + num(r.qty), 0);
+  const verifyAmount = verifyFlat.reduce((s, r) => s + num(r.amount), 0);
+  const countOk = verifyFlat.length === expectedRecordCount;
+  const qtyOk = Math.abs(verifyQty - expectedQty) < 0.01;
+  const amountOk = Math.abs(verifyAmount - expectedAmount) < 1;
+
+  if (!countOk || !qtyOk || !amountOk) {
+    // 검증 실패: 원본은 절대 건드리지 않고, 방금 만든 임시 시트만 지우고 에러를 던집니다.
+    await deleteSheetByTitleIfExistsById(spreadsheetId, stagingTitle).catch(() => {});
+    throw new Error(
+      `Daily_Sales_History 저장 검증 실패로 중단했습니다(원본은 그대로 보존됨). ` +
+      `기대값: 건수 ${expectedRecordCount}/수량 ${expectedQty}/금액 ${expectedAmount}, ` +
+      `실제값: 건수 ${verifyFlat.length}/수량 ${verifyQty}/금액 ${verifyAmount}`
+    );
+  }
+
+  // 검증 통과: 이제 이름만 바꿔서 교체합니다 (셀 내용을 지우거나 다시 쓰지 않습니다).
+  const backupTitle = `${DAILY_HISTORY_SHEET}_backup`;
+  const props = await getSheetPropsById(spreadsheetId);
+  const liveExists = props.some((p) => p.title === DAILY_HISTORY_SHEET);
+
+  if (liveExists) {
+    await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
+    await renameSheetById(spreadsheetId, DAILY_HISTORY_SHEET, backupTitle);
+  }
+  await renameSheetById(spreadsheetId, stagingTitle, DAILY_HISTORY_SHEET);
+
+  return {
+    recordCount: expectedRecordCount,
+    compactRowCount: compactRows.length,
+    totalQty: expectedQty,
+    totalAmount: expectedAmount,
+    backupSheetName: liveExists ? backupTitle : "",
+  };
+}
+
 export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const daily = data || await readDailySalesFromMarkDb();
   const spreadsheetId = getHistorySheetId();
-  await ensureSheetExistsById(spreadsheetId, DAILY_HISTORY_SHEET, DAILY_HISTORY_HEADER);
 
   const saveId = makeDailySnapshotId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
   const snapshotDate = ymdKST();
   const newFlatRows = buildDailyHistoryRows(daily);
 
-  // 기존에 쌓여있던 데이터(구형이든 압축형이든)를 전부 평면 구조로 불러옵니다.
+  // 기존에 쌓여있던 데이터(구형이든 압축형이든, 아예 없어도 됨)를 전부 평면 구조로 불러옵니다.
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
   const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
 
@@ -471,11 +524,10 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const rowsToAdd = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
 
   const mergedFlatRows = [...existingFlatRows, ...rowsToAdd];
-  const compactRows = buildCompactDailyHistoryRows(mergedFlatRows);
 
-  // 항상 압축 형식으로 시트 전체를 다시 씁니다.
-  // 구형 데이터가 섞여 있어도 저장할 때마다 압축 형식으로 자동 정리(자가 치유)됩니다.
-  await replaceSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, [DAILY_HISTORY_HEADER, ...compactRows]);
+  // MARK 6.6.1: clear+update 대신 새 시트에 쓰고 검증한 뒤 이름만 바꿔서 교체합니다.
+  // 검증에 실패하면 원본(Daily_Sales_History)은 전혀 손대지 않고 에러를 던집니다.
+  const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
 
   return {
     saveId,
@@ -488,7 +540,7 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
     skippedRows: newFlatRows.length - rowsToAdd.length,
     totalDailySales: daily.totalDailySales || 0,
     totalDailyAmount: daily.totalDailyAmount || 0,
-    compactRowCount: compactRows.length,
+    compactRowCount: writeResult.compactRowCount,
     flatRowCount: mergedFlatRows.length,
   };
 }

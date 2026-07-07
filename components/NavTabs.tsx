@@ -12,6 +12,7 @@ export default function NavTabs({ active }: { active: "schedule" | "sales-data" 
     { key: "vmd", label: "VMD", href: "/vmd" },
     { key: "daily", label: "일간", href: "/daily" },
     { key: "monthly", label: "월간", href: "/monthly" },
+    { key: "snapshot", label: "스냅샷", href: "/snapshot" },
   ] as const;
 
   function logout() {

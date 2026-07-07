@@ -149,6 +149,9 @@ export default function SnapshotDashboard() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [migrateStatus, setMigrateStatus] = useState("");
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<any>(null);
 
   async function loadCurrentData() {
     setDataStatus("구글시트 데이터 불러오는 중");
@@ -256,6 +259,22 @@ export default function SnapshotDashboard() {
     }
   }
 
+  async function runDailyHistoryMigration(confirm: boolean) {
+    setMigrateLoading(true);
+    setMigrateStatus(confirm ? "실제 변환 저장 중..." : "미리보기 확인 중...");
+    try {
+      const res = await fetch(`/api/migrate-daily-history${confirm ? "?confirm=1" : ""}`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "마이그레이션 실패");
+      setMigrateResult(json);
+      setMigrateStatus(json.message || (confirm ? "변환 완료" : "미리보기 완료"));
+    } catch (error: any) {
+      setMigrateStatus(error?.message || "마이그레이션 실패");
+    } finally {
+      setMigrateLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadCurrentData();
     loadSnapshots();
@@ -320,6 +339,51 @@ export default function SnapshotDashboard() {
           </div>
           {dailyStatus ? (
             <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm font-black text-blue-700">{dailyStatus}</div>
+          ) : null}
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-500">Daily Sales History</p>
+              <h2 className="mt-1 text-2xl font-black">압축(JSON) 저장 형식 마이그레이션</h2>
+              <p className="mt-2 text-sm font-semibold text-slate-500">
+                날짜+점포마다 여러 줄로 쌓이던 것을 날짜+점포당 한 줄(JSON)로 압축합니다.
+                먼저 <b>미리보기</b>로 줄어드는 규모를 확인한 뒤, <b>실제 변환</b>을 눌러주세요.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => runDailyHistoryMigration(false)}
+                disabled={migrateLoading}
+                className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-black text-slate-700 disabled:opacity-50"
+              >
+                {migrateLoading ? "확인 중..." : "미리보기"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm("Daily_Sales_History 시트를 압축(JSON) 형식으로 실제 변환합니다. 계속할까요?")) return;
+                  runDailyHistoryMigration(true);
+                }}
+                disabled={migrateLoading}
+                className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white disabled:opacity-50"
+              >
+                {migrateLoading ? "변환 중..." : "실제 변환 실행"}
+              </button>
+            </div>
+          </div>
+          {migrateStatus ? (
+            <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">{migrateStatus}</div>
+          ) : null}
+          {migrateResult?.before ? (
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Kpi title="변환 전 줄 수" value={`${fmtNum(migrateResult.before.rows)}줄`} tone="plain" />
+              <Kpi title="변환 후 줄 수" value={`${fmtNum(migrateResult.after.rows)}줄`} tone="blue" />
+              <Kpi title="변환 전 셀 수(추정)" value={`${fmtNum(migrateResult.before.approxCells)}칸`} tone="plain" />
+              <Kpi title="줄어든 비율" value={`${migrateResult.reductionRate}%`} tone="green" />
+            </div>
           ) : null}
         </section>
 

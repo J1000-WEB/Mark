@@ -115,6 +115,60 @@ export async function replaceSheetValuesById(spreadsheetId: string, sheetName: s
   });
 }
 
+export async function getSheetPropsById(spreadsheetId: string) {
+  const sheets = await getSheetsClient();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  return (meta.data.sheets || []).map((s) => ({ title: s.properties?.title || "", sheetId: s.properties?.sheetId }));
+}
+
+export async function renameSheetById(spreadsheetId: string, oldTitle: string, newTitle: string) {
+  const sheets = await getSheetsClient();
+  const props = await getSheetPropsById(spreadsheetId);
+  const target = props.find((p) => p.title === oldTitle);
+  if (!target) throw new Error(`시트를 찾지 못했습니다: ${oldTitle}`);
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        { updateSheetProperties: { properties: { sheetId: target.sheetId, title: newTitle }, fields: "title" } },
+      ],
+    },
+  });
+}
+
+export async function deleteSheetByTitleIfExistsById(spreadsheetId: string, title: string) {
+  const sheets = await getSheetsClient();
+  const props = await getSheetPropsById(spreadsheetId);
+  const target = props.find((p) => p.title === title);
+  if (!target) return false;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ deleteSheet: { sheetId: target.sheetId } }] },
+  });
+  return true;
+}
+
+/**
+ * Creates a brand-new sheet (fails loudly if the title already exists, so callers should
+ * pick a unique staging title) and writes values into it in one shot. Nothing existing is
+ * ever cleared here — this only ever adds a new sheet.
+ */
+export async function createSheetWithValuesById(spreadsheetId: string, title: string, values: any[][]) {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ addSheet: { properties: { title } } }] },
+  });
+  if (!values.length) return;
+  const escaped = title.replace(/'/g, "''");
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${escaped}'!A1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values },
+  });
+}
+
 export async function ensureSheetExistsById(spreadsheetId: string, title: string, header?: any[]) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

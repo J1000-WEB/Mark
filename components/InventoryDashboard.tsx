@@ -240,6 +240,44 @@ function ItemList({ items, type, maxHeight }: { items: any[]; type: "alloc" | "r
   );
 }
 
+function groupRtItems(withIndex: { item: any; index: number; key: string; status: string }[]) {
+  const groups = new Map<string, {
+    groupKey: string;
+    styleCode: string;
+    productName: string;
+    companyRank: number;
+    bestRtScore: number;
+    totalQty: number;
+    entries: { item: any; index: number; key: string; status: string }[];
+    counts: Record<string, number>;
+  }>();
+
+  for (const entry of withIndex) {
+    const styleCode = entry.item.styleCode || entry.item.productName || "미확인 품번";
+    if (!groups.has(styleCode)) {
+      groups.set(styleCode, {
+        groupKey: styleCode,
+        styleCode,
+        productName: entry.item.productName || styleCode,
+        companyRank: Number(entry.item.companyRank ?? 9999),
+        bestRtScore: 0,
+        totalQty: 0,
+        entries: [],
+        counts: { all: 0, suggested: 0, approved: 0, hold: 0, rejected: 0 },
+      });
+    }
+    const group = groups.get(styleCode)!;
+    group.entries.push(entry);
+    group.totalQty += Number(entry.item.suggestQty || 0);
+    group.bestRtScore = Math.max(group.bestRtScore, Number(entry.item.rtScore || 0));
+    group.companyRank = Math.min(group.companyRank, Number(entry.item.companyRank ?? 9999));
+    group.counts.all++;
+    group.counts[entry.status] = (group.counts[entry.status] || 0) + 1;
+  }
+
+  return [...groups.values()].sort((a, b) => a.companyRank - b.companyRank || b.bestRtScore - a.bestRtScore);
+}
+
 function RTSuggestionSection({
   items,
   statusMap,
@@ -256,6 +294,7 @@ function RTSuggestionSection({
   onStatus: (item: any, index: number, status: "approved" | "hold" | "rejected") => void;
 }) {
   const [downloadDate, setDownloadDate] = useState(todayKSTInputValue());
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const withIndex = (items || []).map((item, index) => ({ item, index, key: rtItemKey(item, index), status: statusMap[rtItemKey(item, index)] || "suggested" }));
   const counts = {
     all: withIndex.length,
@@ -265,6 +304,8 @@ function RTSuggestionSection({
     rejected: withIndex.filter((x) => x.status === "rejected").length,
   };
   const filtered = filter === "all" ? withIndex : withIndex.filter((x) => x.status === filter);
+  const groups = groupRtItems(filtered);
+  const productCount = new Set(withIndex.map((x) => x.item.styleCode || x.item.productName)).size;
 
   const tabs: [string, string, number][] = [
     ["all", "전체보기", counts.all],
@@ -273,6 +314,12 @@ function RTSuggestionSection({
     ["hold", "보류", counts.hold],
     ["rejected", "거절", counts.rejected],
   ];
+
+  function setAllOpen(open: boolean) {
+    const next: Record<string, boolean> = {};
+    for (const g of groups) next[g.groupKey] = open;
+    setOpenGroups(next);
+  }
 
   return (
     <Card
@@ -308,20 +355,60 @@ function RTSuggestionSection({
         </div>
       }
     >
-      {!filtered.length ? (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+        <p className="text-xs font-bold text-slate-600">
+          전사 판매 TOP 20 품번 중 <span className="text-slate-900">{productCount}개 품번</span>에서 제안 발생 · 총 {counts.all}건
+        </p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setAllOpen(true)} className="h-8 rounded-full bg-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-300">전체 펼치기</button>
+          <button type="button" onClick={() => setAllOpen(false)} className="h-8 rounded-full bg-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-300">전체 접기</button>
+        </div>
+      </div>
+
+      {!groups.length ? (
         <Empty />
       ) : (
-        <div className="max-h-[760px] space-y-4 overflow-y-auto pr-2">
-          {filtered.map(({ item, index, key, status }) => (
-            <RTCard
-              key={key}
-              it={item}
-              index={index}
-              status={status}
-              saving={savingKey === key}
-              onStatus={(nextStatus) => onStatus(item, index, nextStatus)}
-            />
-          ))}
+        <div className="max-h-[760px] space-y-3 overflow-y-auto pr-2">
+          {groups.map((group) => {
+            const isOpen = !!openGroups[group.groupKey];
+            return (
+              <div key={group.groupKey} className="rounded-2xl border border-slate-100 bg-slate-50/60">
+                <button
+                  type="button"
+                  onClick={() => setOpenGroups((prev) => ({ ...prev, [group.groupKey]: !prev[group.groupKey] }))}
+                  className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left"
+                >
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-black text-white">전사 {group.companyRank === 9999 ? "권외" : `${group.companyRank}위`}</span>
+                    <p className="truncate text-sm font-black text-slate-900">{group.productName}</p>
+                    <span className="text-xs font-bold text-slate-500">{group.styleCode}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-600">
+                    <span>제안 {group.counts.all}건</span>
+                    <span>총 {fmtNum(group.totalQty)}장</span>
+                    {group.counts.approved > 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">승인 {group.counts.approved}</span>}
+                    {group.counts.hold > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">보류 {group.counts.hold}</span>}
+                    {group.counts.rejected > 0 && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-rose-700">거절 {group.counts.rejected}</span>}
+                    <span className="text-slate-400">{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="space-y-3 px-4 pb-4">
+                    {group.entries.map(({ item, index, key, status }) => (
+                      <RTCard
+                        key={key}
+                        it={item}
+                        index={index}
+                        status={status}
+                        saving={savingKey === key}
+                        onStatus={(nextStatus) => onStatus(item, index, nextStatus)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

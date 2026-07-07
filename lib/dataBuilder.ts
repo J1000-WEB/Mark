@@ -1030,6 +1030,8 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
   // RT Smart Transfer Engine V2
   // 목적: 단순 재고 이동이 아니라 "판매 전환 가능성이 높은 점포"로 재고를 이동합니다.
   // 핵심 가중치: 상품 판매력 70% + 재고 부족도 20% + 점포 매출력 10%
+  // MARK 6.5: RT 대상 품번을 전사 판매순위 TOP 20으로 고정합니다 (기존 TOP 50 → TOP 20).
+  const RT_ELIGIBLE_RANK = 20;
   const byStyle = new Map<string, any[]>();
   const storeAmountMap = new Map<string, number>();
 
@@ -1056,7 +1058,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     // 전사 판매 상위 상품을 우선 대상으로 봅니다.
     // 단, top 리스트가 비어있으면 기존 데이터 전체를 대상으로 동작합니다.
     const companyRank = topProductRankMap.get(styleCode) || 9999;
-    const isCompanyTopProduct = companyTopProducts.length ? companyRank <= 50 : true;
+    const isCompanyTopProduct = companyTopProducts.length ? companyRank <= RT_ELIGIBLE_RANK : true;
     if (!isCompanyTopProduct) continue;
 
     const maxStyleWeekNet = Math.max(1, ...rows.map((r: any) => Number(r.weekNet || 0)));
@@ -1244,6 +1246,14 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
       return { ...v, avgWeeks: weeks.length ? weeks.reduce((s: number, w: number) => s + w, 0) / weeks.length : 0 };
     });
 
+  const sortedRtSuggestions = rtSuggestions.sort(
+    (a, b) => (b.rtScore || 0) - (a.rtScore || 0) || (a.companyRank || 9999) - (b.companyRank || 9999)
+  );
+  // MARK 6.5: 기존에는 결과를 10건으로 강제 컷했습니다.
+  // TOP 20 품번 전체에서 나온 제안을 보여주되, 안전장치로만 넉넉한 상한(300건)을 둡니다.
+  const RT_SUGGESTION_SAFETY_CAP = 300;
+  const rtSuggestionProductCount = new Set(sortedRtSuggestions.map((s) => s.styleCode)).size;
+
   const consignmentTopProducts = aggregateProducts(consignmentProducts, undefined, 10);
   const consignmentRecommendations = (consignmentTopProducts.length ? consignmentTopProducts : companyTopProducts).slice(0, 5).map((p) => {
     const inv: any = invMap.get(p.styleCode) || {};
@@ -1264,7 +1274,9 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     overstockRisk: overstockRisk.sort((a, b) => b.offlineWeeks - a.offlineWeeks).slice(0, 10),
     allocationSuggestions: allocationSuggestions.sort((a, b) => b.weekAmount - a.weekAmount).slice(0, 5),
     onlineTransferSuggestions,
-    rtSuggestions: rtSuggestions.sort((a, b) => (b.rtScore || 0) - (a.rtScore || 0) || (a.companyRank || 9999) - (b.companyRank || 9999)).slice(0, 10),
+    rtSuggestions: sortedRtSuggestions.slice(0, RT_SUGGESTION_SAFETY_CAP),
+    rtEligibleProductRank: RT_ELIGIBLE_RANK,
+    rtSuggestionProductCount,
     consignmentRecommendations,
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     overstockStoreTop5: finalize(send).sort((a: any, b: any) => b.count - a.count).slice(0, 5),

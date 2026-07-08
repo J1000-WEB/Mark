@@ -1783,6 +1783,10 @@ function rtGrade(rateValue: number) {
   return "C";
 }
 
+function todayDateKey() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+}
+
 function performancePeriods(row: any) {
   const startDate = row.startDate;
   if (!startDate) {
@@ -1809,21 +1813,27 @@ function performancePeriods(row: any) {
     };
   }
 
-  // MARK 4.91.5:
-  // 프로모션은 종료일이 있어도 성과분석 KPI는 시작일 포함 3일만 봅니다.
-  // 장기 행사 종료일까지 잡으면 실행 전/후 기간이 겹치므로 성과판단용으로 부적합합니다.
+  // MARK 6.7.3: 프로모션은 "고정 3일"이 아니라 실제 행사기간(시작일~종료일)으로 비교합니다.
+  // 실행후 기간은 행사기간 전체(단, 아직 안 끝났으면 오늘까지로 제한)이고,
+  // 실행전 기간은 그 직전에 같은 일수만큼(겹치지 않게) 비교합니다.
+  const today = todayDateKey();
   const duringStart = startDate;
-  const duringEnd = dateAddDays(startDate, 2);
+  const rawEndDate = row.endDate || startDate;
+  const duringEnd = rawEndDate > today ? today : rawEndDate; // 미래 종료일/진행중인 행사는 오늘까지만
+  const safeDuringEnd = duringEnd < duringStart ? duringStart : duringEnd;
 
-  const beforeStart = dateAddDays(startDate, -7);
-  const beforeEnd = dateAddDays(startDate, -5);
+  const duringDates = dateRange(duringStart, safeDuringEnd);
+  const durationDays = Math.max(1, duringDates.length);
+
+  const beforeEnd = dateAddDays(duringStart, -1);
+  const beforeStart = dateAddDays(beforeEnd, -(durationDays - 1));
 
   return {
     beforeDates: dateRange(beforeStart, beforeEnd),
-    duringDates: dateRange(duringStart, duringEnd),
-    basis: `프로모션 비교: 핵심 오프라인 매장 기준 / 실행 전 ${beforeStart}~${beforeEnd} ↔ 실행 후 ${duringStart}~${duringEnd}`,
+    duringDates,
+    basis: `프로모션 비교: 핵심 오프라인 매장 기준 / 실행 전 ${beforeStart}~${beforeEnd}(${durationDays}일) ↔ 실행 ${duringStart}~${safeDuringEnd}(${durationDays}일)`,
     beforeLabel: `${beforeStart}~${beforeEnd}`,
-    duringLabel: `${duringStart}~${duringEnd}`,
+    duringLabel: `${duringStart}~${safeDuringEnd}`,
   };
 }
 

@@ -858,7 +858,7 @@ function PerformanceTrackingSection({ data }: { data: any }) {
           <div>
             <p className="text-sm font-black text-slate-800">성과 분석 기준</p>
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              RT 기본값은 실행전주 7일 ↔ 실행주 7일, 프로모션 기본값은 시작일 기준 전주 동일요일 3일 ↔ 실행 3일입니다.
+              RT 기본값은 실행전주 7일 ↔ 실행주 7일, 프로모션 기본값은 행사기간(시작일~종료일, 진행중이면 오늘까지) ↔ 그 직전 같은 일수입니다.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -971,6 +971,23 @@ function PerformanceTrackingSection({ data }: { data: any }) {
               </div>
               <div className={`rounded-2xl p-5 text-white shadow-sm ${Number(selected.addedAmount || 0) >= 0 ? "bg-emerald-600" : "bg-rose-600"}`}>
                 <p className="text-xs font-bold text-white/80">💰 추가 확보매출</p>
+                <p className="mt-2 text-2xl font-black">{Number(selected.addedAmount || 0) >= 0 ? "+" : ""}{won(selected.addedAmount)}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-800 p-5 text-white shadow-sm">
+                <p className="text-xs font-bold text-slate-300">✅ 실행건수 · 성공률</p>
+                <p className="mt-2 text-2xl font-black">{fmtNum(selected.count)}건 · {Number(selected.successRate || 0).toFixed(0)}%</p>
+              </div>
+            </div>
+          )}
+
+          {categoryFilter === "PROMOTION" && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className={`rounded-2xl p-5 text-white shadow-sm ${Number(selected.addedQty || 0) >= 0 ? "bg-blue-600" : "bg-rose-600"}`}>
+                <p className="text-xs font-bold text-white/80">📈 판매수량 증감</p>
+                <p className="mt-2 text-2xl font-black">{Number(selected.addedQty || 0) >= 0 ? "+" : ""}{fmtNum(selected.addedQty)}개</p>
+              </div>
+              <div className={`rounded-2xl p-5 text-white shadow-sm ${Number(selected.addedAmount || 0) >= 0 ? "bg-emerald-600" : "bg-rose-600"}`}>
+                <p className="text-xs font-bold text-white/80">💰 매출 증감</p>
                 <p className="mt-2 text-2xl font-black">{Number(selected.addedAmount || 0) >= 0 ? "+" : ""}{won(selected.addedAmount)}</p>
               </div>
               <div className="rounded-2xl bg-slate-800 p-5 text-white shadow-sm">
@@ -1176,6 +1193,17 @@ export default function InventoryDashboard() {
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
           {data.periodLabel}
         </section>
+
+        <a
+          href="/consignment-upload"
+          className="flex items-center justify-between rounded-3xl bg-gradient-to-r from-indigo-600 to-blue-600 p-5 text-white shadow-sm transition hover:from-indigo-700 hover:to-blue-700"
+        >
+          <div>
+            <p className="text-xs font-bold text-indigo-100">위탁샵 (면세 · 한컬렉션 · 무신사)</p>
+            <p className="mt-1 text-lg font-black">📤 인샵매출업로드 — 눌러서 이동</p>
+          </div>
+          <span className="text-2xl">→</span>
+        </a>
 
         <RTSuggestionSection
           items={data.rtSuggestions || []}

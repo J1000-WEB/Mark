@@ -277,8 +277,8 @@ async function appendRtToPerformance(item: any, proposedAt: string) {
     const toStore = text(item.toStore);
     const suggestQty = num(item.suggestQty);
     const reason = text(item.reason);
-    // MARK 6.7: 호조/부진 엔진 구분을 판매유형 컬럼에 남겨서 성과분석에서 구분할 수 있게 합니다.
-    const saleType = item.moveType === "부진" ? "RT-부진" : "RT-호조";
+    // MARK 6.7/6.9: 호조/부진/점포요청 엔진 구분을 판매유형 컬럼에 남겨서 성과분석에서 구분할 수 있게 합니다.
+    const saleType = item.moveType === "부진" ? "RT-부진" : item.moveType === "점포요청" ? "RT-점포요청" : "RT-호조";
 
     await appendValuesById(dbId, `'${PERFORMANCE_SHEET}'!A:T`, [[
       "RT",

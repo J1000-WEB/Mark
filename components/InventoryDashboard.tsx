@@ -54,6 +54,7 @@ function PriorityBadge({ value }: { value: string }) {
 
 function MoveTypeBadge({ value }: { value?: string }) {
   if (!value) return null;
+  if (value === "점포요청") return <span className="rounded-full bg-purple-600 px-2.5 py-1 text-xs font-black text-white">🙋 점포요청</span>;
   const isUnderperform = value === "부진";
   const color = isUnderperform ? "bg-slate-500" : "bg-indigo-600";
   const label = isUnderperform ? "부진 · 재고회전" : "호조 · 결품방지";
@@ -1135,6 +1136,141 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
   );
 }
 
+function StoreRequestRtSection() {
+  const [styleCode, setStyleCode] = useState("");
+  const [toStore, setToStore] = useState("");
+  const [qty, setQty] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
+  const [savingKey, setSavingKey] = useState("");
+
+  async function fetchSuggestion() {
+    if (!styleCode.trim() || !toStore.trim()) {
+      setError("품번과 요청 점포를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setResult(null);
+    setSavedKeys({});
+    try {
+      const params = new URLSearchParams({ styleCode: styleCode.trim(), toStore: toStore.trim() });
+      if (qty.trim()) params.set("qty", qty.trim());
+      const res = await fetch(`/api/rt-request?${params.toString()}`, { cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "제안 계산에 실패했습니다.");
+      setResult(body);
+    } catch (e: any) {
+      setError(e?.message || "제안 계산에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function approveSuggestion(item: any, key: string) {
+    setSavingKey(key);
+    try {
+      const res = await fetch("/api/rt-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "저장에 실패했습니다.");
+      setSavedKeys((prev) => ({ ...prev, [key]: true }));
+    } catch (e: any) {
+      alert(e?.message || "저장에 실패했습니다.");
+    } finally {
+      setSavingKey("");
+    }
+  }
+
+  return (
+    <Card title="🙋 점포 요청 RT" tone="white">
+      <p className="mb-4 text-xs font-semibold text-slate-500">품번과 요청 점포를 입력하면, 어느 매장에서 이동하면 좋을지 바로 제안해드려요. 수량은 비워두면 자동(목표재고 3주 기준)으로 계산해요.</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          품번
+          <input
+            value={styleCode}
+            onChange={(e) => setStyleCode(e.target.value)}
+            placeholder="예: GF2LTS523"
+            className="w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          요청 점포
+          <input
+            value={toStore}
+            onChange={(e) => setToStore(e.target.value)}
+            placeholder="예: 성수 플래그십"
+            className="w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          수량(선택)
+          <input
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            placeholder="자동"
+            className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={fetchSuggestion}
+          disabled={loading}
+          className="h-10 rounded-full bg-blue-600 px-5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "계산 중..." : "제안 받기"}
+        </button>
+      </div>
+
+      {error && <p className="mt-3 text-xs font-black text-red-600">⚠ {error}</p>}
+
+      {result && (
+        <div className="mt-4 space-y-3">
+          <div className="rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-600">
+            <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode})</p>
+            <p className="mt-1">
+              {result.toStore} 현재 재고 {fmtNum(result.toStock)}개 · 재고주수 {result.toStockWeeks >= 999 ? "판매없음" : `${Number(result.toStockWeeks).toFixed(1)}주`} ·
+              목표수량 {fmtNum(result.desiredQty)}개 (충족 {fmtNum(result.fulfilledQty)}개{result.shortfall ? `, 부족 ${fmtNum(result.shortfall)}개` : ""})
+            </p>
+          </div>
+
+          {!result.suggestions?.length ? (
+            <Empty />
+          ) : (
+            result.suggestions.map((item: any, i: number) => {
+              const key = `${item.fromStore}__${item.toStore}__${i}`;
+              const saved = savedKeys[key];
+              return (
+                <div key={key} className="rounded-2xl border border-slate-100 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-black text-slate-900">{item.fromStore} → {item.toStore} · {fmtNum(item.suggestQty)}개</p>
+                    <button
+                      type="button"
+                      onClick={() => approveSuggestion(item, key)}
+                      disabled={saved || savingKey === key}
+                      className={`h-9 rounded-full px-4 text-xs font-black text-white transition ${saved ? "bg-emerald-500" : "bg-slate-900 hover:bg-slate-700"} disabled:opacity-60`}
+                    >
+                      {saved ? "✓ 승인됨" : savingKey === key ? "저장 중..." : "승인"}
+                    </button>
+                  </div>
+                  <p className="mt-2 whitespace-pre-line text-xs font-semibold text-slate-500">{item.reason}</p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+
 export default function InventoryDashboard() {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
@@ -1204,6 +1340,8 @@ export default function InventoryDashboard() {
           </div>
           <span className="text-2xl">→</span>
         </a>
+
+        <StoreRequestRtSection />
 
         <RTSuggestionSection
           items={data.rtSuggestions || []}

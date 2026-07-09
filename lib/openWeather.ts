@@ -210,17 +210,33 @@ export async function saveSeoulWeatherSnapshot() {
   const existing = await readWeatherHistory();
   const yesterday = ymd(kstDate(-1));
   const actualRows = existing.filter((row) => row.source === "actual");
+  const forecastRows = existing.filter((row) => row.source === "forecast");
 
-  // OpenWeather 무료 5일/3시간 예보 API에는 과거 실제 날씨가 없으므로,
-  // 전날 저장되어 있던 forecast를 다음날 00시에 actual로 확정 저장합니다.
-  const hasYesterdayActual = actualRows.some((row) => row.date === yesterday && row.region === REGION_LABEL);
-  if (!hasYesterdayActual) {
-    const yesterdayForecast = existing
-      .filter((row) => row.source === "forecast" && row.date === yesterday && row.region === REGION_LABEL)
+  // MARK 6.9.1: 크론이 며칠 못 돌았거나 스킵된 날이 있어도, 마지막 확정일 다음날부터
+  // 어제까지 밀린 날짜를 전부 한 번에 확정(actual) 처리해서 따라잡습니다.
+  // (기존엔 "어제" 딱 하루만 확인해서, 며칠 건너뛰면 중간 날짜가 영영 유실됐습니다.)
+  const lastActualDate = actualRows
+    .filter((row) => row.region === REGION_LABEL)
+    .map((row) => row.date)
+    .sort()
+    .pop();
+
+  const yesterdayDate = new Date(`${yesterday}T00:00:00`);
+  const cursorStart = lastActualDate ? new Date(`${lastActualDate}T00:00:00`) : new Date(yesterdayDate);
+  if (lastActualDate) cursorStart.setDate(cursorStart.getDate() + 1);
+
+  for (const cursor = cursorStart; cursor <= yesterdayDate; cursor.setDate(cursor.getDate() + 1)) {
+    const dateKey = ymd(cursor);
+    const alreadyActual = actualRows.some((row) => row.date === dateKey && row.region === REGION_LABEL);
+    if (alreadyActual) continue;
+
+    const forecastForDate = forecastRows
+      .filter((row) => row.date === dateKey && row.region === REGION_LABEL)
       .sort((a, b) => text(b.savedAt).localeCompare(text(a.savedAt)))[0];
-    if (yesterdayForecast) {
-      actualRows.push({ ...yesterdayForecast, source: "actual", savedAt: nowKST() });
+    if (forecastForDate) {
+      actualRows.push({ ...forecastForDate, source: "actual", savedAt: nowKST() });
     }
+    // 예보 기록조차 없는 날짜(더 큰 공백)는 OpenWeather 무료 API로는 과거 실측치를 못 가져오므로 건너뜁니다.
   }
 
   const forecasts = await fetchOpenWeatherForecast();

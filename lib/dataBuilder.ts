@@ -2153,7 +2153,7 @@ function applyDailyPerformance(rows: any[], dailyRows: any[], override?: Perform
       rtGrade: row.category === "RT" && rtQty ? rtGrade(depletionRate) : "",
       // MARK 6.7: RT 호조/부진 엔진 구분(saleType=RT-호조/RT-부진)을 화면에서 쓰기 쉬운 필드로 노출합니다.
       // (아래 result의 "부진"은 실행 결과 평가 라벨이라 의미가 다릅니다 — 헷갈리지 않게 별도 필드로 둡니다.)
-      moveType: row.category === "RT" ? (String(row.saleType || "").includes("부진") ? "부진" : "호조") : "",
+      moveType: row.category === "RT" ? (String(row.saleType || "").includes("점포요청") ? "점포요청" : String(row.saleType || "").includes("부진") ? "부진" : "호조") : "",
       beforeQty,
       duringQty,
       addedQty,
@@ -2227,6 +2227,99 @@ function buildPerformanceSummary(rows: any[]) {
     rows,
   };
 }
+
+// MARK 6.9: 점포에서 직접 요청한 RT — 품번+요청점포를 받아서 어디서 이동하면 좋을지 제안합니다.
+// 호조/부진 자동 엔진과 별개로, 담당자가 수동으로 입력한 요청 1건에 대해 즉시 계산합니다.
+export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number) {
+  const styleCode = text(styleCodeInput).toUpperCase();
+  if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
+  if (!text(toStoreInput)) return { ok: false, error: "요청 점포를 입력해주세요." };
+
+  const titles = await getSpreadsheetTitles();
+  const productSheet = pickProductSheet(titles);
+  if (!productSheet) return { ok: false, error: "금주/전주 시트를 찾지 못했습니다." };
+
+  const values = await getManySheetValues([productSheet], "A:AZ");
+  const productRowsRaw = parseProducts(values[productSheet] || []);
+
+  const coreRows = productRowsRaw.filter(
+    (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
+  );
+  if (!coreRows.length) {
+    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 금주/전주 시트에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
+  }
+
+  const toKey = normalizeStoreKey(toStoreInput);
+  const toRow = coreRows.find((r: any) => normalizeStoreKey(r.storeName) === toKey);
+  const productName = coreRows[0]?.productName || "";
+  const toStoreName = toRow?.storeName || toStoreInput;
+  const toStock = Number(toRow?.storeStock || 0);
+  const toWeekNet = Number(toRow?.weekNet || 0);
+  const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;
+
+  // 호조 엔진과 동일한 "목표재고 3주" 기준을 기본값으로 사용하되, 사용자가 수량을 직접 지정하면 그걸 우선합니다.
+  const RT_TARGET_STOCK_WEEKS = 3;
+  const defaultTarget = Math.max(1, Math.ceil(toWeekNet * RT_TARGET_STOCK_WEEKS));
+  const desiredQty = desiredQtyInput && desiredQtyInput > 0
+    ? Math.round(desiredQtyInput)
+    : Math.max(1, defaultTarget - toStock);
+
+  const senderCandidates = coreRows
+    .filter((r: any) => normalizeStoreKey(r.storeName) !== toKey)
+    .map((r: any) => {
+      const weekNet = Number(r.weekNet || 0);
+      const stock = Number(r.storeStock || 0);
+      const targetStock = Math.max(1, Math.ceil(weekNet * RT_TARGET_STOCK_WEEKS));
+      const safeStock = Math.max(3, targetStock, Math.ceil(weekNet * 2));
+      const transferable = Math.max(0, Math.floor(stock - safeStock));
+      const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
+      return { storeName: r.storeName, stock, weekNet, stockWeeks, transferable };
+    })
+    .filter((r) => r.transferable > 0)
+    .sort((a, b) => b.transferable - a.transferable || b.stockWeeks - a.stockWeeks);
+
+  let remaining = desiredQty;
+  const suggestions: any[] = [];
+  for (const s of senderCandidates) {
+    if (remaining <= 0) break;
+    const qty = Math.min(remaining, s.transferable);
+    if (qty <= 0) continue;
+
+    suggestions.push({
+      styleCode,
+      productName,
+      fromStore: s.storeName,
+      toStore: toStoreName,
+      suggestQty: qty,
+      fromStock: s.stock,
+      fromStockWeeks: s.stockWeeks,
+      toStock,
+      toStockWeeks,
+      moveType: "점포요청",
+      companyRank: 0,
+      reason: [
+        `${toStoreName} 매장에서 품번 ${styleCode} 이동을 직접 요청했습니다.`,
+        `목표 수량은 ${desiredQty}개이며, 이 중 ${qty}개를 ${s.storeName}에서 이동하는 안입니다.`,
+        `${s.storeName}의 현재 재고는 ${Math.round(s.stock).toLocaleString("ko-KR")}개(재고주수 ${s.stockWeeks >= 999 ? "판매없음" : `${s.stockWeeks.toFixed(1)}주`})로, 자체 안전재고를 제외한 이동 가능 여유분입니다.`,
+      ].join("\n"),
+    });
+    remaining -= qty;
+  }
+
+  return {
+    ok: true,
+    styleCode,
+    productName,
+    toStore: toStoreName,
+    toStock,
+    toStockWeeks,
+    desiredQty,
+    fulfilledQty: desiredQty - remaining,
+    shortfall: Math.max(0, remaining),
+    suggestions,
+  };
+}
+
 
 export async function buildPerformanceAnalysis(override: PerformanceOverride = {}) {
   try {

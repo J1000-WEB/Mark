@@ -97,11 +97,11 @@ function isOfflineSalesStore(storeName: string) {
   return !isOnlineChannel(s) && !isExcludedStore(s);
 }
 
-function isCoreOfflineSalesStore(storeName: string) {
+export function isCoreOfflineSalesStore(storeName: string) {
   return isOfflineSalesStore(storeName) && !isConsignmentChannel(storeName);
 }
 
-function normalizeStoreKey(storeName: string) {
+export function normalizeStoreKey(storeName: string) {
   const raw = String(storeName || "").trim();
   return raw
     .replace(/^오프라인[_\s-]*/i, "")

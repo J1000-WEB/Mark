@@ -86,6 +86,7 @@ function clampDate(date: Date, start: Date, end: Date) {
 
 function categoryClass(category: string) {
   if (category === "promotion") return "bg-rose-500 text-white";
+  if (category === "special_offer_week") return "bg-orange-500 text-white";
   if (category === "vmd") return "bg-emerald-500 text-white";
   if (category === "meeting") return "bg-violet-500 text-white";
   if (category === "product") return "bg-cyan-500 text-white";
@@ -97,6 +98,8 @@ function categoryClass(category: string) {
 function categorySoftClass(category: string) {
   if (category === "promotion")
     return "border-rose-100 bg-rose-50 text-rose-700";
+  if (category === "special_offer_week")
+    return "border-orange-100 bg-orange-50 text-orange-700";
   if (category === "vmd")
     return "border-emerald-100 bg-emerald-50 text-emerald-700";
   if (category === "meeting")
@@ -119,8 +122,12 @@ const TEAM_MEMBERS = [
   "조지현",
 ];
 
-const CATEGORY_ROWS = [
+const CATEGORY_ROWS_TOP = [
   { key: "promotion", label: "프로모션" },
+  { key: "special_offer_week", label: "스페셜오퍼위크" },
+];
+
+const CATEGORY_ROWS_BOTTOM = [
   { key: "vmd", label: "VMD" },
   { key: "meeting", label: "회의" },
   ...TEAM_MEMBERS.map((name) => ({
@@ -131,6 +138,8 @@ const CATEGORY_ROWS = [
   { key: "schedule", label: "기타 일정" },
   { key: "general", label: "기타" },
 ];
+
+const CATEGORY_ROWS = [...CATEGORY_ROWS_TOP, ...CATEGORY_ROWS_BOTTOM];
 
 function eventDurationDays(event: any) {
   const s = toDate(event.startDate);
@@ -171,7 +180,7 @@ function EventBar({
         left: `${left + 4}px`,
         width: `${Math.max(compact ? 76 : 90, width)}px`,
       }}
-      title={`${event.startDate}${event.endDate && event.endDate !== event.startDate ? ` ~ ${event.endDate}` : ""} / ${event.person || ""} / ${event.group || ""} / ${event.content || event.title}`}
+      title={`${event.startDate}${event.endDate && event.endDate !== event.startDate ? ` ~ ${event.endDate}` : ""} / ${event.person || ""} / ${event.group || ""} / ${event.content || event.title}${event.category === "special_offer_week" ? ` / 기간 매출: ${Math.round(Number(event.salesAmount || 0)).toLocaleString("ko-KR")}원` : ""}`}
     >
       <div className="truncate leading-4">
         {isLong ? (compact ? "━ " : "━━ ") : "● "}{" "}
@@ -281,6 +290,7 @@ export default function ScheduleDashboard() {
   }, []);
 
   const events = data?.events || [];
+  const dailyRevenue = data?.dailyRevenue || [];
   const monthStartDate = monthStart(currentMonth);
   const monthEndDate = monthEnd(currentMonth);
   const days = dateRange(monthStartDate, monthEndDate);
@@ -350,6 +360,14 @@ export default function ScheduleDashboard() {
     }
     return map;
   }, [weatherData]);
+
+  const revenueByDate = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const row of dailyRevenue) {
+      if (row?.date) map.set(row.date, row);
+    }
+    return map;
+  }, [dailyRevenue]);
 
   function moveMonth(delta: number) {
     setCurrentMonth(
@@ -506,7 +524,129 @@ export default function ScheduleDashboard() {
             </div>
 
             <div>
-              {CATEGORY_ROWS.map((row) => {
+              {CATEGORY_ROWS_TOP.map((row) => {
+                const categoryEvents = eventsByCategory.get(row.key) || [];
+                const lanes = stackEvents(categoryEvents);
+                const isCompactRow =
+                  row.key.startsWith("staff:") || row.key === "schedule";
+                const laneHeight = isCompactRow ? 32 : 44;
+                const rowHeight = Math.max(
+                  isCompactRow ? 42 : 58,
+                  lanes.length * laneHeight + 10,
+                );
+
+                return (
+                  <div key={row.key} className="flex border-b border-slate-100">
+                    <div
+                      className={`sticky left-0 z-20 flex w-36 shrink-0 items-center justify-between border-r border-slate-200 bg-white ${isCompactRow ? "p-2" : "p-3"} ${categorySoftClass((row as any).category || row.key)}`}
+                    >
+                      <div>
+                        <p
+                          className={`${isCompactRow ? "text-xs" : "text-sm"} font-black`}
+                        >
+                          {row.label}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-bold opacity-70">
+                          {categoryEvents.length}건
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className="relative"
+                      style={{
+                        width: `${timelineWidth}px`,
+                        height: `${rowHeight}px`,
+                      }}
+                    >
+                      <div
+                        className="absolute inset-0 grid"
+                        style={{
+                          gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                        }}
+                      >
+                        {days.map((day) => (
+                          <div
+                            key={ymd(day)}
+                            className={`border-r border-slate-100 ${day.getDay() === 0 || day.getDay() === 6 ? "bg-slate-50" : ""}`}
+                          />
+                        ))}
+                      </div>
+
+                      {lanes.map((lane, laneIndex) => (
+                        <div
+                          key={`${row.key}-lane-${laneIndex}`}
+                          className="absolute left-0 right-0"
+                          style={{
+                            top: `${laneIndex * laneHeight + 6}px`,
+                            height: `${isCompactRow ? 28 : 40}px`,
+                          }}
+                        >
+                          {lane.map((event: any) => (
+                            <EventBar
+                              key={event.id}
+                              event={event}
+                              monthStartDate={monthStartDate}
+                              monthEndDate={monthEndDate}
+                              dayWidth={dayWidth}
+                              compact={isCompactRow}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="flex border-b border-slate-100 bg-emerald-50/60">
+                <div className="sticky left-0 z-20 flex w-36 shrink-0 items-center border-r border-slate-200 bg-emerald-50 p-3">
+                  <div>
+                    <p className="text-sm font-black text-emerald-800">매출</p>
+                    <p className="mt-1 text-[11px] font-bold text-emerald-600">핵심 오프라인</p>
+                  </div>
+                </div>
+                <div
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                    width: `${timelineWidth}px`,
+                  }}
+                >
+                  {days.map((day) => {
+                    const key = ymd(day);
+                    const revenue = revenueByDate.get(key);
+                    const amount = Number(revenue?.amount || 0);
+                    const growthRate = revenue ? Number(revenue.growthRate || 0) : null;
+                    const tooltip = revenue
+                      ? `일자: ${key}\n매출: ${Math.round(amount).toLocaleString("ko-KR")}원\n전주 동요일(${revenue.prevDate}) 대비: ${growthRate! >= 0 ? "+" : ""}${growthRate!.toFixed(1)}%`
+                      : "매출 데이터 없음";
+
+                    return (
+                      <div
+                        key={`revenue-${key}`}
+                        title={tooltip}
+                        className={`min-h-[58px] border-r border-emerald-100 p-2 text-center ${day.getDay() === 0 || day.getDay() === 6 ? "bg-emerald-100/40" : ""}`}
+                      >
+                        {revenue ? (
+                          <>
+                            <p className="truncate text-[11px] font-black text-emerald-900">
+                              {amount >= 10000 ? `${Math.round(amount / 10000).toLocaleString("ko-KR")}만` : Math.round(amount).toLocaleString("ko-KR")}
+                            </p>
+                            <p className={`mt-1 truncate text-[11px] font-bold ${growthRate! >= 0 ? "text-blue-600" : "text-rose-600"}`}>
+                              {growthRate! >= 0 ? "+" : ""}{growthRate!.toFixed(0)}%
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-[11px] font-bold text-emerald-300">-</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {CATEGORY_ROWS_BOTTOM.map((row) => {
                 const categoryEvents = eventsByCategory.get(row.key) || [];
                 const lanes = stackEvents(categoryEvents);
                 const isCompactRow =

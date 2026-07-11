@@ -125,6 +125,10 @@ export async function buildSpecialOfferEvents(dailyFlatRows: DailyFlatRow[]) {
 
   debug.skippedNoStoreOrDate = skippedNoStoreOrDate;
   debug.eventCount = events.length;
+  debug.sampleEvents = events.slice(0, 8).map((e) => ({ storeName: e.storeName, startDate: e.startDate, endDate: e.endDate, salesAmount: e.salesAmount }));
+  debug.dateRange = events.length
+    ? { earliest: events.map((e) => e.startDate).sort()[0], latest: events.map((e) => e.endDate).sort().slice(-1)[0] }
+    : null;
 
   return { events, debug };
 }

@@ -73,6 +73,30 @@ export async function getSheetValuesById(spreadsheetId: string, sheetName: strin
   return (res.data.values || []) as any[][];
 }
 
+// 날짜 셀이 표시 형식상 연도를 포함 안 하는 경우(예: "4월 25일")가 있어서,
+// 텍스트 대신 구글시트 내부 일련번호(SERIAL_NUMBER)로 받아옵니다 — 표시 형식과 무관하게 항상 정확합니다.
+export async function getSheetValuesWithSerialDatesById(spreadsheetId: string, sheetName: string, range = "A:AZ") {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${escaped}'!${range}`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+    dateTimeRenderOption: "SERIAL_NUMBER",
+  });
+  return (res.data.values || []) as any[][];
+}
+
+// 구글시트 일련번호(1899-12-30 기준)를 "YYYY-MM-DD" 문자열로 변환합니다.
+export function sheetSerialToDateKey(serial: number): string {
+  if (!Number.isFinite(serial)) return "";
+  const epoch = Date.UTC(1899, 11, 30);
+  const ms = epoch + Math.round(serial) * 86400000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 export async function appendValuesById(spreadsheetId: string, range: string, values: any[][]) {
   const sheets = await getSheetsClient();
   return sheets.spreadsheets.values.append({

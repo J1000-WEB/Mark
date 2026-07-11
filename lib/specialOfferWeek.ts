@@ -1,4 +1,4 @@
-import { getSheetValuesById, batchUpdateValuesById } from "@/lib/googleSheets";
+import { getSheetValuesWithSerialDatesById, sheetSerialToDateKey, batchUpdateValuesById } from "@/lib/googleSheets";
 import { normalizeStoreKey } from "@/lib/dataBuilder";
 
 export const SPECIAL_OFFER_SHEET_ID = "1KfiwexgTnPIrBaV4G7B2c_aXtvhvUoCnjyXAxc_cZN4";
@@ -12,13 +12,22 @@ function text(v: any) {
 }
 
 function parseDate(v: any) {
-  const s = text(v).replace(/[./]/g, "-").slice(0, 10);
+  // 구글시트 일련번호(숫자)로 오는 게 정상 케이스입니다 — 셀 표시형식과 무관하게 항상 정확합니다.
+  if (typeof v === "number" && Number.isFinite(v)) {
+    return sheetSerialToDateKey(v);
+  }
+  const raw = text(v);
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    return sheetSerialToDateKey(Number(raw));
+  }
+  // 혹시 숫자가 아니라 텍스트로 온 경우를 위한 안전망(연도 없는 형식은 실패할 수 있음).
+  const s = raw.replace(/[./]/g, "-").slice(0, 10);
   const parts = s.split("-").map((x) => Number(x));
   if (parts.length >= 3 && parts.every((x) => Number.isFinite(x))) {
     const y = parts[0] < 100 ? parts[0] + 2000 : parts[0];
     return `${y}-${String(parts[1]).padStart(2, "0")}-${String(parts[2]).padStart(2, "0")}`;
   }
-  const d = new Date(text(v));
+  const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -35,7 +44,7 @@ function findColumn(header: string[], labels: string[], fallback: number) {
 }
 
 export async function readSpecialOfferSheet() {
-  const rows = await getSheetValuesById(SPECIAL_OFFER_SHEET_ID, SPECIAL_OFFER_SHEET_NAME, "A:T");
+  const rows = await getSheetValuesWithSerialDatesById(SPECIAL_OFFER_SHEET_ID, SPECIAL_OFFER_SHEET_NAME, "A:T");
   const debug: any = { sheetId: SPECIAL_OFFER_SHEET_ID, sheetName: SPECIAL_OFFER_SHEET_NAME, totalRowsRead: rows?.length || 0 };
 
   if (!rows || !rows.length) {

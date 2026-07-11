@@ -18,6 +18,10 @@
     {
       "path": "/api/auto-weather",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/auto-special-offer-actuals",
+      "schedule": "5 3 * * *"
     }
   ]
 }

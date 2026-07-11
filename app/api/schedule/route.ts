@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById, getHistorySheetId } from "@/lib/googleSheets";
-import { isCoreOfflineSalesStore, normalizeStoreKey } from "@/lib/dataBuilder";
+import { isCoreOfflineSalesStore } from "@/lib/dataBuilder";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { buildSpecialOfferEvents } from "@/lib/specialOfferWeek";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,107 +47,7 @@ function categoryOf(largeCategory: string, group: string, content: string) {
   return "general";
 }
 
-const SPECIAL_OFFER_SHEET_ID = "1KfiwexgTnPIrBaV4G7B2c_aXtvhvUoCnjyXAxc_cZN4";
-const SPECIAL_OFFER_SHEET_NAME = "세부일정";
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
-
-// MARK 6.10: 스페셜오퍼위크 전용 스케줄러 시트에서 이벤트(점포+기간)를 읽어오고,
-// 해당 점포가 그 기간 동안 실제로 얼마 팔았는지 Daily_Sales_History와 매칭해서 같이 반환합니다.
-async function buildSpecialOfferEvents(dailyFlatRows: { date: string; storeName: string; amount: number }[]) {
-  const debug: any = { sheetId: SPECIAL_OFFER_SHEET_ID, sheetName: SPECIAL_OFFER_SHEET_NAME };
-  try {
-    const rows = await getSheetValuesById(SPECIAL_OFFER_SHEET_ID, SPECIAL_OFFER_SHEET_NAME, "A:J");
-    const events: any[] = [];
-    debug.totalRowsRead = rows?.length || 0;
-
-    if (!rows || !rows.length) {
-      debug.error = "세부일정 시트에서 데이터를 한 줄도 못 읽었습니다 (권한 또는 시트명 확인 필요).";
-      return { events, debug };
-    }
-
-    // 고정 행 번호 대신, "점포명"+"시작일" 텍스트가 같이 있는 행을 헤더로 자동 탐지합니다.
-    let headerRowIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 20); i++) {
-      const joined = (rows[i] || []).map((v) => text(v)).join("|");
-      if ((joined.includes("점포명") || joined.includes("매장명")) && joined.includes("시작일")) {
-        headerRowIdx = i;
-        break;
-      }
-    }
-
-    if (headerRowIdx < 0) {
-      debug.error = "헤더 행(점포명/시작일)을 찾지 못했습니다.";
-      debug.first5Rows = rows.slice(0, 5);
-      return { events, debug };
-    }
-
-    const header = rows[headerRowIdx].map((v) => text(v));
-    const findColumn = (labels: string[], fallback: number) => {
-      for (const label of labels) {
-        const idx = header.findIndex((h) => h.replace(/\s/g, "").includes(label.replace(/\s/g, "")));
-        if (idx >= 0) return idx;
-      }
-      return fallback;
-    };
-
-    const storeCol = findColumn(["점포명", "매장명"], 7);
-    const startCol = findColumn(["시작일"], 8);
-    const endCol = findColumn(["종료일"], 9);
-    const completedCol = findColumn(["완료유무", "완료"], 6);
-
-    debug.headerRowIdx = headerRowIdx;
-    debug.storeCol = storeCol;
-    debug.startCol = startCol;
-    debug.endCol = endCol;
-
-    let skippedNoStoreOrDate = 0;
-
-    for (let i = headerRowIdx + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || !row.length) continue;
-
-      const storeName = text(row[storeCol]);
-      const startDate = parseDate(row[startCol]);
-      const endDate = parseDate(row[endCol]) || startDate;
-      const completed = text(row[completedCol]);
-      if (!storeName || !startDate) {
-        skippedNoStoreOrDate++;
-        continue;
-      }
-
-      const storeKey = normalizeStoreKey(storeName);
-      const salesAmount = dailyFlatRows
-        .filter((r) => r.date >= startDate && r.date <= endDate && normalizeStoreKey(r.storeName) === storeKey)
-        .reduce((sum, r) => sum + Number(r.amount || 0), 0);
-
-      events.push({
-        id: `sow-${i}`,
-        startDate,
-        endDate,
-        largeCategory: "스페셜오퍼위크",
-        category: "special_offer_week",
-        categoryLabel: "스페셜오퍼위크",
-        person: "",
-        rowKey: "special_offer_week",
-        group: completed,
-        content: storeName,
-        title: storeName,
-        displayTitle: storeName,
-        storeName,
-        salesAmount,
-        raw: { startDate: row[startCol], endDate: row[endCol], storeName: row[storeCol], completed: row[completedCol] },
-      });
-    }
-
-    debug.skippedNoStoreOrDate = skippedNoStoreOrDate;
-    debug.eventCount = events.length;
-
-    return { events, debug };
-  } catch (error: any) {
-    debug.error = error?.message || String(error);
-    return { events: [], debug };
-  }
-}
 
 // MARK 6.10: 날짜별 핵심 오프라인 매장 전체 매출 + 전주 동요일 대비 신장률.
 function buildDailyRevenueSeries(dailyFlatRows: { date: string; storeName: string; amount: number }[]) {

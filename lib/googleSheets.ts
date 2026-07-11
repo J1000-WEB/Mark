@@ -94,6 +94,20 @@ export async function updateValuesById(spreadsheetId: string, range: string, val
   });
 }
 
+// 여러 개의 (서로 떨어진) 셀/범위를 한 번의 API 호출로 업데이트합니다.
+// 예: 세부일정 시트의 특정 행들의 R열(실적)만 골라서 갱신할 때 사용.
+export async function batchUpdateValuesById(spreadsheetId: string, updates: { range: string; values: any[][] }[]) {
+  if (!updates.length) return null;
+  const sheets = await getSheetsClient();
+  return sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: updates.map((u) => ({ range: u.range, values: u.values })),
+    },
+  });
+}
+
 
 /**
  * Replaces all values in a sheet range. Used for compacting append-only history sheets

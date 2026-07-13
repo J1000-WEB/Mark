@@ -1557,7 +1557,9 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
 
   // 금주/전주 시트의 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다.
   // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
-  const productSummary = !requested || requested.week === b2Basis
+  // 단, "실시간 갱신"(options.refresh)을 명시적으로 눌렀을 때는 현재 보고 있는 주차 문자열이
+  // b2Basis와 미묘하게 안 맞더라도(공백/포맷 차이 등) 항상 라이브 데이터를 보여준다.
+  const productSummary = !requested || requested.week === b2Basis || options.refresh
     ? productSummaryFromWeeklyPrice(currentWeeklyRaw.rows || [])
     : { companyTopProducts: [] as any[], storeTopProducts: {} as Record<string, any[]> };
   const aggregation = {

@@ -531,7 +531,8 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
   const current = new Map<string, SalesAgg>();
   const previous = new Map<string, SalesAgg>();
   const stores = new Set<string>();
-  if (!rows?.length) return { current, previous, stores, columns: {} };
+  const productNames = new Map<string, string>();
+  if (!rows?.length) return { current, previous, stores, productNames, columns: {} };
 
   const curQtyCol = findGroupColumn(rows, "금주", "합계", 20); // 헤더 기준: 금주 합계수량(예: U열)
   const curAmountCol = findGroupColumn(rows, "금주", "판매금액", 21); // 헤더 기준: 금주 판매금액(예: V열)
@@ -548,6 +549,10 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     if (!style) continue;
     const key = salesKey(style, color, type);
     const stock = num(r[stockCol]);
+
+    // MARK 6.11: 상품명(스타일명, D열)도 같이 잡아둡니다 — 없으면 첫 유효값을 사용합니다.
+    const styleName = text(r[3]);
+    if (styleName && !productNames.get(style)) productNames.set(style, styleName);
 
     // 주간 데이터는 회사 검증 기준인 금주/전주 시트의 집계영역을 Source of Truth로 사용합니다.
     // 금주/전주 컬럼은 헤더명으로 찾으며, 원본 붙여넣기 영역(I/J 등)은 매출 fallback으로 사용하지 않습니다.
@@ -572,7 +577,7 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     });
     stores.add(channelName);
   }
-  return { current, previous, stores, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
+  return { current, previous, stores, productNames, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
 }
 
 function preferQtyFromDailyAndAmountFromPrice(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
@@ -1461,15 +1466,23 @@ function productSummaryFromWeeklyPrice(rows: Row[]) {
   const aggregate = aggregateWeeklyPriceSheet(rows, "style");
   const current = aggregate.current;
   const previous = aggregate.previous;
+  const productNames = aggregate.productNames;
+
+  const totalWeekAmount = [...current.values()].reduce((sum, agg) => sum + num(agg.amount), 0);
+
   const companyTopProducts = [...current.entries()]
     .map(([styleCode, currentAgg]) => {
       const prevAgg = previous.get(styleCode) || emptyAgg();
+      const weekAmount = num(currentAgg.amount);
       return {
         styleCode,
-        productName: styleCode,
-        weekAmount: num(currentAgg.amount),
+        productName: productNames.get(styleCode) || styleCode,
+        weekAmount,
+        weekNet: num(currentAgg.qty),
         prevAmount: num(prevAgg.amount),
-        amountChangeRate: percentChange(num(currentAgg.amount), num(prevAgg.amount)),
+        prevNet: num(prevAgg.qty),
+        amountChangeRate: percentChange(weekAmount, num(prevAgg.amount)),
+        contributionRate: totalWeekAmount ? (weekAmount / totalWeekAmount) * 100 : 0,
       };
     })
     .filter((row) => row.weekAmount || row.prevAmount)
@@ -1477,6 +1490,14 @@ function productSummaryFromWeeklyPrice(rows: Row[]) {
     .slice(0, 20);
 
   const storeTopProducts: Record<string, any[]> = {};
+  const storeTotals: Record<string, number> = {};
+  for (const [, currentAgg] of current.entries()) {
+    for (const [rawStore, amount] of Object.entries(currentAgg.byStoreAmount || {})) {
+      if (!isOfflineStore(rawStore)) continue;
+      storeTotals[rawStore] = (storeTotals[rawStore] || 0) + num(amount);
+    }
+  }
+
   for (const [styleCode, currentAgg] of current.entries()) {
     const prevAgg = previous.get(styleCode) || emptyAgg();
     const storeKeys = new Set([
@@ -1490,12 +1511,16 @@ function productSummaryFromWeeklyPrice(rows: Row[]) {
       const prevAmount = num(prevAgg.byStoreAmount?.[rawStore]);
       if (!weekAmount && !prevAmount) continue;
       if (!storeTopProducts[storeName]) storeTopProducts[storeName] = [];
+      const storeTotal = storeTotals[rawStore] || 0;
       storeTopProducts[storeName].push({
         styleCode,
-        productName: styleCode,
+        productName: productNames.get(styleCode) || styleCode,
         weekAmount,
+        weekNet: num(currentAgg.byStore?.[rawStore]),
         prevAmount,
+        prevNet: num(prevAgg.byStore?.[rawStore]),
         amountChangeRate: percentChange(weekAmount, prevAmount),
+        contributionRate: storeTotal ? (weekAmount / storeTotal) * 100 : 0,
       });
     }
   }

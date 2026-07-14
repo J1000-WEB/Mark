@@ -308,6 +308,7 @@ function buildStoreSummaryFromDailySales(rows: DailyStoreSaleRecord[], selected:
       compareWeekSales,
       weekChangeRate: percentChange(weekSales, compareWeekSales),
       weekTarget,
+      weekTargetAvailable: false,
       weekRate: weekTarget ? (weekSales / weekTarget) * 100 : 0,
       monthSales,
       monthTarget: 0,

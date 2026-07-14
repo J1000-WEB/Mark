@@ -154,7 +154,7 @@ export default function ConsignmentUploadDashboard() {
 
         {result && (
           <Card title="✅ 처리 완료" tone="white">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-bold text-slate-500">채널</p>
                 <p className="mt-1 text-lg font-black">{CHANNEL_LABEL[result.channel] || result.channel}</p>
@@ -166,6 +166,10 @@ export default function ConsignmentUploadDashboard() {
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-bold text-slate-500">저장 위치</p>
                 <p className="mt-1 text-lg font-black">{result.writtenRange || "-"}</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 p-4">
+                <p className="text-xs font-bold text-emerald-700">칼라코드 자동수정</p>
+                <p className="mt-1 text-lg font-black text-emerald-700">{result.autoFixedCount || 0}건</p>
               </div>
               <div className="rounded-2xl bg-amber-50 p-4">
                 <p className="text-xs font-bold text-amber-700">확인 필요(품번 의심)</p>

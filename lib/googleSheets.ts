@@ -91,7 +91,7 @@ export async function getSheetValuesWithSerialDatesById(spreadsheetId: string, s
 export function sheetSerialToDateKey(serial: number): string {
   if (!Number.isFinite(serial)) return "";
   const epoch = Date.UTC(1899, 11, 30);
-  const ms = epoch + Math.round(serial) * 86400000;
+  const ms = epoch + Math.floor(serial) * 86400000;
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;

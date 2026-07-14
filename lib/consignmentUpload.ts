@@ -20,6 +20,7 @@ export type UploadRow = {
   price: number;
   flagged?: boolean; // 바코드 15자 이상 등 확인 필요
   flagReason?: string;
+  autoFixed?: boolean; // 칼라코드 매핑으로 자동 수정됨
 };
 
 function text(v: any) {
@@ -63,6 +64,8 @@ function parseDateLike(v: any): string {
   return "";
 }
 
+export const COLOR_CODE_SHEET_NAME = "COLORCODE";
+
 // ---- 점포코드 매핑 로드 ----
 export async function loadStoreCodeMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
@@ -77,6 +80,38 @@ export async function loadStoreCodeMap(): Promise<Map<string, string>> {
     // 시트가 없거나 읽기 실패 시 빈 맵 반환 (호출부에서 하드코딩 폴백 사용)
   }
   return map;
+}
+
+// MARK 6.13: 칼라코드 매핑 로드 — 한컬렉션 품번코드에 칼라명이 풀네임으로 잘못 들어간 경우
+// (예: GF2MKP016TOMATOXL) 자동으로 코드(TO)로 바꿔주기 위해 사용합니다.
+export type ColorCodeEntry = { code: string; name: string };
+export async function loadColorCodeList(): Promise<ColorCodeEntry[]> {
+  const list: ColorCodeEntry[] = [];
+  try {
+    const rows = await getSheetValuesById(UPLOAD_SPREADSHEET_ID, COLOR_CODE_SHEET_NAME, "A:C");
+    for (const row of rows || []) {
+      const code = text(row?.[1]);
+      const name = text(row?.[2]);
+      if (code && name && code !== "칼라") list.push({ code, name: name.toUpperCase() });
+    }
+  } catch {
+    // 시트가 없거나 읽기 실패 시 빈 목록 반환 (자동수정 없이 기존 플래그 방식으로 폴백)
+  }
+  // 긴 이름부터 매칭해야 "WHITE TOMATO"가 "TOMATO"보다 먼저 잡혀서 오매칭을 피합니다.
+  return list.sort((a, b) => b.name.length - a.name.length);
+}
+
+// 바코드에 풀네임 칼라명이 들어간 경우, 매칭되는 칼라코드로 치환을 시도합니다.
+export function tryAutoFixBarcode(barcode: string, colorCodeList: ColorCodeEntry[]): { fixed: string; changed: boolean; matchedName?: string } {
+  const upper = barcode.toUpperCase();
+  for (const { code, name } of colorCodeList) {
+    const idx = upper.indexOf(name);
+    if (idx >= 0) {
+      const fixed = barcode.slice(0, idx) + code + barcode.slice(idx + name.length);
+      return { fixed, changed: true, matchedName: name };
+    }
+  }
+  return { fixed: barcode, changed: false };
 }
 
 // 위 시트가 비어있거나 아직 없을 때를 대비한 폴백(사용자가 준 실제 값 기준)
@@ -136,7 +171,7 @@ export function parseMusinsa(workbook: XLSX.WorkBook, storeCodeMap: Map<string, 
 // ================= 한컬렉션 =================
 // 원본: 매출일보_YYYYMMDD_HHMMSS.xls, 메타 정보 몇 줄 + 헤더 + 합계 1줄 + 데이터
 // D=판매일자, K=매입거래처상품코드(바코드, _뒤 제거), Q=실판매가(단가), R=판매수량
-export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<string, string>): { rows: UploadRow[]; warnings: string[] } {
+export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<string, string>, colorCodeList: ColorCodeEntry[] = []): { rows: UploadRow[]; warnings: string[] } {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
@@ -157,6 +192,8 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
   const warnings: string[] = [];
   if (!channel) warnings.push("한컬렉션 채널코드를 점포코드 시트에서 찾지 못했습니다.");
 
+  let autoFixedCount = 0;
+
   for (let i = headerRow + 1; i < raw.length; i++) {
     const row = raw[i];
     if (!row || !row.length) continue;
@@ -172,7 +209,24 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
     // 밑줄(_) 뒤 부가정보 제거
     if (barcode.includes("_")) barcode = barcode.split("_")[0];
 
-    const flagged = barcode.length >= 15;
+    let flagged = barcode.length >= 15;
+    let flagReason: string | undefined;
+    let autoFixed = false;
+
+    if (flagged && colorCodeList.length) {
+      const attempt = tryAutoFixBarcode(barcode, colorCodeList);
+      if (attempt.changed) {
+        barcode = attempt.fixed;
+        autoFixed = true;
+        autoFixedCount++;
+        flagged = barcode.length >= 15; // 수정 후에도 여전히 길면 계속 확인 필요로 남김
+      }
+    }
+
+    if (flagged) {
+      flagReason = `바코드 ${barcode.length}자 - 품번코드 확인 필요`;
+    }
+
     rows.push({
       date: parseDateLike(dateRaw),
       pos: "P1",
@@ -181,9 +235,12 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       qty,
       price,
       flagged,
-      flagReason: flagged ? `바코드 ${barcode.length}자 - 품번코드 확인 필요` : undefined,
+      flagReason,
+      autoFixed,
     });
   }
+
+  if (autoFixedCount) warnings.push(`칼라코드 매핑으로 ${autoFixedCount}건의 품번코드를 자동 수정했습니다.`);
 
   return { rows, warnings };
 }
@@ -239,10 +296,11 @@ export function parseByChannel(
   channel: ConsignmentChannel,
   workbook: XLSX.WorkBook,
   storeCodeMap: Map<string, string>,
-  userDate: string
+  userDate: string,
+  colorCodeList: ColorCodeEntry[] = []
 ) {
   if (channel === "musinsa") return parseMusinsa(workbook, storeCodeMap);
-  if (channel === "hancollection") return parseHancollection(workbook, storeCodeMap);
+  if (channel === "hancollection") return parseHancollection(workbook, storeCodeMap, colorCodeList);
   return parseDutyFree(workbook, storeCodeMap, userDate);
 }
 

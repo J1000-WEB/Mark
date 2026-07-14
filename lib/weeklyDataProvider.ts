@@ -8,6 +8,7 @@ import {
   replaceSheetValuesById,
   updateValuesById,
 } from "@/lib/googleSheets";
+import { getSavedWeeklyTarget } from "@/lib/weeklyTarget";
 
 type SalesType = "style" | "color";
 type Row = any[];
@@ -1555,6 +1556,22 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
   const dailyStoreSummary = dailyStoreRows.length ? buildStoreSummaryFromDailySales(dailyStoreRows, selected) : { current: [], compare: [], productStoreNames: [] as string[] };
 
+  // MARK 6.12: 예전엔 일간매출(26년) 시트의 "기간목표"(연간 스케일) 값을 그대로 주간목표로 썼던 버그가 있었습니다.
+  // 이제는 일_전일!I열에서 주차별로 캡처해둔 스냅샷(Weekly_Target_History)에서, 지금 보는 주(selected.week)와
+  // 정확히 일치하는 주차 목표만 사용합니다. 저장된 게 없으면 목표 없이("-") 보여줍니다.
+  const savedWeeklyTarget = await getSavedWeeklyTarget(selected.week).catch(() => null);
+  for (const row of dailyStoreSummary.current) {
+    const matched = savedWeeklyTarget?.byStore.get(row.storeName);
+    row.weekTarget = matched || 0;
+    row.weekTargetAvailable = !!savedWeeklyTarget;
+    row.weekRate = row.weekTarget ? (Number(row.weekSales || 0) / row.weekTarget) * 100 : 0;
+  }
+  const weeklyTargetSummary = {
+    available: !!savedWeeklyTarget,
+    weekMonday: selected.week,
+    companyTarget: savedWeeklyTarget?.companyTarget || 0,
+  };
+
   // 금주/전주 시트의 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다.
   // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
   // 단, "실시간 갱신"(options.refresh)을 명시적으로 눌렀을 때는 현재 보고 있는 주차 문자열이
@@ -1589,6 +1606,7 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
       comparePeriod: { start: selected.compareStart, end: selected.compareEnd },
       current: dailyStoreSummary.current,
       compare: dailyStoreSummary.compare,
+      weeklyTargetSummary,
       companyTopProducts: productSummary.companyTopProducts,
       storeTopProducts: productSummary.storeTopProducts,
       productStoreNames: dailyStoreSummary.productStoreNames,

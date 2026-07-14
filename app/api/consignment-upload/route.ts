@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
   detectChannelFromFilename,
   loadStoreCodeMap,
+  loadColorCodeList,
   parseByChannel,
   appendUploadRows,
   highlightFlaggedRows,
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
     const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array", cellDates: true });
 
     const storeCodeMap = await loadStoreCodeMap();
-    const { rows, warnings } = parseByChannel(channel, workbook, storeCodeMap, userDate);
+    const colorCodeList = channel === "hancollection" ? await loadColorCodeList() : [];
+    const { rows, warnings } = parseByChannel(channel, workbook, storeCodeMap, userDate, colorCodeList);
 
     if (!rows.length) {
       return NextResponse.json({ ok: false, channel, error: "변환된 행이 없습니다. 파일 내용을 확인해주세요.", warnings }, { status: 400 });
@@ -48,6 +50,7 @@ export async function POST(req: Request) {
     const flaggedOffsets = rows
       .map((r, i) => (r.flagged ? i : -1))
       .filter((i) => i >= 0);
+    const autoFixedCount = rows.filter((r) => r.autoFixed).length;
 
     if (written && flaggedOffsets.length) {
       await highlightFlaggedRows(written.startRow, flaggedOffsets).catch(() => {});
@@ -61,6 +64,7 @@ export async function POST(req: Request) {
       writtenRange: written ? `${written.startRow}~${written.endRow}행` : null,
       flaggedCount: flaggedOffsets.length,
       flaggedItems: rows.filter((r) => r.flagged).map((r) => ({ barcode: r.barcode, reason: r.flagReason })),
+      autoFixedCount,
       warnings,
     });
   } catch (error: any) {

@@ -1,6 +1,7 @@
 import fallback from "./mark-data.json";
 import { getDbSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
+import { saveWeeklyStylePrices } from "./stylePriceHistory";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -176,7 +177,7 @@ function pickWeeklyCompare(titles: string[]) {
 }
 
 
-function pickProductSheet(titles: string[]) {
+export function pickProductSheet(titles: string[]) {
   // 실제 탭명은 보통 "금주/전주"입니다.
   // 없는 이름("금주전주")을 fallback으로 반환하면 Google Sheets batchGet 전체가 실패합니다.
   const exact = titles.find((t) => t === "금주/전주");
@@ -310,7 +311,7 @@ function findMetricInGroup(groupHeader: any[], header: any[], start: number, met
   return fallback;
 }
 
-function parseProducts(rows: any[][]) {
+export function parseProducts(rows: any[][]) {
   const headerRow = findHeaderRow(rows, ["채널명", "스타일"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : [];
   const groupHeader = headerRow > 0 ? rows[headerRow - 1] || [] : [];
@@ -494,7 +495,7 @@ function parseInventory(rows: any[][]) {
   return Array.from(grouped.values());
 }
 
-function aggregateProducts(rows: any[], storeName?: string, top = 10) {
+export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
   const map = new Map<string, any>();
   for (const r of rows) {
     if (storeName && r.storeName !== storeName) continue;
@@ -539,6 +540,29 @@ function aggregateProducts(rows: any[], storeName?: string, top = 10) {
     })
     .sort((a, b) => Number(b.weekAmount || 0) - Number(a.weekAmount || 0))
     .slice(0, top);
+}
+
+// MARK 6.15: 금주/전주 시트에서 품번별 "실제판매금액 ÷ 실제판매수량 = 실제 평균단가"를 계산해서
+// Style_Price_History에 이번 주 스냅샷으로 저장합니다. (parseProducts/aggregateProducts를
+// 이미 이 파일이 갖고 있어서, 순환 참조 없이 여기서 계산합니다.)
+export async function captureWeeklyStylePrices() {
+  const dbId = getDbSheetId();
+  const titles = await getSpreadsheetTitlesById(dbId);
+  const productSheet = pickProductSheet(titles);
+  if (!productSheet) return { ok: false, error: "금주/전주 시트를 찾지 못했습니다." };
+
+  const rows = await getSheetValuesById(dbId, productSheet, "A:AZ");
+  const productRows = parseProducts(rows);
+  const allProducts = aggregateProducts(productRows, undefined, 999999);
+
+  const prices: Record<string, number> = {};
+  for (const p of allProducts) {
+    if (p.styleCode && Number(p.weekNet || 0) > 0) {
+      prices[p.styleCode] = Math.round(Number(p.weekAmount || 0) / Number(p.weekNet || 0));
+    }
+  }
+
+  return saveWeeklyStylePrices(prices);
 }
 
 function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] = []) {

@@ -8,6 +8,7 @@ import {
   getSpreadsheetTitlesById,
   renameSheetById,
 } from "@/lib/googleSheets";
+import { getStylePriceMap } from "@/lib/stylePriceHistory";
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -164,6 +165,11 @@ export async function readDailySalesFromMarkDb() {
   const channelBlocks = buildChannelBlocks(row2, row3);
   const items: any[] = [];
 
+  // MARK 6.15: "수량 × 정가" 추정 대신, 금주/전주 시트에서 미리 계산해둔
+  // "실제판매금액 ÷ 실제판매수량" 평균단가를 우선 사용합니다. 값이 없는 신규 품번 등은
+  // 기존처럼 판매가(정가) 컬럼으로 폴백합니다.
+  const stylePriceMap = await getStylePriceMap(ymdKST()).catch(() => new Map<string, number>());
+
   for (const row of rows.slice(3)) {
     const styleCode = text(row[styleCol]);
     const productName = text(row[nameCol]);
@@ -173,7 +179,9 @@ export async function readDailySalesFromMarkDb() {
     const colorCode = text(row[colorCol]);
     const colorName = text(row[colorNameCol]);
     const size = text(row[sizeCol]);
-    const price = num(row[priceCol]);
+    const listPrice = num(row[priceCol]);
+    const actualPrice = stylePriceMap.get(styleCode);
+    const price = actualPrice && actualPrice > 0 ? actualPrice : listPrice;
 
     for (const block of channelBlocks) {
       const dailySales = num(row[block.dailyCol]);

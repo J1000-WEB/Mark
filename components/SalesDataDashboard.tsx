@@ -94,6 +94,11 @@ export default function SalesDataDashboard() {
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<GroupState>({ "점포별 판매/재고": true });
   const [query, setQuery] = useState("");
+  const [uploadFiles, setUploadFiles] = useState<Record<string, File | null>>({});
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadError, setUploadError] = useState("");
+  const [showUpload, setShowUpload] = useState(false);
 
   async function load(nextWeek = week, nextType = type) {
     setStatus("MARK 데이터로 판매데이터 생성 중...");
@@ -117,6 +122,44 @@ export default function SalesDataDashboard() {
     setSort(null);
     setCollapsedGroups({ "점포별 판매/재고": true });
     setStatus(data.sheetName ? `${data.sheetName} · ${data.rowCount || 0}개 상품 · ${data.colCount || 0}열` : "판매데이터를 생성하지 못했습니다.");
+  }
+
+  async function runUpload() {
+    setUploading(true);
+    setUploadError("");
+    setUploadResult(null);
+    try {
+      const form = new FormData();
+      const fieldMap: Record<string, string> = {
+        "재고": "재고",
+        "생산": "생산",
+        "기간판매(전주,2주)": "기간판매_전주_2주",
+        "기간판매(3주,4주)": "기간판매_3주_4주",
+        "재런칭": "재런칭",
+        "라인업": "라인업",
+      };
+      for (const [label, field] of Object.entries(fieldMap)) {
+        const file = uploadFiles[label];
+        if (file) form.append(field, file);
+      }
+      const res = await fetch("/api/sales-data-upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "업로드 처리 실패");
+      setUploadResult(data);
+      await load("", type);
+    } catch (e: any) {
+      setUploadError(e?.message || "업로드 처리 실패");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function downloadExcel() {
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, type === "color" ? "컬러" : "품번");
+    XLSX.writeFile(wb, `주간판매데이터_${week || "latest"}_${type === "color" ? "컬러" : "품번"}.xlsx`);
   }
 
   useEffect(() => {
@@ -218,6 +261,65 @@ export default function SalesDataDashboard() {
           </div>
           <NavTabs active="sales-data" />
         </header>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setShowUpload((v) => !v)}
+              className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-black text-white hover:bg-indigo-700"
+            >
+              📤 {showUpload ? "업로드 패널 닫기" : "주간판매데이터 파일 업로드"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadExcel}
+              disabled={!rows.length}
+              className="rounded-2xl border border-emerald-600 px-4 py-2 text-sm font-black text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+            >
+              📥 엑셀로 다운로드
+            </button>
+          </div>
+
+          {showUpload && (
+            <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-semibold text-slate-500">
+                재고 / 생산 / 기간판매(전주,2주)는 필수예요. 기간판매(3주,4주) · 재런칭 · 라인업은 선택이에요(안 올리면 이전 값 유지).
+                업로드하면 계산해서 <b>스냅샷으로 저장</b>되고, 다음부터는 페이지 열 때마다 다시 계산하지 않고 저장된 걸 바로 보여줘요.
+              </p>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                {["재고", "생산", "기간판매(전주,2주)", "기간판매(3주,4주)", "재런칭", "라인업"].map((label) => (
+                  <label key={label} className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-3">
+                    <span className="text-xs font-black text-slate-700">
+                      {label} {["재고", "생산", "기간판매(전주,2주)"].includes(label) && <span className="text-rose-600">*</span>}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => setUploadFiles((prev) => ({ ...prev, [label]: e.target.files?.[0] || null }))}
+                      className="text-[11px]"
+                    />
+                    {uploadFiles[label] && <span className="truncate text-[10px] font-bold text-emerald-600">{uploadFiles[label]!.name}</span>}
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={runUpload}
+                disabled={uploading || !uploadFiles["재고"] || !uploadFiles["생산"] || !uploadFiles["기간판매(전주,2주)"]}
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-40"
+              >
+                {uploading ? "계산 중..." : "계산해서 저장"}
+              </button>
+              {uploadError && <p className="text-xs font-black text-red-600">⚠ {uploadError}</p>}
+              {uploadResult && (
+                <p className="text-xs font-black text-emerald-700">
+                  ✅ {uploadResult.weekKey} 스냅샷 저장 완료 — 품번 {uploadResult.style?.rowCount}건 · 컬러 {uploadResult.color?.rowCount}건
+                </p>
+              )}
+            </div>
+          )}
+        </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">

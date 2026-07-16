@@ -1,7 +1,7 @@
 import fallback from "./mark-data.json";
 import { getDbSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
-import { saveWeeklyStylePrices } from "./stylePriceHistory";
+import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -545,6 +545,9 @@ export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
 // MARK 6.15: 금주/전주 시트에서 품번별 "실제판매금액 ÷ 실제판매수량 = 실제 평균단가"를 계산해서
 // Style_Price_History에 이번 주 스냅샷으로 저장합니다. (parseProducts/aggregateProducts를
 // 이미 이 파일이 갖고 있어서, 순환 참조 없이 여기서 계산합니다.)
+// MARK 6.16.1: 화요일에 캡처할 때 "금주"(방금 시작한 주, 데이터 거의 없음) 대신
+// "전주"(막 끝난, 데이터가 완전한 주)를 사용해야 정확합니다. 그래서 저장하는 주차도
+// "이번 주 월요일"이 아니라 "지난 주 월요일"로 기록합니다.
 export async function captureWeeklyStylePrices() {
   const dbId = getDbSheetId();
   const titles = await getSpreadsheetTitlesById(dbId);
@@ -557,12 +560,19 @@ export async function captureWeeklyStylePrices() {
 
   const prices: Record<string, number> = {};
   for (const p of allProducts) {
-    if (p.styleCode && Number(p.weekNet || 0) > 0) {
-      prices[p.styleCode] = Math.round(Number(p.weekAmount || 0) / Number(p.weekNet || 0));
+    if (p.styleCode && Number(p.prevNet || 0) > 0) {
+      prices[p.styleCode] = Math.round(Number(p.prevAmount || 0) / Number(p.prevNet || 0));
     }
   }
 
-  return saveWeeklyStylePrices(prices);
+  const thisMonday = currentWeekMonday();
+  const lastMonday = (() => {
+    const d = new Date(`${thisMonday}T00:00:00`);
+    d.setDate(d.getDate() - 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  return saveWeeklyStylePrices(prices, lastMonday);
 }
 
 function mergeStoreRows(currentRows: any[], compareRows: any[], yearRows: any[] = []) {

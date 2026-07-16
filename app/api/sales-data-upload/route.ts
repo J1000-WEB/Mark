@@ -10,6 +10,7 @@ import {
   buildColorReport,
   saveReportSnapshot,
 } from "@/lib/salesDataUpload";
+import { recordUpload } from "@/lib/uploadAlertState";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -56,6 +57,15 @@ export async function POST(req: Request) {
 
     const styleSaved = await saveReportSnapshot("style", styleReport);
     const colorSaved = await saveReportSnapshot("color", colorReport);
+
+    // MARK 6.16.1: 재고/생산 파일이 실제로 제공됐을 때만 "마지막 업로드"를 갱신합니다.
+    if (stockWb) {
+      await recordUpload("카테고리가격").catch(() => {});
+      await recordUpload("재고물류").catch(() => {});
+    }
+    if (productionWb) {
+      await recordUpload("생산").catch(() => {});
+    }
 
     return NextResponse.json({
       ok: true,

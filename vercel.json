@@ -34,6 +34,10 @@
     {
       "path": "/api/auto-style-price-capture",
       "schedule": "0 15 * * 1"
+    },
+    {
+      "path": "/api/auto-upload-staleness-check",
+      "schedule": "40 3 * * *"
     }
   ]
 }

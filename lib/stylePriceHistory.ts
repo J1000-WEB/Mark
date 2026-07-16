@@ -51,9 +51,9 @@ function chunkPriceMap(prices: Record<string, number>, maxChars = MAX_CELL_CHARS
 }
 
 // 이미 계산된 품번별 평균단가를 이번 주 스냅샷으로 저장합니다. (계산 자체는 호출부 책임)
-export async function saveWeeklyStylePrices(prices: Record<string, number>) {
+export async function saveWeeklyStylePrices(prices: Record<string, number>, weekKeyOverride?: string) {
   const dbId = getDbSheetId();
-  const weekKey = currentWeekMonday();
+  const weekKey = weekKeyOverride || currentWeekMonday();
 
   await ensureSheetExistsById(dbId, STYLE_PRICE_SHEET, STYLE_PRICE_HEADER);
   const existing = await getSheetValuesById(dbId, STYLE_PRICE_SHEET, "A:D").catch(() => []);
@@ -68,6 +68,22 @@ export async function saveWeeklyStylePrices(prices: Record<string, number>) {
   await appendValuesById(dbId, `'${STYLE_PRICE_SHEET}'!A:D`, newRows);
 
   return { ok: true, skipped: false, weekKey, styleCount: Object.keys(prices).length, rowsWritten: newRows.length };
+}
+
+// 재고컨트롤 화면에 "마지막 갱신일시"를 보여주기 위한 메타 정보 조회.
+export async function getLatestStylePriceMeta(): Promise<{ weekKey: string; savedAt: string; styleCount: number } | null> {
+  const dbId = getDbSheetId();
+  const rows = await getSheetValuesById(dbId, STYLE_PRICE_SHEET, "A:D").catch(() => []);
+  const body = rows.slice(1);
+  if (!body.length) return null;
+
+  const weeks = Array.from(new Set(body.map((r) => text(r[0])).filter(Boolean))).sort();
+  const latestWeek = weeks[weeks.length - 1];
+  const rowsForWeek = body.filter((r) => text(r[0]) === latestWeek);
+  const savedAt = rowsForWeek.map((r) => text(r[2])).sort().pop() || "";
+  const styleCount = rowsForWeek.reduce((sum, r) => sum + Number(r[1] || 0), 0);
+
+  return { weekKey: latestWeek, savedAt, styleCount };
 }
 
 // 특정 날짜 기준으로 적용할 "실제 평균단가" 맵을 가져옵니다.

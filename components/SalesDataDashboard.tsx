@@ -99,6 +99,14 @@ export default function SalesDataDashboard() {
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [uploadError, setUploadError] = useState("");
   const [showUpload, setShowUpload] = useState(false);
+  const [uploadStatuses, setUploadStatuses] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/upload-status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setUploadStatuses(d); })
+      .catch(() => {});
+  }, []);
 
   async function load(nextWeek = week, nextType = type) {
     setStatus("MARK 데이터로 판매데이터 생성 중...");
@@ -147,6 +155,7 @@ export default function SalesDataDashboard() {
       if (!data.ok) throw new Error(data.error || "업로드 처리 실패");
       setUploadResult(data);
       await load("", type);
+      fetch("/api/upload-status", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (d.ok) setUploadStatuses(d); }).catch(() => {});
     } catch (e: any) {
       setUploadError(e?.message || "업로드 처리 실패");
     } finally {
@@ -287,6 +296,23 @@ export default function SalesDataDashboard() {
                 재고 / 생산 / 기간판매(전주,2주)는 필수예요. 기간판매(3주,4주) · 재런칭 · 라인업은 선택이에요(안 올리면 이전 값 유지).
                 업로드하면 계산해서 <b>스냅샷으로 저장</b>되고, 다음부터는 페이지 열 때마다 다시 계산하지 않고 저장된 걸 바로 보여줘요.
               </p>
+              {uploadStatuses && (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  {Object.entries(uploadStatuses.statuses || {}).map(([kind, info]: [string, any]) => {
+                    const threshold = uploadStatuses.thresholds?.[kind] ?? 7;
+                    const stale = info.daysSince !== null && info.daysSince >= threshold;
+                    return (
+                      <div key={kind} className={`rounded-xl border p-2 text-xs font-bold ${stale ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-600"}`}>
+                        <p className="font-black">{kind}</p>
+                        <p className="mt-0.5">
+                          {info.lastUploadedAt ? `마지막 업로드: ${info.lastUploadedAt} (${info.daysSince}일 전)` : "업로드 이력 없음"}
+                          {stale ? " ⚠ 기한 초과" : ""}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 {["재고", "생산", "기간판매(전주,2주)", "기간판매(3주,4주)", "재런칭", "라인업"].map((label) => (
                   <label key={label} className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-3">

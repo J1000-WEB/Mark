@@ -1277,6 +1277,9 @@ export default function InventoryDashboard() {
   const [rtFilter, setRtFilter] = useState("all");
   const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
   const [rtSavingKey, setRtSavingKey] = useState("");
+  const [priceMeta, setPriceMeta] = useState<any>(null);
+  const [priceCapturing, setPriceCapturing] = useState(false);
+  const [priceStatus, setPriceStatus] = useState("");
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -1286,7 +1289,28 @@ export default function InventoryDashboard() {
         setDataStatus(d.source === "google-sheet" ? "구글시트 실시간 데이터" : "내장 데이터");
       })
       .catch(() => setDataStatus("내장 데이터"));
+
+    fetch("/api/style-price-manual-capture", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setPriceMeta(d.meta); })
+      .catch(() => {});
   }, []);
+
+  async function runPriceCapture() {
+    setPriceCapturing(true);
+    setPriceStatus("갱신 중...");
+    try {
+      const res = await fetch("/api/style-price-manual-capture", { method: "POST" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "갱신 실패");
+      setPriceMeta(data.meta);
+      setPriceStatus(data.result?.skipped ? "이미 이번 주(전주 기준) 갱신되어 있어요." : "갱신 완료!");
+    } catch (e: any) {
+      setPriceStatus(e?.message || "갱신 실패");
+    } finally {
+      setPriceCapturing(false);
+    }
+  }
 
   const data = dashboardData?.inventory || {};
 
@@ -1340,6 +1364,24 @@ export default function InventoryDashboard() {
           </div>
           <span className="text-2xl">→</span>
         </a>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-bold text-slate-500">품번별 실제 평균단가 (Style_Price_History)</p>
+            <p className="mt-1 text-sm font-black text-slate-900">
+              {priceMeta ? `마지막 갱신: ${priceMeta.weekKey} 주 · ${priceMeta.savedAt} · 품번 ${priceMeta.styleCount}개` : "아직 갱신된 적 없음"}
+            </p>
+            {priceStatus && <p className="mt-1 text-xs font-bold text-blue-600">{priceStatus}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={runPriceCapture}
+            disabled={priceCapturing}
+            className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            {priceCapturing ? "갱신 중..." : "🔄 지금 갱신하기"}
+          </button>
+        </div>
 
         <StoreRequestRtSection />
 

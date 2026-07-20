@@ -11,8 +11,9 @@ export async function GET(req: Request) {
     const toStore = url.searchParams.get("toStore") || "";
     const qtyParam = url.searchParams.get("qty");
     const qty = qtyParam ? Number(qtyParam) : undefined;
+    const color = url.searchParams.get("color") || "";
 
-    const result = await buildRtRequestSuggestion(styleCode, toStore, qty);
+    const result = await buildRtRequestSuggestion(styleCode, toStore, qty, color);
     if (!result.ok) {
       return NextResponse.json(result, { status: 400 });
     }

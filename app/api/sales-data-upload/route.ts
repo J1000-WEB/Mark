@@ -13,8 +13,8 @@ import {
   buildStyleReport,
   buildColorReport,
   buildPeriodSalesFromDailyHistory,
-  saveReportSnapshot,
 } from "@/lib/salesDataUpload";
+import { saveReportSnapshot } from "@/lib/salesDataSnapshot";
 import { recordUpload } from "@/lib/uploadAlertState";
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";

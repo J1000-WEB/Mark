@@ -1138,6 +1138,7 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
 
 function StoreRequestRtSection() {
   const [styleCode, setStyleCode] = useState("");
+  const [color, setColor] = useState("");
   const [toStore, setToStore] = useState("");
   const [qty, setQty] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1158,6 +1159,7 @@ function StoreRequestRtSection() {
     try {
       const params = new URLSearchParams({ styleCode: styleCode.trim(), toStore: toStore.trim() });
       if (qty.trim()) params.set("qty", qty.trim());
+      if (color.trim()) params.set("color", color.trim());
       const res = await fetch(`/api/rt-request?${params.toString()}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.ok) throw new Error(body?.error || "제안 계산에 실패했습니다.");
@@ -1189,7 +1191,7 @@ function StoreRequestRtSection() {
 
   return (
     <Card title="🙋 점포 요청 RT" tone="white">
-      <p className="mb-4 text-xs font-semibold text-slate-500">품번과 요청 점포를 입력하면, 어느 매장에서 이동하면 좋을지 바로 제안해드려요. 수량은 비워두면 자동(목표재고 3주 기준)으로 계산해요.</p>
+      <p className="mb-4 text-xs font-semibold text-slate-500">품번과 요청 점포를 입력하면, 어느 매장에서 이동하면 좋을지 바로 제안해드려요. 칼라를 지정하면 그 칼라 기준으로만 계산해요(안 지정하면 품번 전체 기준). 수량은 비워두면 자동(목표재고 3주 기준)으로 계산해요.</p>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
           품번
@@ -1198,6 +1200,15 @@ function StoreRequestRtSection() {
             onChange={(e) => setStyleCode(e.target.value)}
             placeholder="예: GF2LTS523"
             className="w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          칼라(선택)
+          <input
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            placeholder="예: BK"
+            className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
@@ -1233,7 +1244,7 @@ function StoreRequestRtSection() {
       {result && (
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-600">
-            <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode})</p>
+            <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode}{result.colorCode ? ` / ${result.colorCode}${result.colorName ? " " + result.colorName : ""}` : ""})</p>
             <p className="mt-1">
               {result.toStore} 현재 재고 {fmtNum(result.toStock)}개 · 재고주수 {result.toStockWeeks >= 999 ? "판매없음" : `${Number(result.toStockWeeks).toFixed(1)}주`} ·
               목표수량 {fmtNum(result.desiredQty)}개 (충족 {fmtNum(result.fulfilledQty)}개{result.shortfall ? `, 부족 ${fmtNum(result.shortfall)}개` : ""})

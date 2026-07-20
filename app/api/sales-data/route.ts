@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSalesDataPayload } from "@/lib/weeklyDataProvider";
-import { loadLatestReportSnapshot } from "@/lib/salesDataUpload";
+import { loadLatestReportSnapshot } from "@/lib/salesDataSnapshot";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

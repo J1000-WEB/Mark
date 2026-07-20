@@ -138,23 +138,66 @@ export default function SalesDataDashboard() {
     setUploadError("");
     setUploadResult(null);
     try {
-      const form = new FormData();
-      const fieldMap: Record<string, string> = {
-        "재고": "재고",
-        "생산": "생산",
-        "기간판매(전주,2주)": "기간판매_전주_2주",
-        "기간판매(3주,4주)": "기간판매_3주_4주",
-        "재런칭": "재런칭",
-        "라인업": "라인업",
-      };
-      for (const [label, field] of Object.entries(fieldMap)) {
+      const XLSX = await import("xlsx");
+      const salesDataUpload = await import("@/lib/salesDataUpload");
+
+      async function readWorkbooks(label: string) {
         const files = uploadFiles[label] || [];
-        for (const file of files) form.append(field, file);
+        const wbs = [];
+        for (const file of files) {
+          const buf = await file.arrayBuffer();
+          wbs.push(XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true }));
+        }
+        return wbs;
       }
-      const res = await fetch("/api/sales-data-upload", { method: "POST", body: form });
+
+      const stockWbs = await readWorkbooks("재고");
+      const productionWbs = await readWorkbooks("생산");
+      const periodAWbs = await readWorkbooks("기간판매(전주,2주)");
+      const periodBWbs = await readWorkbooks("기간판매(3주,4주)");
+      const relaunchWbs = await readWorkbooks("재런칭");
+      const lineupWbs = await readWorkbooks("라인업");
+
+      if (!stockWbs.length || !productionWbs.length) {
+        throw new Error("재고 / 생산 파일은 필수입니다.");
+      }
+
+      const stockRows = stockWbs.flatMap((wb) => salesDataUpload.parseStockSheet(wb));
+      const production = salesDataUpload.mergeProductionMaps(productionWbs.map((wb) => salesDataUpload.parseProductionSheet(wb)));
+
+      let periodA;
+      let periodB: any = { byStyle: new Map(), byStyleColor: new Map() };
+      if (periodAWbs.length) {
+        periodA = salesDataUpload.mergePeriodSalesAggs(periodAWbs.map((wb) => salesDataUpload.parsePeriodSalesSheet(wb)));
+        if (periodBWbs.length) periodB = salesDataUpload.mergePeriodSalesAggs(periodBWbs.map((wb) => salesDataUpload.parsePeriodSalesSheet(wb)));
+      } else {
+        // 기간판매 파일이 없으면 Daily_Sales_History 기반 자동 집계를 서버에서 가져옵니다(작은 JSON).
+        const res = await fetch("/api/daily-history-period-sales", { cache: "no-store" });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "자동 기간판매 집계 조회 실패");
+        const byStyle = new Map<string, any>();
+        for (const [k, v] of Object.entries(data.byStyle || {})) byStyle.set(k, v);
+        periodA = { byStyle, byStyleColor: new Map() };
+      }
+
+      const relaunch = relaunchWbs.length ? salesDataUpload.mergeFlagSets(relaunchWbs.map((wb) => salesDataUpload.parseFlagSheetByStyle(wb, "재런칭"))) : new Set<string>();
+      const lineup = lineupWbs.length ? salesDataUpload.mergeLineupMaps(lineupWbs.map((wb) => salesDataUpload.parseLineupSheet(wb))) : new Map<string, string>();
+
+      if (!stockRows.length) throw new Error("재고 파일에서 데이터를 읽지 못했습니다.");
+
+      const inputs = { stockRows, production, periodA, periodB, relaunch, lineup };
+      const styleReport = salesDataUpload.buildStyleReport(inputs);
+      const colorReport = salesDataUpload.buildColorReport(inputs);
+
+      // 원본 파일이 아니라 계산이 끝난 작은 결과만 서버로 보냅니다 (요청 용량 제한 회피).
+      const res = await fetch("/api/sales-data-save-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleReport, colorReport, uploadedStock: true, uploadedProduction: true }),
+      });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "업로드 처리 실패");
-      setUploadResult(data);
+      if (!data.ok) throw new Error(data.error || "저장 실패");
+      setUploadResult({ ...data, stockRowsParsed: stockRows.length, productionStylesParsed: production.size });
       await load("", type);
       fetch("/api/upload-status", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (d.ok) setUploadStatuses(d); }).catch(() => {});
     } catch (e: any) {
@@ -294,8 +337,8 @@ export default function SalesDataDashboard() {
           {showUpload && (
             <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4">
               <p className="text-xs font-semibold text-slate-500">
-                재고 / 생산 / 기간판매(전주,2주)는 필수예요. 기간판매(3주,4주) · 재런칭 · 라인업은 선택이에요(안 올리면 이전 값 유지).
-                업로드하면 계산해서 <b>스냅샷으로 저장</b>되고, 다음부터는 페이지 열 때마다 다시 계산하지 않고 저장된 걸 바로 보여줘요.
+                재고 / 생산은 필수예요. 기간판매(전주,2주)/(3주,4주)는 <b>선택</b>이에요 — 안 올리면 이미 쌓고 있는 Daily_Sales_History로 자동 계산해요(단, 컬러별 세부 수치는 기간판매 파일을 올렸을 때가 더 정확해요). 재런칭·라인업도 선택이에요(안 올리면 이전 값 유지).
+                <br />파일은 <b>브라우저에서 바로 계산</b>돼서 서버로 원본 파일 전체를 보내지 않아요(용량 큰 파일도 안전해요). 업로드하면 계산해서 <b>스냅샷으로 저장</b>되고, 다음부터는 페이지 열 때마다 다시 계산하지 않고 저장된 걸 바로 보여줘요.
               </p>
               {uploadStatuses && (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-3">

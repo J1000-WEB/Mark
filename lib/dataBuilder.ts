@@ -2268,7 +2268,18 @@ function buildPerformanceSummary(rows: any[]) {
 
 // MARK 6.9: 점포에서 직접 요청한 RT — 품번+요청점포를 받아서 어디서 이동하면 좋을지 제안합니다.
 // 호조/부진 자동 엔진과 별개로, 담당자가 수동으로 입력한 요청 1건에 대해 즉시 계산합니다.
-export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number) {
+// 특정 매장 row에서, 주어진 칼라코드에 해당하는 재고/주간판매를 skuRows에서 합산합니다.
+// (금주/전주 시트는 칼라+사이즈별로 skuRows에 상세를 보존하고 있습니다.)
+function colorLevelStats(row: any, colorCode: string) {
+  const target = text(colorCode).toUpperCase();
+  const matches = (row.skuRows || []).filter((s: any) => text(s.color).toUpperCase() === target);
+  const stock = matches.reduce((sum: number, s: any) => sum + Number(s.stock || 0), 0);
+  const weekNet = matches.reduce((sum: number, s: any) => sum + Number(s.weekNet || 0), 0);
+  const colorName = matches[0]?.colorName || "";
+  return { stock, weekNet, colorName, found: matches.length > 0 };
+}
+
+export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number, colorInput?: string) {
   const styleCode = text(styleCodeInput).toUpperCase();
   if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
   if (!text(toStoreInput)) return { ok: false, error: "요청 점포를 입력해주세요." };
@@ -2287,13 +2298,24 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 금주/전주 시트에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
   }
 
+  const colorCode = text(colorInput).toUpperCase();
+  const useColor = !!colorCode;
+  if (useColor) {
+    const anyColorMatch = coreRows.some((r: any) => colorLevelStats(r, colorCode).found);
+    if (!anyColorMatch) {
+      return { ok: false, error: `품번 "${styleCodeInput}"에서 칼라 "${colorInput}"를 찾지 못했습니다. 칼라코드를 다시 확인해주세요.` };
+    }
+  }
+
   const toKey = normalizeStoreKey(toStoreInput);
   const toRow = coreRows.find((r: any) => normalizeStoreKey(r.storeName) === toKey);
+  const toColorStats = toRow && useColor ? colorLevelStats(toRow, colorCode) : null;
   const productName = coreRows[0]?.productName || "";
   const toStoreName = toRow?.storeName || toStoreInput;
-  const toStock = Number(toRow?.storeStock || 0);
-  const toWeekNet = Number(toRow?.weekNet || 0);
+  const toStock = useColor ? (toColorStats?.stock || 0) : Number(toRow?.storeStock || 0);
+  const toWeekNet = useColor ? (toColorStats?.weekNet || 0) : Number(toRow?.weekNet || 0);
   const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;
+  const resolvedColorName = useColor ? (toColorStats?.colorName || coreRows.map((r: any) => colorLevelStats(r, colorCode).colorName).find(Boolean) || "") : "";
 
   // 호조 엔진과 동일한 "목표재고 3주" 기준을 기본값으로 사용하되, 사용자가 수량을 직접 지정하면 그걸 우선합니다.
   const RT_TARGET_STOCK_WEEKS = 3;
@@ -2305,15 +2327,16 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   const senderCandidates = coreRows
     .filter((r: any) => normalizeStoreKey(r.storeName) !== toKey)
     .map((r: any) => {
-      const weekNet = Number(r.weekNet || 0);
-      const stock = Number(r.storeStock || 0);
+      const colorStats = useColor ? colorLevelStats(r, colorCode) : null;
+      const weekNet = useColor ? (colorStats?.weekNet || 0) : Number(r.weekNet || 0);
+      const stock = useColor ? (colorStats?.stock || 0) : Number(r.storeStock || 0);
       const targetStock = Math.max(1, Math.ceil(weekNet * RT_TARGET_STOCK_WEEKS));
       const safeStock = Math.max(3, targetStock, Math.ceil(weekNet * 2));
       const transferable = Math.max(0, Math.floor(stock - safeStock));
       const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
-      return { storeName: r.storeName, stock, weekNet, stockWeeks, transferable };
+      return { storeName: r.storeName, stock, weekNet, stockWeeks, transferable, hasColor: !useColor || !!colorStats?.found };
     })
-    .filter((r) => r.transferable > 0)
+    .filter((r) => r.transferable > 0 && r.hasColor)
     .sort((a, b) => b.transferable - a.transferable || b.stockWeeks - a.stockWeeks);
 
   let remaining = desiredQty;
@@ -2325,6 +2348,8 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
 
     suggestions.push({
       styleCode,
+      colorCode: useColor ? colorCode : "",
+      colorName: resolvedColorName,
       productName,
       fromStore: s.storeName,
       toStore: toStoreName,
@@ -2336,7 +2361,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
       moveType: "점포요청",
       companyRank: 0,
       reason: [
-        `${toStoreName} 매장에서 품번 ${styleCode} 이동을 직접 요청했습니다.`,
+        `${toStoreName} 매장에서 품번 ${styleCode}${useColor ? `(칼라 ${colorCode}${resolvedColorName ? " " + resolvedColorName : ""})` : ""} 이동을 직접 요청했습니다.`,
         `목표 수량은 ${desiredQty}개이며, 이 중 ${qty}개를 ${s.storeName}에서 이동하는 안입니다.`,
         `${s.storeName}의 현재 재고는 ${Math.round(s.stock).toLocaleString("ko-KR")}개(재고주수 ${s.stockWeeks >= 999 ? "판매없음" : `${s.stockWeeks.toFixed(1)}주`})로, 자체 안전재고를 제외한 이동 가능 여유분입니다.`,
       ].join("\n"),
@@ -2347,6 +2372,8 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   return {
     ok: true,
     styleCode,
+    colorCode: useColor ? colorCode : "",
+    colorName: resolvedColorName,
     productName,
     toStore: toStoreName,
     toStock,

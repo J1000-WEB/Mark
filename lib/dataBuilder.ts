@@ -1648,7 +1648,11 @@ function mergeRtRows(performanceRows: any[], rtRows: any[]) {
         productName: existing.productName || rt.productName,
         toStore: existing.toStore || rt.toStore,
         channel: existing.channel || rt.channel,
-        rtQty: Number(existing.rtQty || 0) + Number(rt.rtQty || 0),
+        // MARK 6.17.1: 같은 RT 건이 Promotion_Performance와 RT_Result 양쪽에 각각 기록되어 있어서,
+        // 예전엔 두 값을 더해서 수량이 2배로 집계되는 버그가 있었습니다.
+        // RT_Result가 실제 수량 컬럼을 그대로 합산한 더 신뢰도 높은 값이라 이걸 우선하고,
+        // 혹시 비어있으면(0이면) 기존 값을 그대로 씁니다 — 더하지 않습니다.
+        rtQty: Number(rt.rtQty || 0) || Number(existing.rtQty || 0),
         fromStores: Array.from(fromStores),
         fromStore: Array.from(fromStores).join(", "),
         toStores: Array.from(new Set([...(existing.toStores || []), ...(rt.toStores || []), existing.toStore, rt.toStore].filter(Boolean))),

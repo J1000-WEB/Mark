@@ -240,7 +240,117 @@ export function parsePeriodSalesSheet(workbook: XLSX.WorkBook): PeriodSalesAgg {
   return { byStyle, byStyleColor };
 }
 
-// ================= 재런칭 / 라인업 / 신상리스트 (기준→ 시트) =================
+// ================= 여러 파일(용량 커서 나뉜 파트) 병합 유틸 =================
+// ERP에서 용량이 큰 파일을 자동으로 여러 개로 쪼개서 내려주는 경우, 각 파트를 따로 파싱한 뒤
+// 이 함수들로 하나로 합칩니다.
+export function mergeProductionMaps(maps: Map<string, ProductionAgg>[]): Map<string, ProductionAgg> {
+  const merged = new Map<string, ProductionAgg>();
+  for (const m of maps) {
+    for (const [styleCode, agg] of m.entries()) {
+      if (!merged.has(styleCode)) {
+        merged.set(styleCode, { ...agg });
+        continue;
+      }
+      const cur = merged.get(styleCode)!;
+      cur.planned += agg.planned;
+      cur.received += agg.received;
+      cur.sold += agg.sold;
+      cur.stock += agg.stock;
+      if (!cur.firstInDate && agg.firstInDate) cur.firstInDate = agg.firstInDate;
+      if (!cur.firstOutDate && agg.firstOutDate) cur.firstOutDate = agg.firstOutDate;
+    }
+  }
+  return merged;
+}
+
+function mergeCounterMap(maps: Map<string, { period1Qty: number; period1Amount: number; period2Qty: number; period2Amount: number }>[]) {
+  const merged = new Map<string, { period1Qty: number; period1Amount: number; period2Qty: number; period2Amount: number }>();
+  for (const m of maps) {
+    for (const [key, v] of m.entries()) {
+      if (!merged.has(key)) {
+        merged.set(key, { ...v });
+        continue;
+      }
+      const cur = merged.get(key)!;
+      cur.period1Qty += v.period1Qty;
+      cur.period1Amount += v.period1Amount;
+      cur.period2Qty += v.period2Qty;
+      cur.period2Amount += v.period2Amount;
+    }
+  }
+  return merged;
+}
+
+export function mergePeriodSalesAggs(aggs: PeriodSalesAgg[]): PeriodSalesAgg {
+  return {
+    byStyle: mergeCounterMap(aggs.map((a) => a.byStyle)),
+    byStyleColor: mergeCounterMap(aggs.map((a) => a.byStyleColor)),
+  };
+}
+
+export function mergeFlagSets(sets: Set<string>[]): Set<string> {
+  const merged = new Set<string>();
+  for (const s of sets) for (const v of s) merged.add(v);
+  return merged;
+}
+
+export function mergeLineupMaps(maps: Map<string, string>[]): Map<string, string> {
+  const merged = new Map<string, string>();
+  for (const m of maps) for (const [k, v] of m.entries()) merged.set(k, v);
+  return merged;
+}
+
+
+// ================= Daily_Sales_History 기반 자동 집계 (기간판매 파일 업로드 대체) =================
+// MARK 6.17: 기간판매(전주,2주)/(3주,4주) 파일을 매주 업로드하지 않아도, 이미 쌓고 있는
+// Daily_Sales_History로 같은 걸 자동 계산합니다. 수량은 그대로 신뢰하고, 금액은
+// Style_Price_History의 그 시점 실제 평균단가 × 수량으로 다시 계산합니다(저장된 금액은 안 씀).
+export function buildPeriodSalesFromDailyHistory(
+  dailyFlatRows: { date: string; storeName: string; styleCode: string; qty: number }[],
+  priceMapsByDate: Map<string, Map<string, number>>,
+  todayKey: string
+): PeriodSalesAgg {
+  const addDays = (dateKey: string, days: number) => {
+    const d = new Date(`${dateKey}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const windows = {
+    period1: [addDays(todayKey, -6), todayKey],
+    period2: [addDays(todayKey, -13), addDays(todayKey, -7)],
+    period3: [addDays(todayKey, -20), addDays(todayKey, -14)],
+    period4: [addDays(todayKey, -27), addDays(todayKey, -21)],
+  };
+
+  const byStyle = new Map<string, { period1Qty: number; period1Amount: number; period2Qty: number; period2Amount: number; period3Qty?: number; period4Qty?: number }>();
+
+  for (const r of dailyFlatRows) {
+    if (!r.styleCode || !r.date) continue;
+    const price = priceMapsByDate.get(r.date)?.get(r.styleCode) || 0;
+    const amount = r.qty * price;
+
+    if (!byStyle.has(r.styleCode)) {
+      byStyle.set(r.styleCode, { period1Qty: 0, period1Amount: 0, period2Qty: 0, period2Amount: 0, period3Qty: 0, period4Qty: 0 });
+    }
+    const agg = byStyle.get(r.styleCode)!;
+
+    if (r.date >= windows.period1[0] && r.date <= windows.period1[1]) {
+      agg.period1Qty += r.qty;
+      agg.period1Amount += amount;
+    } else if (r.date >= windows.period2[0] && r.date <= windows.period2[1]) {
+      agg.period2Qty += r.qty;
+      agg.period2Amount += amount;
+    } else if (r.date >= windows.period3[0] && r.date <= windows.period3[1]) {
+      agg.period3Qty = (agg.period3Qty || 0) + r.qty;
+    } else if (r.date >= windows.period4[0] && r.date <= windows.period4[1]) {
+      agg.period4Qty = (agg.period4Qty || 0) + r.qty;
+    }
+  }
+
+  return { byStyle, byStyleColor: new Map() };
+}
+
 export function parseFlagSheetByStyle(workbook: XLSX.WorkBook, label: string): Set<string> {
   const sheetName = workbook.SheetNames[0];
   const rows = sheetToRows(workbook, sheetName);
@@ -382,7 +492,21 @@ function buildColumnLayout(withColor: boolean) {
   cols.push("주간", "2주전", "3주전", "4주전");
   const stockStart = cols.length;
   cols.push("총재고", "물류", "물류(온)", "물류(오프)", "점포");
-  return { cols, lifecycleStart, rankStart, amountStart, qtyStart, stockStart };
+  const actionStart = cols.length;
+  cols.push("가용재고", "액션");
+  return { cols, lifecycleStart, rankStart, amountStart, qtyStart, stockStart, actionStart };
+}
+
+// MARK 6.17: 단순 규칙 기반 액션 라벨 (2단계 중 우선 반영분 — 매장별 등급 블록은 아직 미포함)
+function computeAvailableStockAndAction(stockTotal: number, weekQty: number, prevQty: number) {
+  const safetyStock = Math.ceil(weekQty * 1); // 1주치를 안전재고로 봄
+  const availableStock = Math.max(0, stockTotal - safetyStock);
+  let action = "정상";
+  if (stockTotal <= 0 && weekQty > 0) action = "품절 임박 · 입고 필요";
+  else if (weekQty === 0 && stockTotal > 0) action = "재고 소진 필요(판매 없음)";
+  else if (prevQty > 0 && weekQty > prevQty * 1.5 && availableStock < weekQty) action = "추가 발주 검토(수요 급증)";
+  else if (stockTotal > 0 && weekQty > 0 && stockTotal / weekQty >= 8) action = "재고 과다 · 이동/프로모션 검토";
+  return { availableStock, action };
 }
 
 function buildHeaderRows(withColor: boolean) {
@@ -479,6 +603,8 @@ export function buildStyleReport(inputs: ReportInputs) {
     row.push(pA?.period1Qty || 0, pA?.period2Qty || 0, pB?.period1Qty || 0, pB?.period2Qty || 0);
     // 재고
     row.push(master.stockTotal, master.stockOnline + master.stockOffline, master.stockOnline, master.stockOffline, Math.max(0, master.stockTotal - master.stockOnline - master.stockOffline));
+    const { availableStock, action } = computeAvailableStockAndAction(master.stockTotal, pA?.period1Qty || 0, pA?.period2Qty || 0);
+    row.push(availableStock, action);
 
     return row;
   });
@@ -560,6 +686,8 @@ export function buildColorReport(inputs: ReportInputs) {
     row.push(pA?.period1Amount || 0, pA?.period2Amount || 0, pct(pA?.period1Amount || 0, totalCompanyAmount));
     row.push(pA?.period1Qty || 0, pA?.period2Qty || 0, pB?.period1Qty || 0, pB?.period2Qty || 0);
     row.push(m.stockTotal, m.stockOnline + m.stockOffline, m.stockOnline, m.stockOffline, Math.max(0, m.stockTotal - m.stockOnline - m.stockOffline));
+    const { availableStock, action } = computeAvailableStockAndAction(m.stockTotal, pA?.period1Qty || 0, pA?.period2Qty || 0);
+    row.push(availableStock, action);
 
     return row;
   });

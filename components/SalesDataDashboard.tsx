@@ -94,7 +94,8 @@ export default function SalesDataDashboard() {
   const [sort, setSort] = useState<{ col: number; dir: SortDir } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<GroupState>({ "점포별 판매/재고": true });
   const [query, setQuery] = useState("");
-  const [uploadFiles, setUploadFiles] = useState<Record<string, File | null>>({});
+  const [uploadFiles, setUploadFiles] = useState<Record<string, File[]>>({});
+  const [dragOverLabel, setDragOverLabel] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [uploadError, setUploadError] = useState("");
@@ -147,8 +148,8 @@ export default function SalesDataDashboard() {
         "라인업": "라인업",
       };
       for (const [label, field] of Object.entries(fieldMap)) {
-        const file = uploadFiles[label];
-        if (file) form.append(field, file);
+        const files = uploadFiles[label] || [];
+        for (const file of files) form.append(field, file);
       }
       const res = await fetch("/api/sales-data-upload", { method: "POST", body: form });
       const data = await res.json();
@@ -314,25 +315,64 @@ export default function SalesDataDashboard() {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                {["재고", "생산", "기간판매(전주,2주)", "기간판매(3주,4주)", "재런칭", "라인업"].map((label) => (
-                  <label key={label} className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-3">
-                    <span className="text-xs font-black text-slate-700">
-                      {label} {["재고", "생산", "기간판매(전주,2주)"].includes(label) && <span className="text-rose-600">*</span>}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={(e) => setUploadFiles((prev) => ({ ...prev, [label]: e.target.files?.[0] || null }))}
-                      className="text-[11px]"
-                    />
-                    {uploadFiles[label] && <span className="truncate text-[10px] font-bold text-emerald-600">{uploadFiles[label]!.name}</span>}
-                  </label>
-                ))}
+                {["재고", "생산", "기간판매(전주,2주)", "기간판매(3주,4주)", "재런칭", "라인업"].map((label) => {
+                  const files = uploadFiles[label] || [];
+                  const isDragOver = dragOverLabel === label;
+                  return (
+                    <div
+                      key={label}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverLabel(label); }}
+                      onDragLeave={() => setDragOverLabel((cur) => (cur === label ? "" : cur))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverLabel("");
+                        const dropped = Array.from(e.dataTransfer.files || []);
+                        if (dropped.length) setUploadFiles((prev) => ({ ...prev, [label]: [...(prev[label] || []), ...dropped] }));
+                      }}
+                      className={`flex flex-col gap-1 rounded-xl border-2 border-dashed p-3 transition ${isDragOver ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
+                    >
+                      <span className="text-xs font-black text-slate-700">
+                        {label} {["재고", "생산"].includes(label) && <span className="text-rose-600">*</span>}
+                      </span>
+                      <label className="cursor-pointer text-[11px] font-black text-blue-600 underline">
+                        파일 선택 (여러 개 가능)
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          multiple
+                          onChange={(e) => {
+                            const picked = Array.from(e.target.files || []);
+                            if (picked.length) setUploadFiles((prev) => ({ ...prev, [label]: [...(prev[label] || []), ...picked] }));
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-[10px] text-slate-400">여기로 드래그해서 놓아도 돼요 (용량 커서 여러 파일로 나뉜 경우 다 올려주세요)</p>
+                      {files.length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {files.map((f, i) => (
+                            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-1 text-[10px] font-bold text-emerald-600">
+                              <span className="truncate">{f.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setUploadFiles((prev) => ({ ...prev, [label]: (prev[label] || []).filter((_, idx) => idx !== i) }))}
+                                className="shrink-0 text-red-500"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <button
                 type="button"
                 onClick={runUpload}
-                disabled={uploading || !uploadFiles["재고"] || !uploadFiles["생산"] || !uploadFiles["기간판매(전주,2주)"]}
+                disabled={uploading || !(uploadFiles["재고"]?.length) || !(uploadFiles["생산"]?.length)}
                 className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-40"
               >
                 {uploading ? "계산 중..." : "계산해서 저장"}

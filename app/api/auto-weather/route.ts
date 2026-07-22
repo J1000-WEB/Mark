@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { saveSeoulWeatherSnapshot } from "@/lib/openWeather";
+import { saveAllRegionsWeatherSnapshot } from "@/lib/openWeather";
+import { listDistinctRegions } from "@/lib/storeRegion";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,7 +15,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const result = await saveSeoulWeatherSnapshot();
+    // MARK 6.21: 점포형태 시트에 등록된 매장들의 지역(시/도)을 전부 모아서 각각 날씨를 갱신합니다.
+    const regions = await listDistinctRegions().catch(() => ["서울"]);
+    const result = await saveAllRegionsWeatherSnapshot(regions.length ? regions : ["서울"]);
     return NextResponse.json(
       { ok: true, ...result },
       { headers: { "Cache-Control": "no-store, max-age=0" } }
@@ -27,3 +30,4 @@ export async function GET(req: Request) {
     );
   }
 }
+

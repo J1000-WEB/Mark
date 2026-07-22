@@ -1,6 +1,7 @@
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { isCoreOfflineSalesStore, normalizeStoreKey } from "@/lib/dataBuilder";
+import { getWeatherForStoreOnDate } from "@/lib/storeRegion";
 
 // MARK 6.20: 일간(매장) AI 브리핑 — 전사 + 점포별.
 // 요일별 비교 규칙 (평일/전환일/주말 그룹이 바뀌는 경계에서는 "어제"가 아니라 "전주 같은 요일"과 비교):
@@ -35,8 +36,10 @@ export function getComparisonDateForDaily(dateKey: string): { compareDate: strin
   return { compareDate: addDays(dateKey, -1), compareLabel: "어제" };
 }
 
-function todayDateKey() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+function yesterdayDateKey() {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  d.setDate(d.getDate() - 1);
+  return ymd(d);
 }
 
 async function loadDailyFlatRows() {
@@ -84,7 +87,7 @@ function topProductMovers(rows: FlatRow[], targetDate: string, compareDate: stri
 }
 
 export async function buildDailyStoreBriefing(storeName?: string, dateOverride?: string) {
-  const targetDate = dateOverride || todayDateKey();
+  const targetDate = dateOverride || yesterdayDateKey();
   const { compareDate, compareLabel } = getComparisonDateForDaily(targetDate);
 
   const allRows = await loadDailyFlatRows();
@@ -109,6 +112,14 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   }
   if (lines.length === 1) lines.push("아직 상품별로 비교할 만한 전일 실적이 충분하지 않아요.");
 
+  let weather: any = null;
+  if (storeName) {
+    weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
+    if (weather) {
+      lines.push(`${storeName}의 오늘 날씨는 ${weather.weather}(최고 ${weather.maxTemp}°/최저 ${weather.minTemp}°, 강수확률 ${weather.rainChance}%)이었어요.`);
+    }
+  }
+
   return {
     scope: scopeLabel,
     targetDate,
@@ -119,6 +130,7 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
     changeRate,
     bestProduct: best || null,
     worstProduct: worst || null,
+    weather,
     briefing: lines,
   };
 }

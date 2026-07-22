@@ -7,8 +7,28 @@ export const OPENWEATHER_API_KEY = "a78c5c40b7c18d95d057f5ad1878a741";
 
 const WEATHER_SPREADSHEET_ID = "12pDes6F0Go356pXvXNZx2egifDB4tsY2K915JN_K0Lg";
 const SHEET_NAME = "Weather_History";
-const CITY_QUERY = "Seoul,KR";
-const REGION_LABEL = "서울";
+
+// MARK 6.21: 매장이 여러 시/도에 흩어져 있어서, 시/도별로 대표 도시를 하나씩 잡아
+// OpenWeather를 조회합니다. (점포형태 시트 K열의 "지역"과 매칭)
+export const REGION_CITY_QUERY: Record<string, string> = {
+  "서울": "Seoul,KR",
+  "경기": "Suwon,KR",
+  "인천": "Incheon,KR",
+  "강원": "Chuncheon,KR",
+  "충북": "Cheongju,KR",
+  "충남": "Cheonan,KR",
+  "대전": "Daejeon,KR",
+  "전북": "Jeonju,KR",
+  "전남": "Yeosu,KR",
+  "광주": "Gwangju,KR",
+  "경북": "Pohang,KR",
+  "경남": "Changwon,KR",
+  "대구": "Daegu,KR",
+  "부산": "Busan,KR",
+  "울산": "Ulsan,KR",
+  "세종": "Sejong,KR",
+  "제주": "Jeju,KR",
+};
 
 export const WEATHER_HEADER = [
   "날짜",
@@ -101,7 +121,7 @@ function parseRows(rows: any[][]): WeatherRecord[] {
     .map((row) => ({
       date: text(row[0]),
       source: text(row[1]) === "actual" ? "actual" as const : "forecast" as const,
-      region: text(row[2]) || REGION_LABEL,
+      region: text(row[2]) || "서울",
       maxTemp: num(row[3]),
       minTemp: num(row[4]),
       weather: text(row[5]),
@@ -130,13 +150,13 @@ function toRow(record: WeatherRecord) {
   ];
 }
 
-async function fetchOpenWeatherForecast(): Promise<WeatherRecord[]> {
+async function fetchOpenWeatherForecast(cityQuery: string, regionLabel: string): Promise<WeatherRecord[]> {
   if (!hasApiKey()) {
     throw new Error("lib/openWeather.ts의 OPENWEATHER_API_KEY에 API Key를 넣어주세요.");
   }
 
   const url = new URL("https://api.openweathermap.org/data/2.5/forecast");
-  url.searchParams.set("q", CITY_QUERY);
+  url.searchParams.set("q", cityQuery);
   url.searchParams.set("appid", OPENWEATHER_API_KEY);
   url.searchParams.set("units", "metric");
   url.searchParams.set("lang", "en");
@@ -184,7 +204,7 @@ async function fetchOpenWeatherForecast(): Promise<WeatherRecord[]> {
       return {
         date,
         source: "forecast" as const,
-        region: REGION_LABEL,
+        region: regionLabel,
         maxTemp: Math.round(Math.max(...bucket.temps)),
         minTemp: Math.round(Math.min(...bucket.temps)),
         weather,
@@ -204,54 +224,80 @@ export async function readWeatherHistory() {
   return parseRows(rows);
 }
 
-export async function saveSeoulWeatherSnapshot() {
+export async function saveAllRegionsWeatherSnapshot(regions: string[]) {
   await ensureSheetExistsById(WEATHER_SPREADSHEET_ID, SHEET_NAME, WEATHER_HEADER);
 
   const existing = await readWeatherHistory();
   const yesterday = ymd(kstDate(-1));
   const actualRows = existing.filter((row) => row.source === "actual");
   const forecastRows = existing.filter((row) => row.source === "forecast");
+  const allNewForecasts: WeatherRecord[] = [];
+  const failedRegions: string[] = [];
 
-  // MARK 6.9.1: 크론이 며칠 못 돌았거나 스킵된 날이 있어도, 마지막 확정일 다음날부터
-  // 어제까지 밀린 날짜를 전부 한 번에 확정(actual) 처리해서 따라잡습니다.
-  // (기존엔 "어제" 딱 하루만 확인해서, 며칠 건너뛰면 중간 날짜가 영영 유실됐습니다.)
-  const lastActualDate = actualRows
-    .filter((row) => row.region === REGION_LABEL)
-    .map((row) => row.date)
-    .sort()
-    .pop();
+  const uniqueRegions = Array.from(new Set(regions.length ? regions : ["서울"]));
 
-  const yesterdayDate = new Date(`${yesterday}T00:00:00`);
-  const cursorStart = lastActualDate ? new Date(`${lastActualDate}T00:00:00`) : new Date(yesterdayDate);
-  if (lastActualDate) cursorStart.setDate(cursorStart.getDate() + 1);
-
-  for (const cursor = cursorStart; cursor <= yesterdayDate; cursor.setDate(cursor.getDate() + 1)) {
-    const dateKey = ymd(cursor);
-    const alreadyActual = actualRows.some((row) => row.date === dateKey && row.region === REGION_LABEL);
-    if (alreadyActual) continue;
-
-    const forecastForDate = forecastRows
-      .filter((row) => row.date === dateKey && row.region === REGION_LABEL)
-      .sort((a, b) => text(b.savedAt).localeCompare(text(a.savedAt)))[0];
-    if (forecastForDate) {
-      actualRows.push({ ...forecastForDate, source: "actual", savedAt: nowKST() });
+  for (const region of uniqueRegions) {
+    const cityQuery = REGION_CITY_QUERY[region];
+    if (!cityQuery) {
+      failedRegions.push(`${region}(매핑없음)`);
+      continue;
     }
-    // 예보 기록조차 없는 날짜(더 큰 공백)는 OpenWeather 무료 API로는 과거 실측치를 못 가져오므로 건너뜁니다.
+
+    // MARK 6.9.1 로직을 지역별로 그대로 적용: 마지막 확정일 다음날부터 어제까지 밀린 날짜를 따라잡습니다.
+    const lastActualDate = actualRows
+      .filter((row) => row.region === region)
+      .map((row) => row.date)
+      .sort()
+      .pop();
+
+    const yesterdayDate = new Date(`${yesterday}T00:00:00`);
+    const cursorStart = lastActualDate ? new Date(`${lastActualDate}T00:00:00`) : new Date(yesterdayDate);
+    if (lastActualDate) cursorStart.setDate(cursorStart.getDate() + 1);
+
+    for (const cursor = cursorStart; cursor <= yesterdayDate; cursor.setDate(cursor.getDate() + 1)) {
+      const dateKey = ymd(cursor);
+      const alreadyActual = actualRows.some((row) => row.date === dateKey && row.region === region);
+      if (alreadyActual) continue;
+
+      const forecastForDate = forecastRows
+        .filter((row) => row.date === dateKey && row.region === region)
+        .sort((a, b) => text(b.savedAt).localeCompare(text(a.savedAt)))[0];
+      if (forecastForDate) {
+        actualRows.push({ ...forecastForDate, source: "actual", savedAt: nowKST() });
+      }
+    }
+
+    try {
+      const forecasts = await fetchOpenWeatherForecast(cityQuery, region);
+      allNewForecasts.push(...forecasts);
+    } catch (error: any) {
+      console.error(`Weather fetch failed for region ${region}:`, error);
+      failedRegions.push(`${region}(${error?.message || "실패"})`);
+    }
   }
 
-  const forecasts = await fetchOpenWeatherForecast();
-  const rows = [WEATHER_HEADER, ...actualRows.sort((a, b) => a.date.localeCompare(b.date)).map(toRow), ...forecasts.map(toRow)];
+  const rows = [
+    WEATHER_HEADER,
+    ...actualRows.sort((a, b) => a.date.localeCompare(b.date) || a.region.localeCompare(b.region)).map(toRow),
+    ...allNewForecasts.map(toRow),
+  ];
   const paddedRows = [...rows];
   while (paddedRows.length < 120) paddedRows.push(new Array(WEATHER_HEADER.length).fill(""));
 
-  // 기존 예보 행이 더 많았던 경우를 대비해 A:K 일부를 빈 행으로 같이 덮어씁니다.
   await updateValuesById(WEATHER_SPREADSHEET_ID, `'${SHEET_NAME}'!A1:K${paddedRows.length}`, paddedRows);
 
   return {
     sheetName: SHEET_NAME,
     savedAt: nowKST(),
+    regions: uniqueRegions,
+    failedRegions,
     actualCount: actualRows.length,
-    forecastCount: forecasts.length,
-    records: [...actualRows, ...forecasts],
+    forecastCount: allNewForecasts.length,
+    records: [...actualRows, ...allNewForecasts],
   };
+}
+
+// 하위호환: 기존에 "서울"만 갱신하던 호출부가 있으면 그대로 동작하도록 남겨둡니다.
+export async function saveSeoulWeatherSnapshot() {
+  return saveAllRegionsWeatherSnapshot(["서울"]);
 }

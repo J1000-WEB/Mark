@@ -9,7 +9,7 @@ import {
   replaceSheetValuesById,
   updateValuesById,
 } from "@/lib/googleSheets";
-import { getSavedWeeklyTarget } from "@/lib/weeklyTarget";
+import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
 
 type SalesType = "style" | "color";
 type Row = any[];
@@ -313,6 +313,7 @@ function buildStoreSummaryFromDailySales(rows: DailyStoreSaleRecord[], selected:
       weekRate: weekTarget ? (weekSales / weekTarget) * 100 : 0,
       monthSales,
       monthTarget: 0,
+      monthTargetAvailable: false,
       monthRate: 0,
     };
   }).filter((r) => r.weekSales || r.compareWeekSales || r.monthSales).sort((a, b) => b.weekSales - a.weekSales);
@@ -1586,7 +1587,7 @@ async function buildWeeklyAiBriefing(params: {
 
   try {
     const { readSpecialOfferSheet } = await import("@/lib/specialOfferWeek");
-    const { rows, headerIdx } = await readSpecialOfferSheet();
+    const { rows, headerRowIdx: headerIdx } = await readSpecialOfferSheet();
     if (headerIdx >= 0 && rows.length > headerIdx + 1) {
       const count = rows.length - headerIdx - 1;
       if (count > 0) {
@@ -1631,16 +1632,28 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   // 이제는 일_전일!I열에서 주차별로 캡처해둔 스냅샷(Weekly_Target_History)에서, 지금 보는 주(selected.week)와
   // 정확히 일치하는 주차 목표만 사용합니다. 저장된 게 없으면 목표 없이("-") 보여줍니다.
   const savedWeeklyTarget = await getSavedWeeklyTarget(selected.week).catch(() => null);
+  const currentMonthKey = (selected.analysisEnd || selected.week || "").slice(0, 7);
+  const savedMonthlyTarget = currentMonthKey ? await getSavedMonthlyTarget(currentMonthKey).catch(() => null) : null;
   for (const row of dailyStoreSummary.current) {
     const matched = savedWeeklyTarget?.byStore.get(row.storeName);
     row.weekTarget = matched || 0;
     row.weekTargetAvailable = !!savedWeeklyTarget;
     row.weekRate = row.weekTarget ? (Number(row.weekSales || 0) / row.weekTarget) * 100 : 0;
+
+    const matchedMonth = savedMonthlyTarget?.byStore.get(row.storeName);
+    row.monthTarget = matchedMonth || 0;
+    row.monthTargetAvailable = !!savedMonthlyTarget;
+    row.monthRate = row.monthTarget ? (Number(row.monthSales || 0) / row.monthTarget) * 100 : 0;
   }
   const weeklyTargetSummary = {
     available: !!savedWeeklyTarget,
     weekMonday: selected.week,
     companyTarget: savedWeeklyTarget?.companyTarget || 0,
+  };
+  const monthlyTargetSummary = {
+    available: !!savedMonthlyTarget,
+    monthKey: currentMonthKey,
+    companyTarget: savedMonthlyTarget?.companyTarget || 0,
   };
 
   // 금주/전주 시트의 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다.
@@ -1678,6 +1691,7 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
       current: dailyStoreSummary.current,
       compare: dailyStoreSummary.compare,
       weeklyTargetSummary,
+      monthlyTargetSummary,
       companyTopProducts: productSummary.companyTopProducts,
       storeTopProducts: productSummary.storeTopProducts,
       productStoreNames: dailyStoreSummary.productStoreNames,

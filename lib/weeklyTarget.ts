@@ -16,6 +16,8 @@ import {
 const DAILY_PREV_SHEET = "일_전일";
 const TARGET_HISTORY_SHEET = "Weekly_Target_History";
 const TARGET_HISTORY_HEADER = ["주차(월요일)", "매장명", "주간목표", "주간실적(참고)", "저장시각"];
+const MONTHLY_TARGET_HISTORY_SHEET = "Monthly_Target_History";
+const MONTHLY_TARGET_HISTORY_HEADER = ["월(YYYY-MM)", "매장명", "월간목표", "저장시각"];
 const COMPANY_TOTAL_KEY = "__COMPANY_TOTAL__";
 
 function text(v: any) {
@@ -92,11 +94,26 @@ async function readLiveWeeklyTargetSnapshot() {
   }
   if (weekTargetCol < 0) return null;
 
+  // MARK 6.25: "월판매" 그룹의 "기준일목표(A)" 서브컬럼 = 월간목표. 이 목표가 적용되는 월은
+  // 기준일(baseDate)이 속한 달입니다.
+  const monthGroupStart = groupRow.findIndex((v) => v.includes("월판매"));
+  let monthTargetCol = -1;
+  if (monthGroupStart >= 0) {
+    let monthGroupEnd = groupRow.length;
+    for (let c = monthGroupStart + 1; c < groupRow.length; c++) {
+      if (groupRow[c]) { monthGroupEnd = c; break; }
+    }
+    for (let c = monthGroupStart; c < monthGroupEnd; c++) {
+      if (subRow[c].includes("기준일목표")) { monthTargetCol = c; break; }
+    }
+  }
+  const monthKey = baseDate.slice(0, 7); // "YYYY-MM"
+
   const dataStart = groupRowIdx + 2;
   const totalRowIdx = rows.findIndex((r, idx) => idx >= dataStart && text(r?.[1]).includes("합계"));
 
-  const stores: { storeName: string; weekTarget: number; weekActual: number }[] = [];
-  let companyTotal: { weekTarget: number; weekActual: number } | null = null;
+  const stores: { storeName: string; weekTarget: number; weekActual: number; monthTarget: number }[] = [];
+  let companyTotal: { weekTarget: number; weekActual: number; monthTarget: number } | null = null;
 
   for (let i = dataStart; i < rows.length; i++) {
     const row = rows[i];
@@ -105,34 +122,35 @@ async function readLiveWeeklyTargetSnapshot() {
     const storeName = text(row[channelNameCol]);
     const weekTarget = num(row[weekTargetCol]);
     const weekActual = weekActualCol >= 0 ? num(row[weekActualCol]) : 0;
+    const monthTarget = monthTargetCol >= 0 ? num(row[monthTargetCol]) : 0;
 
     if (isTotalRow) {
-      companyTotal = { weekTarget, weekActual };
+      companyTotal = { weekTarget, weekActual, monthTarget };
       continue;
     }
     if (!storeName || !weekTarget) continue;
-    stores.push({ storeName, weekTarget, weekActual });
+    stores.push({ storeName, weekTarget, weekActual, monthTarget });
   }
 
   if (!companyTotal && !stores.length) return null;
 
-  return { weekMonday, refreshedDate, baseDate, companyTotal, stores };
+  return { weekMonday, monthKey, refreshedDate, baseDate, companyTotal, stores };
 }
 
-// 스냅샷을 Weekly_Target_History에 upsert합니다(같은 주차+매장이면 최신값으로 교체).
+// 스냅샷을 Weekly_Target_History / Monthly_Target_History에 upsert합니다(같은 주차/월+매장이면 최신값으로 교체).
 export async function captureWeeklyTargetSnapshot() {
   const live = await readLiveWeeklyTargetSnapshot();
   if (!live) return { ok: false, reason: "일_전일 시트에서 유효한 주간목표를 읽지 못했습니다." };
 
   const historyId = getHistorySheetId();
+  const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+
+  // ---- 주간목표 저장 ----
   await ensureSheetExistsById(historyId, TARGET_HISTORY_SHEET, TARGET_HISTORY_HEADER);
   const existingRaw = await getSheetValuesById(historyId, TARGET_HISTORY_SHEET, "A:E").catch(() => []);
   const existingRows = (existingRaw || []).slice(1);
-
-  // 같은 주차의 기존 행은 제거하고, 새로 읽은 값으로 교체합니다. 작은 시트라 매번 전체를 깨끗하게 다시 씁니다.
   const keep = existingRows.filter((r) => text(r?.[0]) !== live.weekMonday);
 
-  const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
   const newRows: any[][] = [];
   if (live.companyTotal) {
     newRows.push([live.weekMonday, COMPANY_TOTAL_KEY, live.companyTotal.weekTarget, live.companyTotal.weekActual, savedAt]);
@@ -144,7 +162,36 @@ export async function captureWeeklyTargetSnapshot() {
   const { replaceSheetValuesById } = await import("@/lib/googleSheets");
   await replaceSheetValuesById(historyId, TARGET_HISTORY_SHEET, [TARGET_HISTORY_HEADER, ...keep, ...newRows]);
 
-  return { ok: true, weekMonday: live.weekMonday, refreshedDate: live.refreshedDate, storeCount: live.stores.length, hasCompanyTotal: !!live.companyTotal };
+  // ---- 월간목표 저장 ----
+  let monthlySaved = false;
+  if (live.monthKey) {
+    await ensureSheetExistsById(historyId, MONTHLY_TARGET_HISTORY_SHEET, MONTHLY_TARGET_HISTORY_HEADER);
+    const existingMonthlyRaw = await getSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, "A:D").catch(() => []);
+    const existingMonthlyRows = (existingMonthlyRaw || []).slice(1);
+    const keepMonthly = existingMonthlyRows.filter((r) => text(r?.[0]) !== live.monthKey);
+
+    const newMonthlyRows: any[][] = [];
+    if (live.companyTotal?.monthTarget) {
+      newMonthlyRows.push([live.monthKey, COMPANY_TOTAL_KEY, live.companyTotal.monthTarget, savedAt]);
+    }
+    for (const s of live.stores) {
+      if (s.monthTarget) newMonthlyRows.push([live.monthKey, s.storeName, s.monthTarget, savedAt]);
+    }
+    if (newMonthlyRows.length) {
+      await replaceSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, [MONTHLY_TARGET_HISTORY_HEADER, ...keepMonthly, ...newMonthlyRows]);
+      monthlySaved = true;
+    }
+  }
+
+  return {
+    ok: true,
+    weekMonday: live.weekMonday,
+    monthKey: live.monthKey,
+    refreshedDate: live.refreshedDate,
+    storeCount: live.stores.length,
+    hasCompanyTotal: !!live.companyTotal,
+    monthlySaved,
+  };
 }
 
 // 특정 주(월요일 기준)의 저장된 목표를 조회합니다. 없으면 null(=화면에서 "-" 처리).
@@ -174,6 +221,35 @@ export async function getSavedWeeklyTarget(weekMonday: string) {
 
     if (!found) return null;
     return { weekMonday, companyTarget, companyActual, byStore };
+  } catch {
+    return null;
+  }
+}
+
+// 특정 월(YYYY-MM)의 저장된 월간목표를 조회합니다. 없으면 null(=화면에서 "-" 처리).
+export async function getSavedMonthlyTarget(monthKey: string) {
+  try {
+    const historyId = getHistorySheetId();
+    const raw = await getSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, "A:D").catch(() => []);
+    const rows = (raw || []).slice(1);
+    let companyTarget = 0;
+    let found = false;
+    const byStore = new Map<string, number>();
+
+    for (const r of rows) {
+      if (text(r?.[0]) !== monthKey) continue;
+      const store = text(r?.[1]);
+      const target = num(r?.[2]);
+      found = true;
+      if (store === COMPANY_TOTAL_KEY) {
+        companyTarget = target;
+      } else if (store) {
+        byStore.set(store, target);
+      }
+    }
+
+    if (!found) return null;
+    return { monthKey, companyTarget, byStore };
   } catch {
     return null;
   }

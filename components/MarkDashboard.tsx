@@ -695,9 +695,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             </>
           ) : (
             <>
-              <Kpi title="월 목표" value={won(coreTotals.monthTarget)} tone="blue" />
+              <Kpi title="월 목표" value={dashboardData?.weekly?.monthlyTargetSummary?.available ? won(coreTotals.monthTarget) : "-"} tone="blue" />
               <Kpi title="월 누적 매출" value={won(coreTotals.monthSales)} sub={`전월 대비 ${pct(coreTotals.monthChange)}`} tone="green" />
-              <Kpi title="월 달성률" value={pct(coreTotals.monthRate)} tone="purple" />
+              <Kpi title="월 달성률" value={dashboardData?.weekly?.monthlyTargetSummary?.available ? pct(coreTotals.monthRate) : "-"} tone="purple" />
               <Kpi title="전년동월 대비" value={pct(coreTotals.yearMonthChange)} tone="orange" />
             </>
           )}

@@ -1532,6 +1532,74 @@ function productSummaryFromWeeklyPrice(rows: Row[]) {
   return { companyTopProducts, storeTopProducts };
 }
 
+function fmtWon(n: number) {
+  return `${Math.round(n).toLocaleString("ko-KR")}원`;
+}
+
+async function buildWeeklyAiBriefing(params: {
+  weekLabel: string;
+  weekSales: number;
+  compareWeekSales: number;
+  weeklyTargetSummary: { available: boolean; companyTarget: number };
+  storeRows: any[];
+  companyTopProducts: any[];
+}) {
+  const { weekLabel, weekSales, compareWeekSales, weeklyTargetSummary, storeRows, companyTopProducts } = params;
+  const lines: string[] = [];
+
+  if (weeklyTargetSummary.available && weeklyTargetSummary.companyTarget > 0) {
+    const rate = (weekSales / weeklyTargetSummary.companyTarget) * 100;
+    lines.push(`이번 주(${weekLabel}) 매출은 ${fmtWon(weekSales)}으로, 주간 목표(${fmtWon(weeklyTargetSummary.companyTarget)}) 대비 ${rate.toFixed(0)}% 달성했어요.`);
+  } else {
+    const changeRate = compareWeekSales ? ((weekSales - compareWeekSales) / compareWeekSales) * 100 : 0;
+    lines.push(`이번 주(${weekLabel}) 매출은 ${fmtWon(weekSales)}으로, 전주 대비 ${changeRate >= 0 ? "+" : ""}${changeRate.toFixed(1)}%예요.`);
+  }
+
+  const withTarget = storeRows.filter((r) => Number(r.weekTarget || 0) > 0);
+  if (withTarget.length >= 2) {
+    const sorted = [...withTarget].sort((a, b) => Number(a.weekRate || 0) - Number(b.weekRate || 0));
+    const worst = sorted[0];
+    const best = sorted[sorted.length - 1];
+    if (worst && best && worst.storeName !== best.storeName) {
+      lines.push(`${worst.storeName}이 목표 대비 ${Number(worst.weekRate || 0).toFixed(0)}%로 가장 부진했고, ${best.storeName}은 ${Number(best.weekRate || 0).toFixed(0)}%로 가장 좋았어요.`);
+    }
+  } else if (storeRows.length >= 2) {
+    const sorted = [...storeRows].sort((a, b) => Number(a.weekChangeRate || 0) - Number(b.weekChangeRate || 0));
+    const worst = sorted[0];
+    const best = sorted[sorted.length - 1];
+    if (worst && best && worst.storeName !== best.storeName) {
+      lines.push(`${worst.storeName}이 전주 대비 ${Number(worst.weekChangeRate || 0).toFixed(0)}%로 가장 부진했고, ${best.storeName}은 ${Number(best.weekChangeRate || 0).toFixed(0)}%로 가장 좋았어요.`);
+    }
+  }
+
+  const withPrev = companyTopProducts.filter((p) => p.hasPrevProductSales);
+  if (withPrev.length) {
+    const best = [...withPrev].sort((a, b) => Number(b.amountChangeRate || 0) - Number(a.amountChangeRate || 0))[0];
+    if (best && Number(best.amountChangeRate || 0) > 0) {
+      lines.push(`호조상품 ${best.styleCode}(${best.productName || ""})가 전주 대비 +${Number(best.amountChangeRate).toFixed(0)}%로 크게 늘었어요.`);
+    }
+    const worst = [...withPrev].sort((a, b) => Number(a.amountChangeRate || 0) - Number(b.amountChangeRate || 0))[0];
+    if (worst && Number(worst.amountChangeRate || 0) < 0) {
+      lines.push(`${worst.styleCode}(${worst.productName || ""})는 전주 대비 ${Number(worst.amountChangeRate).toFixed(0)}%로 줄었어요.`);
+    }
+  }
+
+  try {
+    const { readSpecialOfferSheet } = await import("@/lib/specialOfferWeek");
+    const { rows, headerIdx } = await readSpecialOfferSheet();
+    if (headerIdx >= 0 && rows.length > headerIdx + 1) {
+      const count = rows.length - headerIdx - 1;
+      if (count > 0) {
+        lines.push(`스페셜오퍼위크 세부일정이 ${count}건 등록되어 있어요. 자세한 건 판매전체상에서 확인해보세요.`);
+      }
+    }
+  } catch {
+    // 스페셜오퍼위크 조회 실패는 브리핑 생성 자체를 막지 않습니다.
+  }
+
+  return lines.length ? lines : [`이번 주(${weekLabel}) 매출은 ${fmtWon(weekSales)}이에요.`];
+}
+
 export async function getWeeklyDashboardPayload(requestedWeek = "", options: { refresh?: boolean } = {}) {
   const dbId = getDbSheetId();
   const mainId = getSheetId();
@@ -1619,10 +1687,14 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
         return total ? top10 / total : 0;
       })(),
       newTop10Entrants: [],
-      aiBriefing: [
-        `일간매출(26년) 기준 ${selected.analysisLabel} 오프라인 주간 매출을 조회했습니다.`,
-        `실시간 갱신은 MARK_DB 원본 2개 시트만 다시 조회하며 Weekly_history에는 저장하지 않습니다.`,
-      ],
+      aiBriefing: await buildWeeklyAiBriefing({
+        weekLabel: selected.analysisLabel,
+        weekSales: aggregation.weekSales,
+        compareWeekSales: aggregation.compareWeekSales,
+        weeklyTargetSummary,
+        storeRows: dailyStoreSummary.current,
+        companyTopProducts: productSummary.companyTopProducts,
+      }),
     },
     inventory: {},
     sources: {

@@ -1291,6 +1291,7 @@ export default function InventoryDashboard() {
   const [priceMeta, setPriceMeta] = useState<any>(null);
   const [priceCapturing, setPriceCapturing] = useState(false);
   const [priceStatus, setPriceStatus] = useState("");
+  const [uploadStatuses, setUploadStatuses] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -1304,6 +1305,11 @@ export default function InventoryDashboard() {
     fetch("/api/style-price-manual-capture", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.ok) setPriceMeta(d.meta); })
+      .catch(() => {});
+
+    fetch("/api/upload-status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setUploadStatuses(d); })
       .catch(() => {});
   }, []);
 
@@ -1380,7 +1386,13 @@ export default function InventoryDashboard() {
           <div>
             <p className="text-xs font-bold text-slate-500">품번별 실제 평균단가 (Style_Price_History)</p>
             <p className="mt-1 text-sm font-black text-slate-900">
-              {priceMeta ? `마지막 갱신: ${priceMeta.weekKey} 주 · ${priceMeta.savedAt} · 품번 ${priceMeta.styleCount}개` : "아직 갱신된 적 없음"}
+              {priceMeta ? (() => {
+                const start = new Date(`${priceMeta.weekKey}T00:00:00`);
+                const end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+                return `적용 기준: ${fmt(start)}~${fmt(end)} 실적 · 갱신일시 ${priceMeta.savedAt} · 품번 ${priceMeta.styleCount}개`;
+              })() : "아직 갱신된 적 없음"}
             </p>
             {priceStatus && <p className="mt-1 text-xs font-bold text-blue-600">{priceStatus}</p>}
           </div>
@@ -1393,6 +1405,28 @@ export default function InventoryDashboard() {
             {priceCapturing ? "갱신 중..." : "🔄 지금 갱신하기"}
           </button>
         </div>
+
+        {uploadStatuses && Object.entries(uploadStatuses.statuses || {}).some(([, info]: [string, any]) => {
+          const kind = Object.keys(uploadStatuses.statuses).find((k) => uploadStatuses.statuses[k] === info);
+          const threshold = uploadStatuses.thresholds?.[kind as string] ?? 7;
+          return info.daysSince !== null && info.daysSince >= threshold;
+        }) && (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-black text-red-700">⚠ 업로드 지연 알림</p>
+            <div className="mt-2 space-y-1">
+              {Object.entries(uploadStatuses.statuses || {}).map(([kind, info]: [string, any]) => {
+                const threshold = uploadStatuses.thresholds?.[kind] ?? 7;
+                const stale = info.daysSince !== null && info.daysSince >= threshold;
+                if (!stale) return null;
+                return (
+                  <p key={kind} className="text-xs font-bold text-red-600">
+                    · {kind}: 마지막 업로드로부터 {info.daysSince}일 경과 (기준 {threshold}일) — 새 파일을 올려주세요.
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <StoreRequestRtSection />
 

@@ -2761,7 +2761,7 @@ function parseDailySalesSheetRows(rows: any[][]) {
   return records;
 }
 
-async function loadDailyStoreSalesFromMarkDb() {
+export async function loadDailyStoreSalesFromMarkDb() {
   const dbId = getDailySourceSheetId();
   const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
   const sheetName = pickNormalizedTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "일간매출(26년)");

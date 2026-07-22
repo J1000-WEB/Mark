@@ -125,13 +125,21 @@ function buildChannelBlocks(row2: any[], row3: any[]) {
       const channelName = currentChannel;
       if (isSummaryChannel(channelName) || isExcludedSalesChannel(channelName)) continue;
 
-      const weeklyCol = normalize(row3[c + 1]) === normalize("주간") ? c + 1 : -1;
-      const cumulativeCol = normalize(row3[c + 2]) === normalize("누적") ? c + 2 : -1;
-      const stockCol = normalize(row3[c + 3]) === normalize("재고") ? c + 3 : -1;
+      // MARK 6.28: "일간" 바로 다음 컬럼이 "일간금액"(실제 판매금액)이면 신규 포맷입니다.
+      // 헤더 텍스트로 먼저 확인하고, 그 다음 컬럼들(주간/누적/재고)도 예상 위치에서 실제로
+      // 그 이름이 맞는지 한 번 더 교차검증합니다(단순 열 번호만 믿지 않음).
+      const hasDailyAmount = normalize(row3[c + 1]) === normalize("일간금액");
+      const offset = hasDailyAmount ? 1 : 0;
+
+      const dailyAmountCol = hasDailyAmount ? c + 1 : -1;
+      const weeklyCol = normalize(row3[c + 1 + offset]) === normalize("주간") ? c + 1 + offset : -1;
+      const cumulativeCol = normalize(row3[c + 2 + offset]) === normalize("누적") ? c + 2 + offset : -1;
+      const stockCol = normalize(row3[c + 3 + offset]) === normalize("재고") ? c + 3 + offset : -1;
 
       blocks.push({
         channelName,
         dailyCol: c,
+        dailyAmountCol,
         weeklyCol,
         cumulativeCol,
         stockCol,
@@ -191,6 +199,10 @@ export async function readDailySalesFromMarkDb() {
 
       if (!dailySales && !weeklySales && !stock) continue;
 
+      // MARK 6.28: "일간금액"(실제 판매금액) 컬럼이 있으면 그대로 사용합니다 — 수량×정가 추정보다 정확합니다.
+      const realDailyAmount = block.dailyAmountCol >= 0 ? num(row[block.dailyAmountCol]) : null;
+      const dailyAmount = realDailyAmount !== null && realDailyAmount > 0 ? realDailyAmount : Math.round(dailySales * price);
+
       items.push({
         sourceDate,
         channelName: block.channelName,
@@ -204,7 +216,7 @@ export async function readDailySalesFromMarkDb() {
         cumulativeSales,
         stock,
         price,
-        dailyAmount: Math.round(dailySales * price),
+        dailyAmount,
       });
     }
   }

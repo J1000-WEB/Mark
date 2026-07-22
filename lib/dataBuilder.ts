@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 
@@ -2762,7 +2762,7 @@ function parseDailySalesSheetRows(rows: any[][]) {
 }
 
 async function loadDailyStoreSalesFromMarkDb() {
-  const dbId = getDbSheetId();
+  const dbId = getDailySourceSheetId();
   const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
   const sheetName = pickNormalizedTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "일간매출(26년)");
   if (!sheetName || !titles.includes(sheetName)) return { sheetName: "", rows: [] as any[] };

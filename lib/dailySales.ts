@@ -1,7 +1,7 @@
 import {
   createSheetWithValuesById,
   deleteSheetByTitleIfExistsById,
-  getDbSheetId,
+  getDailySourceSheetId,
   getHistorySheetId,
   getSheetPropsById,
   getSheetValuesById,
@@ -143,7 +143,7 @@ function buildChannelBlocks(row2: any[], row3: any[]) {
 }
 
 export async function readDailySalesFromMarkDb() {
-  const spreadsheetId = getDbSheetId();
+  const spreadsheetId = getDailySourceSheetId();
   const titles = await getSpreadsheetTitlesById(spreadsheetId);
   const sheetName = pickDailySheetTitle(titles);
   if (!sheetName) throw new Error("MARK_DB에서 스타일별 채널별 입고판매재고현황 시트를 찾지 못했습니다.");

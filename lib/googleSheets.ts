@@ -35,6 +35,12 @@ export function getDbSheetId() {
   return id;
 }
 
+// MARK 6.23: "일간매출(26년)"/"스타일별 채널별 입고판매재고현황" 두 시트만 별도 스프레드시트로 옮기고
+// 싶어서 추가한 전용 소스. 설정 안 하면 기존 MARK_DB(getDbSheetId)를 그대로 씁니다.
+export function getDailySourceSheetId() {
+  return process.env.GOOGLE_SHEET_ID_DAILY_SOURCE || getDbSheetId();
+}
+
 export function getHistorySheetId() {
   const id = process.env.GOOGLE_SHEET_ID_HISTORY || process.env.GOOGLE_HISTORY_SHEET_ID;
   if (!id) throw new Error("GOOGLE_SHEET_ID_HISTORY is not set");

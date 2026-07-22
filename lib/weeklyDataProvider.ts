@@ -1,6 +1,7 @@
 import {
   ensureSheetExistsById,
   getDbSheetId,
+  getDailySourceSheetId,
   getHistorySheetId,
   getWeeklyHistorySheetId,
   getSheetId,
@@ -1309,7 +1310,8 @@ function historyRecordsToMaps(records: any[], basis: string, type: SalesType, st
 async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; historyId: string; dbId: string; mainId: string }) {
   const { selected, historyId, dbId, mainId } = args;
   const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
-  const productRaw = await readFirstAvailableSheet(ids, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
+  const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
+  const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
   const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
   const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
   const productMaps = buildProductMaster(productRaw.rows);

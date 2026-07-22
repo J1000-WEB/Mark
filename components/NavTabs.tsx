@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" }) {
+export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" }) {
   const tabs = [
     { key: "schedule", label: "판매전체상", href: "/schedule" },
     { key: "weekly", label: "주간", href: "/weekly" },
@@ -11,6 +11,7 @@ export default function NavTabs({ active }: { active: "schedule" | "sales-data" 
     { key: "trends", label: "상품동향", href: "/trends" },
     { key: "vmd", label: "VMD", href: "/vmd" },
     { key: "daily", label: "일간", href: "/daily" },
+    { key: "store", label: "매장", href: "/store" },
     { key: "monthly", label: "월간", href: "/monthly" },
     { key: "snapshot", label: "스냅샷", href: "/snapshot" },
   ] as const;

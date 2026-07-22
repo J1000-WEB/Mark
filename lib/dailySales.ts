@@ -104,9 +104,19 @@ function isSummaryChannel(channelName: string) {
   return !s || s === "합계" || s === "채널" || s.endsWith("팀") || s === "팀합계" || s === "기타";
 }
 
-function pickDailySheetTitle(titles: string[]) {
+export function pickDailySheetTitle(titles: string[]) {
+  // MARK 6.31: "(금액)" 버전이 실제 판매금액(일간금액) 컬럼이 있는 최신 시트라 우선 사용합니다.
+  const exactAmount = titles.find((title) => title === "스타일별 채널별 입고/판매/재고현황(금액)");
+  if (exactAmount) return exactAmount;
+
   const exact = titles.find((title) => title === "스타일별 채널별 입고판매재고현황");
   if (exact) return exact;
+
+  const amountVariant = titles.find((title) => {
+    const n = normalize(title);
+    return n.includes("스타일별") && n.includes("채널별") && n.includes("금액");
+  });
+  if (amountVariant) return amountVariant;
 
   return titles.find((title) => {
     const n = normalize(title);

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
+import ProductThumb from "@/components/ProductThumb";
 
 
 function todayKSTInputValue() {
@@ -133,7 +134,10 @@ function RTCard({
             <MoveTypeBadge value={it.moveType} />
             <PriorityBadge value={it.priority || "C"} />
           </div>
-          <p className="mt-1 truncate text-lg font-black">{it.productName}</p>
+          <div className="mt-1 flex items-center gap-2">
+            <ProductThumb styleCode={it.styleCode} size={36} />
+            <p className="truncate text-lg font-black">{it.productName}</p>
+          </div>
           <p className="mt-1 text-xs font-bold text-blue-600">
             {it.moveType === "부진"
               ? `과잉재고 회전 이동 · 전사순위 ${it.companyRank || "-"} · 제안 ${fmtNum(it.suggestQty)}장`
@@ -1292,6 +1296,10 @@ export default function InventoryDashboard() {
   const [priceCapturing, setPriceCapturing] = useState(false);
   const [priceStatus, setPriceStatus] = useState("");
   const [uploadStatuses, setUploadStatuses] = useState<any>(null);
+  const [styleSheetFile, setStyleSheetFile] = useState<File | null>(null);
+  const [styleSheetUploading, setStyleSheetUploading] = useState(false);
+  const [styleSheetProgress, setStyleSheetProgress] = useState("");
+  const [styleSheetError, setStyleSheetError] = useState("");
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -1312,6 +1320,63 @@ export default function InventoryDashboard() {
       .then((d) => { if (d.ok) setUploadStatuses(d); })
       .catch(() => {});
   }, []);
+
+  async function runStyleSheetUpload() {
+    if (!styleSheetFile) return;
+    setStyleSheetUploading(true);
+    setStyleSheetError("");
+    setStyleSheetProgress("파일 읽는 중...");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await styleSheetFile.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true });
+      const sheetName = wb.SheetNames.find((n: string) => n.includes("스타일별") && n.includes("채널별")) || wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+      const CHUNK_SIZE = 3000;
+      const chunks: any[][][] = [];
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) chunks.push(rows.slice(i, i + CHUNK_SIZE));
+
+      if (!chunks.length) throw new Error("파일에서 데이터를 읽지 못했습니다.");
+
+      setStyleSheetProgress(`업로드 중... (1/${chunks.length})`);
+      const startRes = await fetch("/api/upload-style-channel-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "start", rows: chunks[0] }),
+      });
+      const startData = await startRes.json();
+      if (!startData.ok) throw new Error(startData.error || "업로드 시작 실패");
+
+      for (let i = 1; i < chunks.length; i++) {
+        setStyleSheetProgress(`업로드 중... (${i + 1}/${chunks.length})`);
+        const res = await fetch("/api/upload-style-channel-sheet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "chunk", rows: chunks[i] }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || `${i + 1}번째 청크 업로드 실패`);
+      }
+
+      setStyleSheetProgress("마무리 중(검증 + 교체)...");
+      const finishRes = await fetch("/api/upload-style-channel-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "finish", expectedTotalRows: rows.length }),
+      });
+      const finishData = await finishRes.json();
+      if (!finishData.ok) throw new Error(finishData.error || "마무리(교체) 실패");
+
+      setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요.`);
+    } catch (e: any) {
+      setStyleSheetError(e?.message || "업로드 실패");
+      setStyleSheetProgress("");
+    } finally {
+      setStyleSheetUploading(false);
+    }
+  }
 
   async function runPriceCapture() {
     setPriceCapturing(true);
@@ -1381,6 +1446,31 @@ export default function InventoryDashboard() {
           </div>
           <span className="text-2xl">→</span>
         </a>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold text-slate-500">스타일별 채널별 입고/판매/재고현황 업로드</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">
+            온라인 포함 대용량 파일도 안전해요 — 브라우저에서 잘게 쪼개서(청크) 순서대로 올리고, 다 올라가면 검증 후 기존 시트와 통째로 교체해요.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setStyleSheetFile(e.target.files?.[0] || null)}
+              className="text-xs"
+            />
+            <button
+              type="button"
+              onClick={runStyleSheetUpload}
+              disabled={styleSheetUploading || !styleSheetFile}
+              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+            >
+              {styleSheetUploading ? "업로드 중..." : "업로드"}
+            </button>
+          </div>
+          {styleSheetProgress && <p className="mt-2 text-xs font-bold text-blue-600">{styleSheetProgress}</p>}
+          {styleSheetError && <p className="mt-2 text-xs font-black text-red-600">⚠ {styleSheetError}</p>}
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-5 shadow-sm">
           <div>

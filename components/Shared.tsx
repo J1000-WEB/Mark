@@ -1,4 +1,5 @@
 import { fmtNum, pct, won } from "@/lib/mark";
+import ProductThumb from "@/components/ProductThumb";
 
 type Tone = "plain" | "white" | "blue" | "green" | "purple" | "orange" | "yellow" | "beige";
 
@@ -65,6 +66,7 @@ export function ProductList({ items, maxItems = 20, compact = false }: { items: 
               <p className="text-base font-black">{won(p.weekAmount)}</p>
               <p className="text-xs text-slate-500">금주 매출</p>
             </div>
+            <ProductThumb styleCode={p.styleCode} size={40} />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
             <Info label="판매수량" value={`${fmtNum(p.weekNet)}개`} />

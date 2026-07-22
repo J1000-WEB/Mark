@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { won, fmtNum } from "@/lib/mark";
+import ProductThumb from "@/components/ProductThumb";
 
 function TrendChart({ data }: { data: { date: string; amount: number; companyAmount: number }[] }) {
   if (!data.length) return null;
@@ -181,6 +182,7 @@ function StoreCardsSection({ storeName, date }: { storeName: string; date: strin
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
                   {medal || p.companyRank}
                 </span>
+                <ProductThumb styleCode={p.styleCode} size={40} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-black text-slate-900">{p.styleCode}</p>
                   <p className="truncate text-xs font-semibold text-slate-500">{p.productName}</p>

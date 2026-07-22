@@ -4,6 +4,154 @@ import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 
+function drawContain(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
+  const scale = Math.min(w / img.width, h / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const dx = x + (w - dw) / 2;
+  const dy = y + (h - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
+function loadImgEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function OutfitPreviewSection() {
+  const [topCode, setTopCode] = useState("");
+  const [bottomCode, setBottomCode] = useState("");
+  const [topImg, setTopImg] = useState<string | null>(null);
+  const [bottomImg, setBottomImg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function fetchCut(code: string): Promise<string | null> {
+    if (!code.trim()) return null;
+    const res = await fetch(`/api/product-images?code=${encodeURIComponent(code.trim())}`, { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    if (!json?.ok || !json?.product) return null;
+    return json.product.productCuts?.[0] || json.product.hero || null;
+  }
+
+  async function runPreview() {
+    setLoading(true);
+    setError("");
+    setTopImg(null);
+    setBottomImg(null);
+    try {
+      const [t, b] = await Promise.all([fetchCut(topCode), fetchCut(bottomCode)]);
+      if (!t && !b) throw new Error("두 품번 모두 이미지를 찾지 못했어요. 품번을 다시 확인해주세요.");
+      setTopImg(t);
+      setBottomImg(b);
+    } catch (e: any) {
+      setError(e?.message || "미리보기 생성 실패");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadCombined() {
+    if (!topImg && !bottomImg) return;
+    setError("");
+    try {
+      const W = 600;
+      const H = 800;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+
+      if (topImg) drawContain(ctx, await loadImgEl(topImg), 0, 0, W, H / 2);
+      if (bottomImg) drawContain(ctx, await loadImgEl(bottomImg), 0, H / 2, W, H / 2);
+
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `코디_${topCode || "상의"}_${bottomCode || "하의"}.png`;
+      a.click();
+    } catch {
+      setError("이미지를 합쳐서 다운로드하는 데 실패했어요(이미지 서버 CORS 제한일 수 있어요). 화면 캡처로 대신 저장해보세요.");
+    }
+  }
+
+  return (
+    <Card title="👕👖 코디 미리보기 (가안)">
+      <p className="mb-4 text-xs font-semibold text-slate-500">품번 두 개(상의/하의)를 넣으면 제품컷을 위/아래로 배치해서 보여줘요. 아직 실험적인 기능이에요.</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          상의 품번
+          <input
+            value={topCode}
+            onChange={(e) => setTopCode(e.target.value)}
+            placeholder="예: GF2LSH521"
+            className="w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          하의 품번
+          <input
+            value={bottomCode}
+            onChange={(e) => setBottomCode(e.target.value)}
+            placeholder="예: WBE1L12504"
+            className="w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={runPreview}
+          disabled={loading || (!topCode.trim() && !bottomCode.trim())}
+          className="h-10 rounded-full bg-blue-600 px-5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "불러오는 중..." : "미리보기"}
+        </button>
+        {(topImg || bottomImg) && (
+          <button
+            type="button"
+            onClick={downloadCombined}
+            className="h-10 rounded-full border border-slate-900 px-5 text-sm font-black text-slate-900 transition hover:bg-slate-50"
+          >
+            📥 다운로드
+          </button>
+        )}
+      </div>
+
+      {error && <p className="mt-3 text-xs font-black text-red-600">⚠ {error}</p>}
+
+      {(topImg || bottomImg) && (
+        <div className="mt-4 flex justify-center">
+          <div className="flex w-64 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+            <div className="flex h-64 items-center justify-center bg-white">
+              {topImg ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={topImg} alt="상의" className="max-h-full max-w-full object-contain" />
+              ) : (
+                <p className="text-xs font-bold text-slate-300">상의 없음</p>
+              )}
+            </div>
+            <div className="flex h-64 items-center justify-center border-t border-slate-100 bg-white">
+              {bottomImg ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={bottomImg} alt="하의" className="max-h-full max-w-full object-contain" />
+              ) : (
+                <p className="text-xs font-bold text-slate-300">하의 없음</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 type VmdEvent = {
   date: string;
   month: string;
@@ -268,6 +416,8 @@ export default function VmdDashboard() {
             })}
           </div>
         </Card>
+
+        <OutfitPreviewSection />
       </div>
     </main>
   );

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { won, fmtNum } from "@/lib/mark";
 import ProductThumb from "@/components/ProductThumb";
+import Product360Badges from "@/components/Product360Badges";
 
 function TrendChart({ data }: { data: { date: string; amount: number; companyAmount: number }[] }) {
   if (!data.length) return null;
@@ -174,7 +175,7 @@ function StoreCardsSection({ storeName, date }: { storeName: string; date: strin
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <p className="text-sm font-black text-slate-700">전사 TOP10 vs 이 매장 순위</p>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-3">
           {(cards.top10Comparison || []).map((p: any) => {
             const medal = ["🥇", "🥈", "🥉"][p.companyRank - 1];
             return (
@@ -182,10 +183,14 @@ function StoreCardsSection({ storeName, date }: { storeName: string; date: strin
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
                   {medal || p.companyRank}
                 </span>
-                <ProductThumb styleCode={p.styleCode} size={40} />
+                <ProductThumb styleCode={p.styleCode} size={80} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-black text-slate-900">{p.styleCode}</p>
                   <p className="truncate text-xs font-semibold text-slate-500">{p.productName}</p>
+                  <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+                    전사 {won(p.companyAmount)}{p.storeAmount > 0 ? ` · 이 매장 ${won(p.storeAmount)}` : ""}
+                  </p>
+                  <Product360Badges styleCode={p.styleCode} />
                 </div>
                 {p.storeRank ? (
                   <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black text-white ${p.diff && p.diff > 0 ? "bg-rose-500" : "bg-blue-600"}`}>

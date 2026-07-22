@@ -364,7 +364,16 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const storeRankMap = new Map(storeTop10.map((p, i) => [p.styleCode, i + 1]));
   const top10Comparison = companyTop10.map((p, i) => {
     const storeRank = storeRankMap.get(p.styleCode) || null;
-    return { styleCode: p.styleCode, productName: p.productName, companyRank: i + 1, storeRank, diff: storeRank ? i + 1 - storeRank : null };
+    const storeMatch = storeTop10.find((s) => s.styleCode === p.styleCode);
+    return {
+      styleCode: p.styleCode,
+      productName: p.productName,
+      companyRank: i + 1,
+      companyAmount: p.amount,
+      storeRank,
+      storeAmount: storeMatch ? storeMatch.amount : 0,
+      diff: storeRank ? i + 1 - storeRank : null,
+    };
   });
 
   // ---- STEP4 재고확인 AI 제안: 전사에서 잘 팔리는데 이 매장에서 유독 안 팔리는 상품 ----

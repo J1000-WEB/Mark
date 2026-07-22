@@ -1,5 +1,6 @@
 import { fmtNum, pct, won } from "@/lib/mark";
 import ProductThumb from "@/components/ProductThumb";
+import Product360Badges from "@/components/Product360Badges";
 
 type Tone = "plain" | "white" | "blue" | "green" | "purple" | "orange" | "yellow" | "beige";
 
@@ -57,16 +58,17 @@ export function ProductList({ items, maxItems = 20, compact = false }: { items: 
     <div className={`${compact ? "max-h-[520px]" : "max-h-[560px]"} space-y-2 overflow-y-auto pr-2`}>
       {rows.map((p, i) => (
         <div key={`${p.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3">
-          <div className="flex justify-between gap-4">
-            <div className="min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-slate-500">#{i + 1} · {p.styleCode}</p>
               <p className="truncate text-sm font-black">{p.productName}</p>
+              <Product360Badges styleCode={p.styleCode} />
             </div>
             <div className="shrink-0 text-right">
               <p className="text-base font-black">{won(p.weekAmount)}</p>
               <p className="text-xs text-slate-500">금주 매출</p>
             </div>
-            <ProductThumb styleCode={p.styleCode} size={40} />
+            <ProductThumb styleCode={p.styleCode} size={80} />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
             <Info label="판매수량" value={`${fmtNum(p.weekNet)}개`} />

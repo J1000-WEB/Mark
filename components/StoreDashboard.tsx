@@ -3,20 +3,66 @@
 import { useEffect, useState } from "react";
 import { won, fmtNum } from "@/lib/mark";
 
-function Sparkline({ data }: { data: { date: string; amount: number }[] }) {
+function TrendChart({ data }: { data: { date: string; amount: number; companyAmount: number }[] }) {
   if (!data.length) return null;
-  const max = Math.max(...data.map((d) => d.amount), 1);
-  const w = 320;
-  const h = 60;
-  const step = w / Math.max(1, data.length - 1);
-  const points = data.map((d, i) => `${i * step},${h - (d.amount / max) * (h - 6) - 3}`).join(" ");
+  const w = 640;
+  const h = 200;
+  const padL = 8;
+  const padR = 8;
+  const padT = 16;
+  const padB = 28;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const storeMax = Math.max(...data.map((d) => d.amount), 1);
+  const companyMax = Math.max(...data.map((d) => d.companyAmount), 1);
+  const step = innerW / Math.max(1, data.length - 1);
+
+  const storePoints = data.map((d, i) => {
+    const x = padL + i * step;
+    const y = padT + innerH - (d.amount / storeMax) * innerH;
+    return { x, y, d };
+  });
+  const companyPoints = data.map((d, i) => {
+    const x = padL + i * step;
+    const y = padT + innerH - (d.companyAmount / companyMax) * innerH;
+    return { x, y, d };
+  });
+
+  const storeLine = storePoints.map((p) => `${p.x},${p.y}`).join(" ");
+  const companyLine = companyPoints.map((p) => `${p.x},${p.y}`).join(" ");
+
+  const fmtMD = (dateKey: string) => {
+    const [, m, d] = dateKey.split("-");
+    return `${Number(m)}/${Number(d)}`;
+  };
+  const labelIdx = [0, Math.floor((data.length - 1) / 2), data.length - 1];
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-16 w-full">
-      <polyline points={points} fill="none" stroke="#2563eb" strokeWidth="2" />
-      {data.map((d, i) => (
-        <circle key={d.date} cx={i * step} cy={h - (d.amount / max) * (h - 6) - 3} r="2" fill="#2563eb" />
-      ))}
-    </svg>
+    <div>
+      <div className="mb-2 flex items-center gap-4 text-xs font-bold text-slate-500">
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-blue-600" /> 이 매장</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-slate-300" /> 전사(추이 비교용, 각각 자체 최고치 기준 정규화)</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 220 }}>
+        <polyline points={companyLine} fill="none" stroke="#cbd5e1" strokeWidth="2.5" />
+        <polyline points={storeLine} fill="none" stroke="#2563eb" strokeWidth="3" />
+        {storePoints.map((p, i) => (
+          <g key={p.d.date}>
+            <circle cx={p.x} cy={p.y} r="3.5" fill="#2563eb" />
+            <title>{`${p.d.date}: ${won(p.d.amount)} (전사 ${won(p.d.companyAmount)})`}</title>
+            {labelIdx.includes(i) && (
+              <text x={p.x} y={h - 6} fontSize="11" fill="#64748b" textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}>
+                {fmtMD(p.d.date)}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-xs font-bold text-slate-500">
+        <span>최근 매출: {won(data[data.length - 1].amount)}</span>
+        <span>14일 평균: {won(data.reduce((s, d) => s + d.amount, 0) / data.length)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -122,20 +168,33 @@ function StoreCardsSection({ storeName, date }: { storeName: string; date: strin
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <p className="text-xs font-black text-slate-500">최근 14일 매출 추이</p>
-        <Sparkline data={cards.trend} />
+        <TrendChart data={cards.trend} />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-xs font-black text-slate-500">전사 TOP10 vs 이 매장 순위</p>
-        <div className="mt-2 space-y-1">
-          {(cards.top10Comparison || []).map((p: any) => (
-            <div key={p.styleCode} className="flex items-center justify-between text-xs font-bold text-slate-600">
-              <span className="truncate">#{p.companyRank} {p.styleCode} ({p.productName})</span>
-              <span className={p.storeRank ? (p.diff && p.diff > 0 ? "text-rose-600" : "text-blue-600") : "text-slate-400"}>
-                {p.storeRank ? `이 매장 #${p.storeRank}` : "이 매장 미판매"}
-              </span>
-            </div>
-          ))}
+        <p className="text-sm font-black text-slate-700">전사 TOP10 vs 이 매장 순위</p>
+        <div className="mt-3 space-y-2">
+          {(cards.top10Comparison || []).map((p: any) => {
+            const medal = ["🥇", "🥈", "🥉"][p.companyRank - 1];
+            return (
+              <div key={p.styleCode} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
+                  {medal || p.companyRank}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-black text-slate-900">{p.styleCode}</p>
+                  <p className="truncate text-xs font-semibold text-slate-500">{p.productName}</p>
+                </div>
+                {p.storeRank ? (
+                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black text-white ${p.diff && p.diff > 0 ? "bg-rose-500" : "bg-blue-600"}`}>
+                    이 매장 {p.storeRank}위
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-slate-300 px-3 py-1 text-xs font-black text-slate-600">이 매장 미판매</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

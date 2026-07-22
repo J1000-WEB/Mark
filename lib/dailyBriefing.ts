@@ -104,6 +104,30 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   lines.push(
     `${scopeLabel} ${targetDate} 매출은 ${Math.round(targetAmount).toLocaleString("ko-KR")}원으로, ${compareLabel}(${compareDate}) 대비 ${changeRate >= 0 ? "+" : ""}${changeRate.toFixed(1)}%예요.`
   );
+
+  // MARK 6.26: 연속 추세(모멘텀) — 최근 며칠간 매일 전일 대비 같은 방향(증가/감소)으로 움직였는지 확인.
+  const byDateAmount = new Map<string, number>();
+  for (const r of scoped) byDateAmount.set(r.date, (byDateAmount.get(r.date) || 0) + Number(r.amount || 0));
+  {
+    let streak = 0;
+    let direction: "up" | "down" | null = null;
+    let cursor = targetDate;
+    for (let i = 0; i < 6; i++) {
+      const prevDate = addDays(cursor, -1);
+      const cur = byDateAmount.get(cursor) || 0;
+      const prev = byDateAmount.get(prevDate) || 0;
+      if (!prev) break;
+      const dir: "up" | "down" = cur >= prev ? "up" : "down";
+      if (direction === null) direction = dir;
+      if (dir !== direction) break;
+      streak++;
+      cursor = prevDate;
+    }
+    if (streak >= 2 && direction) {
+      lines.push(`최근 ${streak}일 연속 ${direction === "up" ? "증가" : "감소"} 중이에요.`);
+    }
+  }
+
   if (best && best.changeRate > 0) {
     lines.push(`호조상품 ${best.styleCode}(${best.productName})가 ${compareLabel} 대비 +${best.changeRate.toFixed(0)}%로 늘었어요.`);
   }
@@ -114,10 +138,51 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
 
   let weather: any = null;
   if (storeName) {
-    weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
+    try {
+      const cards = await buildStoreCards(storeName, targetDate);
+      weather = cards.weather;
+
+      // 목표 페이스 코멘트
+      if (cards.week.target > 0) {
+        lines.push(`이 페이스면 이번 주 목표 대비 ${cards.week.projectedRate.toFixed(0)}% 달성이 예상돼요.`);
+      }
+
+      // 이벤트 효과 코멘트: 진행중 이벤트가 있으면 시작 전 대비 효과 비교
+      if (cards.activeEvents.length) {
+        const ev = cards.activeEvents[0];
+        const eventDays: string[] = [];
+        for (let d = ev.startDate; d <= targetDate && d <= ev.endDate; d = addDays(d, 1)) eventDays.push(d);
+        const eventAvg = eventDays.length ? eventDays.reduce((s, d) => s + (byDateAmount.get(d) || 0), 0) / eventDays.length : 0;
+        const beforeDays: string[] = [];
+        for (let i = 1; i <= eventDays.length; i++) beforeDays.push(addDays(ev.startDate, -i));
+        const beforeAvg = beforeDays.length ? beforeDays.reduce((s, d) => s + (byDateAmount.get(d) || 0), 0) / beforeDays.length : 0;
+        if (beforeAvg > 0) {
+          const eventChangeRate = ((eventAvg - beforeAvg) / beforeAvg) * 100;
+          lines.push(`행사(${ev.content || ev.title}) 시작 전 대비 일평균 매출이 ${eventChangeRate >= 0 ? "+" : ""}${eventChangeRate.toFixed(0)}%${eventChangeRate >= 0 ? " 늘었어요." : "예요."}`);
+        }
+      }
+
+      // 재고 이슈 요약
+      const urgentCount = cards.stockInsights.length;
+      if (urgentCount > 0) {
+        lines.push(`발주 필요 상품이 ${urgentCount}개 있어요.`);
+      }
+    } catch {
+      weather = null;
+    }
     if (weather) {
       lines.push(`${storeName}의 오늘 날씨는 ${weather.weather}(최고 ${weather.maxTemp}°/최저 ${weather.minTemp}°, 강수확률 ${weather.rainChance}%)이었어요.`);
     }
+  }
+
+  // 마무리 총평(어제 총평)
+  {
+    let tone = "무난한 하루였어요.";
+    if (changeRate >= 20) tone = "아주 좋은 하루였어요.";
+    else if (changeRate >= 5) tone = "좋은 흐름의 하루였어요.";
+    else if (changeRate <= -20) tone = "많이 아쉬운 하루였어요.";
+    else if (changeRate <= -5) tone = "다소 부진한 하루였어요.";
+    lines.push(`종합적으로 ${targetDate}은 ${tone}`);
   }
 
   return {
@@ -170,12 +235,51 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const storeRows = filterByStore(allRows, storeName);
   const companyRows = filterByStore(allRows, undefined);
 
-  // ---- STEP1 이번주 누계/예상달성 ----
+  // MARK 6.26: 이벤트(스페셜오퍼위크) 기간을 먼저 구해둡니다 — 주간 예측 계산에서
+  // 이벤트 기간의 매출을 요일가중치 기준값 계산에서 빼기 위해 필요합니다.
+  let storeEvents: any[] = [];
+  try {
+    const { buildSpecialOfferEvents } = await import("@/lib/specialOfferWeek");
+    const flatForEvents = allRows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+    const { events } = await buildSpecialOfferEvents(flatForEvents);
+    storeEvents = events.filter((e: any) => normalizeStoreKey(e.storeName) === normalizeStoreKey(storeName));
+  } catch {
+    storeEvents = [];
+  }
+  const isEventDate = (dateKey: string) => storeEvents.some((e: any) => dateKey >= e.startDate && dateKey <= e.endDate);
+
+  // 요일별 가중치: 평일(월~목)=1.0, 금=1.4, 토/일=1.7 (주말이 평일보다 매출이 더 나오는 걸 반영)
+  const WEEKDAY_WEIGHT: Record<number, number> = { 0: 1.7, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.4, 6: 1.7 };
+
+  // ---- STEP1 이번주 누계/예상달성 (요일가중치 + 이벤트기간 제외 반영) ----
   const weekStart = getMondayOf(targetDate);
   const weekEnd = addDays(weekStart, 6);
-  const weekElapsedDays = Math.min(7, daysBetweenInclusive(weekStart, targetDate));
-  const weekCumulative = storeRows.filter((r) => r.date >= weekStart && r.date <= targetDate).reduce((s, r) => s + Number(r.amount || 0), 0);
-  const weekProjected = weekElapsedDays > 0 ? (weekCumulative / weekElapsedDays) * 7 : 0;
+  const weekDates: string[] = [];
+  for (let d = weekStart; d <= weekEnd; d = addDays(d, 1)) weekDates.push(d);
+
+  const weekAmountByDate = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date < weekStart || r.date > weekEnd) continue;
+    weekAmountByDate.set(r.date, (weekAmountByDate.get(r.date) || 0) + Number(r.amount || 0));
+  }
+
+  const pastDates = weekDates.filter((d) => d <= targetDate);
+  const futureDates = weekDates.filter((d) => d > targetDate);
+  const weekElapsedDays = pastDates.length;
+  const weekCumulative = pastDates.reduce((s, d) => s + (weekAmountByDate.get(d) || 0), 0);
+
+  // 가중치당 기준매출: 이벤트 기간이 아닌 "이미 지난" 날짜만 사용합니다(이벤트 매출이 평균을 뻥튀기하는 걸 방지).
+  const nonEventPast = pastDates.filter((d) => !isEventDate(d));
+  const nonEventPastAmount = nonEventPast.reduce((s, d) => s + (weekAmountByDate.get(d) || 0), 0);
+  const nonEventPastWeight = nonEventPast.reduce((s, d) => s + WEEKDAY_WEIGHT[dayOfWeek(d)], 0);
+  const perWeightAmount = nonEventPastWeight > 0 ? nonEventPastAmount / nonEventPastWeight : 0;
+
+  // 남은 날짜 예측: 이벤트 기간이면 가중치 없이(1.0) 그냥 기준매출을 적용, 아니면 요일가중치 적용.
+  let futureEstimate = 0;
+  for (const d of futureDates) {
+    futureEstimate += isEventDate(d) ? perWeightAmount : perWeightAmount * WEEKDAY_WEIGHT[dayOfWeek(d)];
+  }
+  const weekProjected = weekCumulative + futureEstimate;
 
   let weekTarget = 0;
   try {
@@ -230,7 +334,6 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
 
   const stockInsights = companyTop10
     .filter((p) => !storeAmountByStyle.has(p.styleCode) || (storeAmountByStyle.get(p.styleCode) || 0) === 0)
-    .slice(0, 5)
     .map((p) => {
       const stock = storeStockByStyle.get(p.styleCode);
       const hasStockInfo = stock !== undefined;
@@ -242,12 +345,15 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
         storeStock: hasStockInfo ? stock : null,
         type: isStockout ? "stockout" : hasStockInfo ? "slow" : "unknown",
         suggestion: isStockout
-          ? "재고가 없어서 못 팔고 있어요(결품). 재입고/RT 이동을 검토해보세요."
+          ? "재고가 없어서 못 팔고 있어요(결품). 발주/RT 이동을 검토해보세요."
           : hasStockInfo
           ? `재고는 ${stock}개 있는데 안 팔리고 있어요. 진열 위치나 프로모션을 점검해보세요.`
           : "이 매장에서 취급 이력 자체가 확인되지 않아요. 입고 여부를 확인해보세요.",
       };
-    });
+    })
+    // MARK 6.26: 재고 10개 미만(0 포함)은 매장에서 판매하기 어려워 빼놓은 경우가 많아 제외합니다.
+    .filter((s) => s.storeStock === null || s.storeStock >= 10)
+    .slice(0, 5);
 
   // ---- STEP5 재고/RT 현황 ----
   const totalStock = Array.from(
@@ -281,28 +387,23 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
 
   // ---- STEP7 진행중 이벤트 스페셜오퍼위크 ----
-  let activeEvents: any[] = [];
-  try {
-    const { buildSpecialOfferEvents } = await import("@/lib/specialOfferWeek");
-    const flatForEvents = allRows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
-    const { events } = await buildSpecialOfferEvents(flatForEvents);
-    activeEvents = events.filter(
-      (e: any) => normalizeStoreKey(e.storeName) === normalizeStoreKey(storeName) && e.startDate <= targetDate && e.endDate >= targetDate
-    );
-  } catch {
-    activeEvents = [];
-  }
+  const activeEvents = storeEvents.filter((e: any) => e.startDate <= targetDate && e.endDate >= targetDate);
 
-  // ---- STEP8 최근 14일 매출 추이 ----
+  // ---- STEP8 최근 14일 매출 추이 (전사 비교 포함) ----
   const trendStart = addDays(targetDate, -13);
   const byDate = new Map<string, number>();
   for (const r of storeRows) {
     if (r.date < trendStart || r.date > targetDate) continue;
     byDate.set(r.date, (byDate.get(r.date) || 0) + Number(r.amount || 0));
   }
-  const trend: { date: string; amount: number }[] = [];
+  const companyByDate = new Map<string, number>();
+  for (const r of companyRows) {
+    if (r.date < trendStart || r.date > targetDate) continue;
+    companyByDate.set(r.date, (companyByDate.get(r.date) || 0) + Number(r.amount || 0));
+  }
+  const trend: { date: string; amount: number; companyAmount: number }[] = [];
   for (let d = trendStart; d <= targetDate; d = addDays(d, 1)) {
-    trend.push({ date: d, amount: byDate.get(d) || 0 });
+    trend.push({ date: d, amount: byDate.get(d) || 0, companyAmount: companyByDate.get(d) || 0 });
   }
 
   return {

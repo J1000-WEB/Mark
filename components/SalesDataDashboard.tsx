@@ -208,11 +208,109 @@ export default function SalesDataDashboard() {
   }
 
   async function downloadExcel() {
-    const XLSX = await import("xlsx");
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, type === "color" ? "컬러" : "품번");
-    XLSX.writeFile(wb, `주간판매데이터_${week || "latest"}_${type === "color" ? "컬러" : "품번"}.xlsx`);
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(type === "color" ? "컬러" : "품번");
+
+    const groupRow = rows[2] || [];
+    const headerRow = rows[3] || [];
+    const totalRowIdx = 5;
+    const dataStart = 7;
+    const colCount = headerRow.length || (rows[0] || []).length || 1;
+
+    // 헤더 텍스트로 "증감/등락/신장률" 계열 컬럼, "액션" 컬럼, "비중" 컬럼을 찾아둡니다.
+    const changeCols = new Set<number>();
+    let actionCol = -1;
+    headerRow.forEach((h: any, i: number) => {
+      const t = String(h || "");
+      if (t.includes("등락") || t.includes("증감") || t.includes("신장률")) changeCols.add(i);
+      if (t === "액션") actionCol = i;
+    });
+
+    rows.forEach((row, r) => {
+      const excelRow = ws.getRow(r + 1);
+      const values = row.length ? row : new Array(colCount).fill("");
+      values.forEach((v: any, c: number) => {
+        excelRow.getCell(c + 1).value = v === "" || v === null || v === undefined ? null : v;
+      });
+      excelRow.commit();
+    });
+
+    // 제목 행
+    ws.mergeCells(1, 1, 1, Math.max(colCount, 4));
+    const titleCell = ws.getCell(1, 1);
+    titleCell.font = { bold: true, size: 14, color: { argb: "FF1E293B" } };
+
+    // 그룹 헤더 행(3행) — 그룹별로 색을 다르게
+    const groupColors: Record<string, string> = {
+      "제품라이프사이클": "FFDCEEFB",
+      "랭킹": "FFEDE9FE",
+      "금액판매": "FFDCFCE7",
+      "수량판매": "FFFEF3C7",
+      "재고": "FFE2E8F0",
+    };
+    let lastGroupColor = "";
+    for (let c = 0; c < colCount; c++) {
+      const label = String(groupRow[c] || "");
+      if (label && groupColors[label]) lastGroupColor = groupColors[label];
+      const cell = ws.getCell(3, c + 1);
+      if (lastGroupColor) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: lastGroupColor } };
+      cell.font = { bold: true, size: 10 };
+      if (label) lastGroupColor = groupColors[label] || lastGroupColor;
+    }
+
+    // 컬럼 헤더 행(4행) — 진한 남색 배경 + 흰 글씨
+    for (let c = 0; c < colCount; c++) {
+      const cell = ws.getCell(4, c + 1);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+      cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    }
+
+    // 합계 행 — 연한 노랑 + 굵게
+    for (let c = 0; c < colCount; c++) {
+      const cell = ws.getCell(totalRowIdx + 1, c + 1);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF9C3" } };
+      cell.font = { bold: true };
+    }
+
+    // 데이터 행 — 줄무늬 배경 + 증감 컬럼 빨강/파랑 + 액션 컬럼 색상
+    for (let r = dataStart; r < rows.length; r++) {
+      const stripe = (r - dataStart) % 2 === 1;
+      for (let c = 0; c < colCount; c++) {
+        const cell = ws.getCell(r + 1, c + 1);
+        if (stripe) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+
+        if (changeCols.has(c)) {
+          const num = Number(String(cell.value ?? "").toString().replace(/[^0-9.\-]/g, ""));
+          if (Number.isFinite(num) && num !== 0) {
+            cell.font = { color: { argb: num > 0 ? "FF2563EB" : "FFDC2626" }, bold: true };
+          }
+        }
+        if (c === actionCol) {
+          const v = String(cell.value || "");
+          if (v.includes("품절") || v.includes("과다")) cell.font = { color: { argb: "FFDC2626" }, bold: true };
+          else if (v.includes("발주") || v.includes("소진")) cell.font = { color: { argb: "FFD97706" }, bold: true };
+          else if (v === "정상") cell.font = { color: { argb: "FF16A34A" } };
+        }
+      }
+    }
+
+    // 헤더 고정 + 열 너비 대략 조정
+    ws.views = [{ state: "frozen", ySplit: dataStart, xSplit: 2 }];
+    for (let c = 0; c < colCount; c++) {
+      const headerText = String(headerRow[c] || "");
+      ws.getColumn(c + 1).width = Math.max(8, Math.min(22, headerText.length + 6));
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `주간판매데이터_${week || "latest"}_${type === "color" ? "컬러" : "품번"}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   useEffect(() => {

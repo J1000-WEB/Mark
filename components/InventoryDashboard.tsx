@@ -1334,9 +1334,23 @@ export default function InventoryDashboard() {
       const sheet = wb.Sheets[sheetName];
       const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
-      const CHUNK_SIZE = 3000;
+      // MARK 6.35: 열이 아주 많은(채널 블록이 많은) 파일은 행 수 기준 청크로도 4.5MB 제한을
+      // 넘을 수 있어서, "실제 JSON 용량"을 기준으로 청크를 나눕니다.
+      const TARGET_CHUNK_BYTES = 2_000_000; // 여유 있게 2MB 목표 (요청 전체 한도는 4.5MB)
       const chunks: any[][][] = [];
-      for (let i = 0; i < rows.length; i += CHUNK_SIZE) chunks.push(rows.slice(i, i + CHUNK_SIZE));
+      let current: any[][] = [];
+      let currentBytes = 2;
+      for (const row of rows) {
+        const rowBytes = JSON.stringify(row).length + 1;
+        if (current.length && currentBytes + rowBytes > TARGET_CHUNK_BYTES) {
+          chunks.push(current);
+          current = [];
+          currentBytes = 2;
+        }
+        current.push(row);
+        currentBytes += rowBytes;
+      }
+      if (current.length) chunks.push(current);
 
       if (!chunks.length) throw new Error("파일에서 데이터를 읽지 못했습니다.");
 

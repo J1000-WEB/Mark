@@ -2,7 +2,7 @@ import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
 import { getWeatherForStoreOnDate } from "@/lib/storeRegion";
-import { mergeDateTotals } from "@/lib/storeDailyAmount";
+import { mergeDateTotals, getComparisonDateForDaily } from "@/lib/storeDailyAmount";
 
 // MARK 6.27: "스타일별 채널별 입고/판매/재고현황"(→Daily_Sales_History, qty×Style_Price_History 단가로
 // 금액을 역산) 은 수량은 정확하지만 금액에 오차가 있을 수 있습니다. 그래서 "매출 총액/누계/추이"처럼
@@ -55,7 +55,7 @@ function dayOfWeek(dateKey: string) {
 
 // 주어진 날짜의 "비교 대상 날짜"를 요일 규칙에 따라 계산합니다.
 // (실제 로직은 lib/storeDailyAmount.ts에 있고, 일간 탭 쪽(dataBuilder.ts)과 공유합니다.)
-export { getComparisonDateForDaily } from "@/lib/storeDailyAmount";
+export { getComparisonDateForDaily };
 
 function yesterdayDateKey() {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));

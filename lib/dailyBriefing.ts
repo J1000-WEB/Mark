@@ -120,13 +120,24 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   const allRows = await loadDailyFlatRows();
   const scoped = filterByStore(allRows, storeName);
 
-  // 매출 총액은 "일간매출(26년)"(실제 기록된 실적)을 우선 사용합니다.
+  // MARK 6.38: 이제 Daily_Sales_History 자체가 "(금액)" 시트의 실제 판매금액을 담고 있어서
+  // 오차가 없습니다. 그래서 Daily_Sales_History를 우선으로 쓰고, 혹시 그 날짜 데이터가
+  // 없을 때만 "일간매출(26년)"(참고용, 업데이트 시차가 있을 수 있음)으로 보완합니다.
   const amountRows = await loadStoreAmountRows();
   const scopedAmountRows = filterAmountRowsByStore(amountRows, storeName);
-  const useAccurateAmount = scopedAmountRows.length > 0;
 
-  const targetAmount = useAccurateAmount ? sumAmountRows(scopedAmountRows, targetDate) : sumAmount(scoped, targetDate);
-  const compareAmount = useAccurateAmount ? sumAmountRows(scopedAmountRows, compareDate) : sumAmount(scoped, compareDate);
+  const byDateAmount = new Map<string, number>();
+  for (const r of scoped) byDateAmount.set(r.date, (byDateAmount.get(r.date) || 0) + Number(r.amount || 0));
+  const byDateAmountRef = new Map<string, number>();
+  for (const r of scopedAmountRows) byDateAmountRef.set(r.date, (byDateAmountRef.get(r.date) || 0) + Number(r.amount || 0));
+
+  function amountForDate(dateKey: string) {
+    if (byDateAmount.has(dateKey)) return byDateAmount.get(dateKey)!;
+    return byDateAmountRef.get(dateKey) || 0;
+  }
+
+  const targetAmount = amountForDate(targetDate);
+  const compareAmount = amountForDate(compareDate);
   const changeRate = compareAmount ? ((targetAmount - compareAmount) / compareAmount) * 100 : targetAmount ? 100 : 0;
 
   const { best, worst } = topProductMovers(scoped, targetDate, compareDate);
@@ -138,20 +149,14 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   );
 
   // MARK 6.26: 연속 추세(모멘텀) — 최근 며칠간 매일 전일 대비 같은 방향(증가/감소)으로 움직였는지 확인.
-  const byDateAmount = new Map<string, number>();
-  if (useAccurateAmount) {
-    for (const r of scopedAmountRows) byDateAmount.set(r.date, (byDateAmount.get(r.date) || 0) + Number(r.amount || 0));
-  } else {
-  for (const r of scoped) byDateAmount.set(r.date, (byDateAmount.get(r.date) || 0) + Number(r.amount || 0));
-  }
   {
     let streak = 0;
     let direction: "up" | "down" | null = null;
     let cursor = targetDate;
     for (let i = 0; i < 6; i++) {
       const prevDate = addDays(cursor, -1);
-      const cur = byDateAmount.get(cursor) || 0;
-      const prev = byDateAmount.get(prevDate) || 0;
+      const cur = amountForDate(cursor);
+      const prev = amountForDate(prevDate);
       if (!prev) break;
       const dir: "up" | "down" = cur >= prev ? "up" : "down";
       if (direction === null) direction = dir;
@@ -188,10 +193,10 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
         const ev = cards.activeEvents[0];
         const eventDays: string[] = [];
         for (let d = ev.startDate; d <= targetDate && d <= ev.endDate; d = addDays(d, 1)) eventDays.push(d);
-        const eventAvg = eventDays.length ? eventDays.reduce((s, d) => s + (byDateAmount.get(d) || 0), 0) / eventDays.length : 0;
+        const eventAvg = eventDays.length ? eventDays.reduce((s, d) => s + amountForDate(d), 0) / eventDays.length : 0;
         const beforeDays: string[] = [];
         for (let i = 1; i <= eventDays.length; i++) beforeDays.push(addDays(ev.startDate, -i));
-        const beforeAvg = beforeDays.length ? beforeDays.reduce((s, d) => s + (byDateAmount.get(d) || 0), 0) / beforeDays.length : 0;
+        const beforeAvg = beforeDays.length ? beforeDays.reduce((s, d) => s + amountForDate(d), 0) / beforeDays.length : 0;
         if (beforeAvg > 0) {
           const eventChangeRate = ((eventAvg - beforeAvg) / beforeAvg) * 100;
           lines.push(`행사(${ev.content || ev.title}) 시작 전 대비 일평균 매출이 ${eventChangeRate >= 0 ? "+" : ""}${eventChangeRate.toFixed(0)}%${eventChangeRate >= 0 ? " 늘었어요." : "예요."}`);
@@ -271,11 +276,12 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const storeRows = filterByStore(allRows, storeName);
   const companyRows = filterByStore(allRows, undefined);
 
-  // MARK 6.27: 매출 총액 계산은 "일간매출(26년)" 실적을 우선 사용합니다(정확도가 더 높음).
+  // MARK 6.38: Daily_Sales_History가 이제 "(금액)" 시트의 실제 판매금액을 담고 있어서
+  // 오차가 없습니다. Daily_Sales_History를 우선 쓰고, 그 날짜 데이터가 없을 때만
+  // "일간매출(26년)"(참고용, 시차 있을 수 있음)으로 보완합니다.
   const amountRows = await loadStoreAmountRows();
   const scopedAmountRows = filterAmountRowsByStore(amountRows, storeName);
   const companyAmountRows = filterAmountRowsByStore(amountRows, undefined);
-  const useAccurateAmount = scopedAmountRows.length > 0;
 
   // MARK 6.26: 이벤트(스페셜오퍼위크) 기간을 먼저 구해둡니다 — 주간 예측 계산에서
   // 이벤트 기간의 매출을 요일가중치 기준값 계산에서 빼기 위해 필요합니다.
@@ -300,9 +306,15 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   for (let d = weekStart; d <= weekEnd; d = addDays(d, 1)) weekDates.push(d);
 
   const weekAmountByDate = new Map<string, number>();
-  const weekAmountSource = useAccurateAmount ? scopedAmountRows : storeRows;
-  for (const r of weekAmountSource) {
+  const weekDatesCoveredByDS = new Set<string>();
+  for (const r of storeRows) {
     if (r.date < weekStart || r.date > weekEnd) continue;
+    weekAmountByDate.set(r.date, (weekAmountByDate.get(r.date) || 0) + Number(r.amount || 0));
+    weekDatesCoveredByDS.add(r.date);
+  }
+  for (const r of scopedAmountRows) {
+    if (r.date < weekStart || r.date > weekEnd) continue;
+    if (weekDatesCoveredByDS.has(r.date)) continue; // Daily_Sales_History에 이미 있으면 그걸 우선
     weekAmountByDate.set(r.date, (weekAmountByDate.get(r.date) || 0) + Number(r.amount || 0));
   }
 
@@ -338,9 +350,14 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const { start: monthStart, end: monthEnd } = getMonthRange(targetDate);
   const monthElapsedDays = Math.min(daysBetweenInclusive(monthStart, monthEnd), daysBetweenInclusive(monthStart, targetDate));
   const monthTotalDays = daysBetweenInclusive(monthStart, monthEnd);
-  const monthCumulative = weekAmountSource === scopedAmountRows
-    ? scopedAmountRows.filter((r) => r.date >= monthStart && r.date <= targetDate).reduce((s, r) => s + Number(r.amount || 0), 0)
-    : storeRows.filter((r) => r.date >= monthStart && r.date <= targetDate).reduce((s, r) => s + Number(r.amount || 0), 0);
+  const monthDatesCoveredByDS = new Set(storeRows.filter((r) => r.date >= monthStart && r.date <= targetDate).map((r) => r.date));
+  const monthCumulativeDS = storeRows
+    .filter((r) => r.date >= monthStart && r.date <= targetDate)
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  const monthCumulativeRefOnly = scopedAmountRows
+    .filter((r) => r.date >= monthStart && r.date <= targetDate && !monthDatesCoveredByDS.has(r.date))
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  const monthCumulative = monthCumulativeDS + monthCumulativeRefOnly;
   const monthProjected = monthElapsedDays > 0 ? (monthCumulative / monthElapsedDays) * monthTotalDays : 0;
   // 월 목표는 별도 저장본이 없어서, 주간목표 × (이번달 일수/7)로 추정합니다(추정치임을 명시).
   const monthTargetEstimate = weekTarget ? weekTarget * (monthTotalDays / 7) : 0;
@@ -443,18 +460,28 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   // ---- STEP7 진행중 이벤트 스페셜오퍼위크 ----
   const activeEvents = storeEvents.filter((e: any) => e.startDate <= targetDate && e.endDate >= targetDate);
 
-  // ---- STEP8 최근 14일 매출 추이 (전사 비교 포함, 일간매출(26년) 실적 우선) ----
+  // ---- STEP8 최근 14일 매출 추이 (전사 비교 포함, Daily_Sales_History 우선) ----
   const trendStart = addDays(targetDate, -13);
   const byDate = new Map<string, number>();
-  const trendStoreSource = useAccurateAmount ? scopedAmountRows : storeRows;
-  for (const r of trendStoreSource) {
+  const trendDatesCoveredByDS = new Set<string>();
+  for (const r of storeRows) {
     if (r.date < trendStart || r.date > targetDate) continue;
+    byDate.set(r.date, (byDate.get(r.date) || 0) + Number(r.amount || 0));
+    trendDatesCoveredByDS.add(r.date);
+  }
+  for (const r of scopedAmountRows) {
+    if (r.date < trendStart || r.date > targetDate || trendDatesCoveredByDS.has(r.date)) continue;
     byDate.set(r.date, (byDate.get(r.date) || 0) + Number(r.amount || 0));
   }
   const companyByDate = new Map<string, number>();
-  const trendCompanySource = companyAmountRows.length ? companyAmountRows : companyRows;
-  for (const r of trendCompanySource) {
+  const companyTrendDatesCoveredByDS = new Set<string>();
+  for (const r of companyRows) {
     if (r.date < trendStart || r.date > targetDate) continue;
+    companyByDate.set(r.date, (companyByDate.get(r.date) || 0) + Number(r.amount || 0));
+    companyTrendDatesCoveredByDS.add(r.date);
+  }
+  for (const r of companyAmountRows) {
+    if (r.date < trendStart || r.date > targetDate || companyTrendDatesCoveredByDS.has(r.date)) continue;
     companyByDate.set(r.date, (companyByDate.get(r.date) || 0) + Number(r.amount || 0));
   }
   const trend: { date: string; amount: number; companyAmount: number }[] = [];
@@ -465,7 +492,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   return {
     storeName,
     targetDate,
-    amountSource: useAccurateAmount ? "일간매출(26년)" : "Daily_Sales_History(추정)",
+    amountSource: "Daily_Sales_History(실제금액) 우선, 일간매출(26년) 보완",
     week: { start: weekStart, end: weekEnd, elapsedDays: weekElapsedDays, cumulative: weekCumulative, target: weekTarget, projected: weekProjected, projectedRate: weekProjectedRate },
     month: { start: monthStart, end: monthEnd, elapsedDays: monthElapsedDays, totalDays: monthTotalDays, cumulative: monthCumulative, targetEstimate: monthTargetEstimate, projected: monthProjected, projectedRate: monthProjectedRate },
     top10Comparison,

@@ -1334,6 +1334,29 @@ export default function InventoryDashboard() {
       const sheet = wb.Sheets[sheetName];
       const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
+      // MARK 6.36.1: 날짜 컬럼("기준일자")을 엑셀 일련번호 그대로 두면, 구글시트가 "숫자"로만
+      // 받아들여서 매번 표시형식을 다시 지정해줘야 합니다. 대신 여기서 바로 "YYYY-MM-DD" 문자열로
+      // 바꿔서 보내면, 시트가 새로 만들어져도 항상 날짜로 정확히 보여요(별도 서식 설정 불필요).
+      let dateColIdx = -1;
+      for (let r = 0; r < Math.min(rows.length, 6) && dateColIdx < 0; r++) {
+        const idx = (rows[r] || []).findIndex((v: any) => String(v ?? "").trim() === "기준일자");
+        if (idx >= 0) dateColIdx = idx;
+      }
+      function excelSerialToDateStr(serial: number) {
+        const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toISOString().slice(0, 10);
+      }
+      if (dateColIdx >= 0) {
+        for (const row of rows) {
+          const v = row[dateColIdx];
+          if (typeof v === "number") {
+            const converted = excelSerialToDateStr(v);
+            if (converted) row[dateColIdx] = converted;
+          }
+        }
+      }
+
       // MARK 6.35: 열이 아주 많은(채널 블록이 많은) 파일은 행 수 기준 청크로도 4.5MB 제한을
       // 넘을 수 있어서, "실제 JSON 용량"을 기준으로 청크를 나눕니다.
       const TARGET_CHUNK_BYTES = 2_000_000; // 여유 있게 2MB 목표 (요청 전체 한도는 4.5MB)

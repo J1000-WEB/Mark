@@ -27,6 +27,10 @@ export async function POST(req: Request) {
     const spreadsheetId = getDailySourceSheetId();
 
     if (mode === "start") {
+      // MARK 6.37: 백업 삭제를 finish 시점이 아니라 여기(start)에서 먼저 합니다.
+      // 그래야 업로드 도중에 [기존백업]+[기존라이브]+[새 스테이징] 3벌이 동시에 존재하는 걸 피하고,
+      // [기존라이브]+[새 스테이징] 2벌만 유지해서 스프레드시트 전체 셀 한도(1000만)에 덜 걸립니다.
+      await deleteSheetByTitleIfExistsById(spreadsheetId, BACKUP_SHEET).catch(() => {});
       await deleteSheetByTitleIfExistsById(spreadsheetId, STAGING_SHEET).catch(() => {});
       await createSheetWithValuesById(spreadsheetId, STAGING_SHEET, rows || []);
       return NextResponse.json({ ok: true, written: (rows || []).length });

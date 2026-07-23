@@ -1329,7 +1329,7 @@ export default function InventoryDashboard() {
     try {
       const XLSX = await import("xlsx");
       const buf = await styleSheetFile.arrayBuffer();
-      const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true });
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
       const sheetName = wb.SheetNames.find((n: string) => n.includes("스타일별") && n.includes("채널별")) || wb.SheetNames[0];
       const sheet = wb.Sheets[sheetName];
       const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });

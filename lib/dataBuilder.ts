@@ -2,6 +2,7 @@ import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
+import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -2797,7 +2798,7 @@ function sumStoreSalesRows(rows: any[], storeName: string, dates: Set<string>) {
     .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
 }
 
-function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "", weeklyAnchorOverride = "") {
+function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "", weeklyAnchorOverride = "", dailyAmountMap?: Map<string, Map<string, number>>) {
   if (!currentDate) return null as any;
 
   const weeklyAnchorMonday = weeklyAnchorOverride || mondayAfterDate(currentDate);
@@ -2822,8 +2823,11 @@ function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, com
     if (target) targetMap.set(r.storeName, Math.max(targetMap.get(r.storeName) || 0, target));
   }
 
-  const makeRows = (dates: Set<string>) => stores.map((storeName) => {
-    const daySales = sumStoreSalesRows(rows, storeName, dayDates);
+  const makeRows = (dates: Set<string>, dayDateOverride?: string) => stores.map((storeName) => {
+    const dayDateKey = dayDateOverride || currentDate;
+    const daySales = dailyAmountMap
+      ? getMergedAmount(dailyAmountMap, storeName, dayDateKey)
+      : sumStoreSalesRows(rows, storeName, new Set([dayDateKey]));
     const weekSales = sumStoreSalesRows(rows, storeName, dates);
     const monthSales = sumStoreSalesRows(rows, storeName, monthDates);
     const weekTarget = targetMap.get(storeName) || 0;
@@ -2847,8 +2851,8 @@ function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, com
   }).filter((r) => Number(r.daySales || 0) || Number(r.weekSales || 0) || Number(r.monthSales || 0));
 
   return {
-    dailyCur: makeRows(dayDates),
-    dailyCmp: makeRows(compareDayDates),
+    dailyCur: makeRows(dayDates, currentDate),
+    dailyCmp: makeRows(compareDayDates, [...compareDayDates][0]),
     weeklyCur: makeRows(weekDates),
     weeklyCmp: makeRows(prevWeekDates),
     monthCur: makeRows(monthDates),
@@ -2891,10 +2895,20 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyAnchorFromB2 = weeklyAnchorFromWeeklySheet(productValues);
   const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
   const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
-  const currentDate = latestStoreSalesDate(dailyStoreRows) || latestHistoryDate(historyRows);
+  // MARK 6.40: 일간 탭과 매장 탭의 기준일을 통일합니다 — 둘 다 기본값은 "어제"(KST)이고,
+  // 비교일도 같은 요일 규칙(평일=어제, 금/토/월=전주 동요일)을 씁니다.
+  const currentDate = yesterdayDateKeyKST();
+  const { compareDate: dailyCompareDate } = getComparisonDateForDaily(currentDate);
+
+  // 매장별 일자별 매출은 Daily_Sales_History(실제 금액, 우선)와 일간매출(26년)(보완)을 병합해서
+  // 계산합니다 — 매장 탭(lib/dailyBriefing.ts)과 완전히 같은 규칙(lib/storeDailyAmount.ts)입니다.
+  const dailyAmountMap = mergeStoreDailyAmounts(
+    coreHistoryRows.filter((r: any) => r.date === currentDate || r.date === dailyCompareDate),
+    dailyStoreRows.filter((r: any) => r.date === currentDate || r.date === dailyCompareDate)
+  );
 
   const historyStores = dailyStoreRows.length
-    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, "", weeklyAnchorFromB2)
+    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, dailyCompareDate, weeklyAnchorFromB2, dailyAmountMap)
     : buildHistoryStoreRows(historyRows, currentDate);
   const dailyCur = historyStores?.dailyCur || [];
   const dailyCmp = historyStores?.dailyCmp || [];

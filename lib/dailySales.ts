@@ -83,10 +83,12 @@ function isExcludedSalesChannel(channelName: string) {
 }
 
 function isOnlineChannel(channelName: string) {
-  const s = text(channelName).toLowerCase();
+  const raw = text(channelName);
+  const s = raw.toLowerCase();
   return (
     isExcludedSalesChannel(channelName) ||
-    s.startsWith("온라인") ||
+    raw.includes("온라인") || // 접두사(startsWith)가 아니라 어디에 있든 매칭해서 더 안전하게
+    raw.includes("글로벌") ||
     s.includes("무신사") ||
     s.includes("29cm") ||
     s.includes("ssf") ||
@@ -95,7 +97,18 @@ function isOnlineChannel(channelName: string) {
     s.includes("w컨셉") ||
     s.includes("wconcept") ||
     s.includes("eql") ||
-    s.includes("한섬")
+    s.includes("한섬") ||
+    s.includes("쿠팡") ||
+    s.includes("카카오") ||
+    s.includes("브랜디") ||
+    s.includes("에이블리") ||
+    s.includes("티몬") ||
+    s.includes("위메프") ||
+    s.includes("옥션") ||
+    s.includes("11번가") ||
+    s.includes("gmarket") ||
+    s.includes("g마켓") ||
+    s.includes("스마트스토어")
   );
 }
 

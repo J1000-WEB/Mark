@@ -133,7 +133,7 @@ export async function GET(req: Request) {
 
     const proposals = (proposalRows || []).slice(1).map(proposalRow).reverse();
     const masters = (masterRows || []).slice(1).map(masterRow).reverse();
-    const requests = (requestRows || []).slice(1).map(requestRow).reverse().slice(0, 30);
+    const requests = (requestRows || []).slice(1).map(requestRow).reverse().slice(0, 100);
     const results = (resultRows || []).slice(1).map(resultRow).reverse().slice(0, 20);
 
     return NextResponse.json(
@@ -199,8 +199,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // MARK 6.43: 요청 처리를 시작할 때 "processing"으로 표시 (화면 Badge가 이 단어를 인식해서 주황색으로 보여줌).
+    if (body.action === "request-start") {
+      const requestId = String(body.requestId || "");
+      if (!requestId) {
+        return NextResponse.json({ ok: false, error: "requestId가 필요합니다." }, { status: 400 });
+      }
+      const requestRows = await getSheetValues(REQUEST_SHEET, "A:F").catch(() => []);
+      const rowIdx = (requestRows || []).slice(1).findIndex((r) => String(r[0] || "") === requestId);
+      if (rowIdx >= 0) {
+        const rowNumber = rowIdx + 2;
+        await updateValues(`'${REQUEST_SHEET}'!E${rowNumber}`, [["processing"]]);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     // MARK 6.41: 로컬 Research Agent(watch.js)가 처리 완료 후 호출하는 액션.
-    // Research_Request 상태를 processed로 바꾸고, Research_Result에 원문 결과를 남깁니다.
+    // Research_Request 상태를 completed/failed로 바꾸고, Research_Result에 원문 결과를 남깁니다.
+    // (화면 Badge 컴포넌트가 "completed"/"failed"를 인식해서 색으로 구분하므로 이 단어를 그대로 씁니다.)
     if (body.action === "request-complete") {
       const requestId = String(body.requestId || "");
       if (!requestId) {
@@ -209,9 +225,10 @@ export async function POST(req: Request) {
 
       const requestRows = await getSheetValues(REQUEST_SHEET, "A:F").catch(() => []);
       const rowIdx = (requestRows || []).slice(1).findIndex((r) => String(r[0] || "") === requestId);
+      const finalStatus = body.status === "error" ? "failed" : "completed";
       if (rowIdx >= 0) {
         const rowNumber = rowIdx + 2;
-        await updateValues(`'${REQUEST_SHEET}'!E${rowNumber}:F${rowNumber}`, [["processed", nowKST()]]);
+        await updateValues(`'${REQUEST_SHEET}'!E${rowNumber}:F${rowNumber}`, [[finalStatus, nowKST()]]);
       }
 
       await appendValues(`'${RESULT_SHEET}'!A:E`, [[
@@ -219,7 +236,7 @@ export async function POST(req: Request) {
         nowKST(),
         requestId,
         body.result || "",
-        body.status || "ok",
+        finalStatus,
       ]]);
 
       return NextResponse.json({ ok: true });

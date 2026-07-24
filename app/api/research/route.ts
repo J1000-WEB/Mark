@@ -206,7 +206,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
-    const proposals = parseResearchResult(String(body.resultText || ""));
+    const resultText = String(body.resultText || "");
+
+    // MARK 6.42: Claude Code CLI가 인증 만료 등으로 실패하면 에러 텍스트를 그대로 뱉는데,
+    // 이걸 정상 응답처럼 파싱해서 Logic_Master에 저장해버리는 사고를 막습니다.
+    const errorSignals = [
+      /api error/i,
+      /failed to authenticate/i,
+      /oauth.*expired/i,
+      /unauthorized/i,
+      /rate limit/i,
+      /^\s*error[:\s]/i,
+    ];
+    const looksLikeError = errorSignals.some((re) => re.test(resultText)) && resultText.trim().length < 500;
+    if (looksLikeError) {
+      return NextResponse.json(
+        { ok: false, error: `Claude 실행 결과가 정상 응답이 아니라 오류로 보여서 저장하지 않았습니다: "${resultText.trim().slice(0, 200)}"` },
+        { status: 400 }
+      );
+    }
+
+    const proposals = parseResearchResult(resultText);
     if (!proposals.length) {
       return NextResponse.json({ ok: false, error: "등록할 로직 제안을 찾지 못했습니다." }, { status: 400 });
     }

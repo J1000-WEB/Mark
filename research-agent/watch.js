@@ -84,6 +84,16 @@ async function saveResearchResult(resultText) {
   return data.count || 0;
 }
 
+async function markRequestProcessing(requestId) {
+  const res = await fetch(`${MARK_BASE_URL}/api/logic`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: LOGIC_PASSWORD, action: "request-start", requestId }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "처리시작 표시 실패");
+}
+
 async function markRequestComplete(requestId, resultText, status = "ok") {
   const res = await fetch(`${MARK_BASE_URL}/api/logic`, {
     method: "POST",
@@ -96,6 +106,7 @@ async function markRequestComplete(requestId, resultText, status = "ok") {
 
 async function processOneRequest(request) {
   log(`처리 시작: ${request.id} (${request.type}) — ${String(request.request || "").slice(0, 60)}`);
+  await markRequestProcessing(request.id).catch((err) => log("⚠ processing 표시 실패(계속 진행):", err.message || err));
 
   const basePrompt = await fetchResearchPack();
   const fullPrompt = `${basePrompt}\n\n---\n추가로, 다음 사용자 요청도 함께 반영해서 제안해주세요:\n${request.request}`;

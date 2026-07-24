@@ -199,6 +199,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // MARK 6.41: 로컬 Research Agent(watch.js)가 처리 완료 후 호출하는 액션.
+    // Research_Request 상태를 processed로 바꾸고, Research_Result에 원문 결과를 남깁니다.
+    if (body.action === "request-complete") {
+      const requestId = String(body.requestId || "");
+      if (!requestId) {
+        return NextResponse.json({ ok: false, error: "requestId가 필요합니다." }, { status: 400 });
+      }
+
+      const requestRows = await getSheetValues(REQUEST_SHEET, "A:F").catch(() => []);
+      const rowIdx = (requestRows || []).slice(1).findIndex((r) => String(r[0] || "") === requestId);
+      if (rowIdx >= 0) {
+        const rowNumber = rowIdx + 2;
+        await updateValues(`'${REQUEST_SHEET}'!E${rowNumber}:F${rowNumber}`, [["processed", nowKST()]]);
+      }
+
+      await appendValues(`'${RESULT_SHEET}'!A:E`, [[
+        makeId("RES"),
+        nowKST(),
+        requestId,
+        body.result || "",
+        body.status || "ok",
+      ]]);
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // 대기중인 Research_Request 목록만 가볍게 조회 (로컬 watcher가 폴링할 때 사용).
+    if (body.action === "pending-requests") {
+      const requestRows = await getSheetValues(REQUEST_SHEET, "A:F").catch(() => []);
+      const pending = (requestRows || []).slice(1).map(requestRow).filter((r) => r.status === "pending");
+      return NextResponse.json({ ok: true, pending });
+    }
+
     return NextResponse.json({ ok: false, error: "지원하지 않는 action입니다." }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "Logic save failed" }, { status: 500 });

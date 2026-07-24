@@ -101,6 +101,14 @@ async function processOneRequest(request) {
   const fullPrompt = `${basePrompt}\n\n---\n추가로, 다음 사용자 요청도 함께 반영해서 제안해주세요:\n${request.request}`;
 
   const resultText = await runClaudeCode(fullPrompt);
+
+  // MARK 6.42: Claude Code가 인증 만료 등으로 실패하면 짧은 에러 텍스트만 돌아오는데,
+  // 이걸 그대로 저장하지 않고 여기서 먼저 걸러냅니다.
+  const errorSignals = [/api error/i, /failed to authenticate/i, /oauth.*expired/i, /unauthorized/i];
+  if (resultText.length < 500 && errorSignals.some((re) => re.test(resultText))) {
+    throw new Error(`Claude Code 실행 오류로 보임: ${resultText.slice(0, 200)}`);
+  }
+
   const savedCount = await saveResearchResult(resultText);
   await markRequestComplete(request.id, resultText, "ok");
 

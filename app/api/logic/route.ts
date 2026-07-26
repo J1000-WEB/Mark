@@ -34,6 +34,7 @@ const MASTER_HEADER = [
   "Status",
   "ApprovedBy",
   "ApprovedAt",
+  "Implemented",
 ];
 
 const REQUEST_HEADER = ["ID", "CreatedAt", "Type", "Request", "Status", "ProcessedAt"];
@@ -89,6 +90,7 @@ function masterRow(row: any[], idx: number) {
     status: String(row[7] || "active").toLowerCase(),
     approvedBy: row[8] || "",
     approvedAt: row[9] || "",
+    implemented: row[10] || "미반영",
   };
 }
 
@@ -126,7 +128,7 @@ export async function GET(req: Request) {
 
     const [proposalRows, masterRows, requestRows, resultRows] = await Promise.all([
       getSheetValues(PROPOSAL_SHEET, "A:K").catch(() => []),
-      getSheetValues(MASTER_SHEET, "A:J").catch(() => []),
+      getSheetValues(MASTER_SHEET, "A:K").catch(() => []),
       getSheetValues(REQUEST_SHEET, "A:F").catch(() => []),
       getSheetValues(RESULT_SHEET, "A:E").catch(() => []),
     ]);
@@ -183,6 +185,18 @@ export async function POST(req: Request) {
       const approvedAt = status === "approved" ? nowKST() : "";
       await updateValues(`'${PROPOSAL_SHEET}'!I${rowNumber}:K${rowNumber}`, [[status, approvedBy, approvedAt]]);
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // MARK 6.44: 승인된 로직이 실제로 코드에 반영됐는지 추적하는 액션.
+    // Logic_Master는 승인 여부만 기록했지, "진짜 코드로 만들었는지"는 표시할 방법이 없었음.
+    if (body.action === "mark-implemented") {
+      const rowNumber = Number(body.rowNumber);
+      const implemented = body.implemented === false ? "미반영" : "반영완료";
+      if (!rowNumber) {
+        return NextResponse.json({ ok: false, error: "rowNumber가 필요합니다." }, { status: 400 });
+      }
+      await updateValues(`'${MASTER_SHEET}'!K${rowNumber}`, [[implemented]]);
       return NextResponse.json({ ok: true });
     }
 

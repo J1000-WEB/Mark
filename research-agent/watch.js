@@ -52,7 +52,9 @@ async function fetchResearchPack() {
 // Claude Code CLI를 "출력 모드"(-p)로 실행하고, stdin으로 프롬프트를 넘겨서 결과를 받습니다.
 function runClaudeCode(prompt) {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE_BIN, ["-p"], { shell: true });
+    // shell:true + 문자열 명령(배열 args 아님)으로 실행 — Windows에서 claude.cmd를 PATH에서
+    // 찾아 실행하려면 shell이 필요하고, 문자열로 넘기면 Node의 "unescaped args" 경고가 안 뜹니다.
+    const child = spawn(`${CLAUDE_BIN} -p`, { shell: true });
     let stdout = "";
     let stderr = "";
 

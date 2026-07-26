@@ -36,7 +36,8 @@ export default function LogicCenter() {
   const [results, setResults] = useState<any[]>([]);
   const [status, setStatus] = useState("");
 
-  const [category, setCategory] = useState("RT");
+  const [requestCategory, setRequestCategory] = useState("RT");
+  const [proposalCategory, setProposalCategory] = useState("RT");
   const [priority, setPriority] = useState("Medium");
   const [title, setTitle] = useState("");
   const [proposal, setProposal] = useState("");
@@ -71,7 +72,7 @@ export default function LogicCenter() {
     const res = await fetch("/api/logic", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, action: "create", category, title, proposal, priority }),
+      body: JSON.stringify({ password, action: "create", category: proposalCategory, title, proposal, priority }),
     });
     const data = await res.json();
 
@@ -96,7 +97,7 @@ export default function LogicCenter() {
     const res = await fetch("/api/logic", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, action: "request", type: category, request: requestText }),
+      body: JSON.stringify({ password, action: "request", type: requestCategory, request: requestText }),
     });
     const data = await res.json();
 
@@ -126,6 +127,100 @@ export default function LogicCenter() {
 
     setStatus(nextStatus === "approved" ? "승인했습니다. Agent가 다음 실행 때 Logic_Master로 승격합니다." : "상태를 변경했습니다.");
     await load();
+  }
+
+  async function markImplemented(rowNumber: number, implemented: boolean) {
+    setStatus("반영 상태 변경 중...");
+    const res = await fetch("/api/logic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, action: "mark-implemented", rowNumber, implemented }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      setStatus(data.error || "반영 상태 변경 실패");
+      return;
+    }
+
+    setStatus(implemented ? "코드 반영완료로 표시했습니다." : "미반영으로 되돌렸습니다.");
+    await load();
+  }
+
+  async function downloadExcel() {
+    setStatus("엑셀 만드는 중...");
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+
+    const headerFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1E293B" } };
+    const headerFont = { color: { argb: "FFFFFFFF" }, bold: true };
+    const cols = [
+      { header: "구분", key: "kind", width: 12 },
+      { header: "카테고리", key: "category", width: 20 },
+      { header: "제목", key: "title", width: 36 },
+      { header: "내용(Problem/Action 등)", key: "proposal", width: 70 },
+      { header: "우선순위", key: "priority", width: 10 },
+      { header: "상태", key: "status", width: 12 },
+      { header: "구현여부", key: "implemented", width: 12 },
+      { header: "생성일", key: "createdAt", width: 20 },
+      { header: "승인자", key: "approvedBy", width: 10 },
+    ];
+
+    function buildSheet(name: string, rows: any[]) {
+      const ws = wb.addWorksheet(name);
+      ws.columns = cols;
+      ws.getRow(1).eachCell((cell) => {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+      });
+      ws.views = [{ state: "frozen", ySplit: 1 }];
+      rows.forEach((r) => {
+        const row = ws.addRow(r);
+        row.eachCell((cell) => {
+          cell.alignment = { wrapText: true, vertical: "top" };
+        });
+      });
+    }
+
+    buildSheet(
+      "대기중 제안",
+      pending.map((p: any) => ({
+        kind: "제안(pending)",
+        category: p.category,
+        title: p.title,
+        proposal: p.proposal,
+        priority: p.priority,
+        status: p.status,
+        implemented: "-",
+        createdAt: p.createdAt,
+        approvedBy: p.approvedBy || "-",
+      }))
+    );
+
+    buildSheet(
+      "승인된 로직(Logic_Master)",
+      activeMasters.map((m: any) => ({
+        kind: "확정 로직",
+        category: m.category,
+        title: m.title,
+        proposal: m.proposal,
+        priority: "-",
+        status: m.status,
+        implemented: m.implemented || "미반영",
+        createdAt: m.createdAt,
+        approvedBy: m.approvedBy || "-",
+      }))
+    );
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Logic_Center_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus("엑셀 다운로드 완료.");
   }
 
   const pending = proposals.filter((x) => x.status === "pending");
@@ -171,7 +266,16 @@ export default function LogicCenter() {
               Research Agent 제안 → 승인 → Logic_Master 자산화 흐름을 관리합니다.
             </p>
           </div>
-          <NavTabs active="weekly" />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={downloadExcel}
+              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-700"
+            >
+              📥 엑셀 다운로드
+            </button>
+            <NavTabs active="weekly" />
+          </div>
         </header>
 
         {status && <section className="rounded-2xl bg-blue-50 p-4 text-sm font-black text-blue-700">{status}</section>}
@@ -195,17 +299,23 @@ export default function LogicCenter() {
           </div>
         </section>
 
+        <div className="pt-2">
+          <h2 className="text-2xl font-black text-slate-900">1️⃣ 내 질문</h2>
+          <p className="text-sm font-semibold text-slate-500">여기서 요청을 만들면 watch.js가 자동으로 처리해요.</p>
+        </div>
+
         <section className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black">Research_Request 수동 생성</h2>
             <p className="mt-1 text-sm font-bold text-slate-500">Trigger가 아닌 직접 연구 요청을 만들 때 사용합니다.</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold" value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option>Validation</option>
+              <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold" value={requestCategory} onChange={(e) => setRequestCategory(e.target.value)}>
                 <option>RT</option>
                 <option>Inventory</option>
                 <option>Sales</option>
                 <option>Promotion</option>
+                <option>Store</option>
+                <option>Validation</option>
                 <option>General</option>
               </select>
               <button onClick={createResearchRequest} className="md:col-span-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-black text-white">
@@ -224,7 +334,7 @@ export default function LogicCenter() {
             <h2 className="text-xl font-black">Logic_Proposal 수동 등록</h2>
             <p className="mt-1 text-sm font-bold text-slate-500">Claude 결과를 직접 붙여넣어 pending 제안으로 저장합니다.</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold" value={category} onChange={(e) => setCategory(e.target.value)}>
+              <select className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-bold" value={proposalCategory} onChange={(e) => setProposalCategory(e.target.value)}>
                 <option>RT</option>
                 <option>Inventory</option>
                 <option>Sales</option>
@@ -251,8 +361,50 @@ export default function LogicCenter() {
             </button>
           </div>
         </section>
+        <div className="pt-2">
+          <h2 className="text-2xl font-black text-slate-900">2️⃣ 최근 요청 로그</h2>
+          <p className="text-sm font-semibold text-slate-500">방금 만든 요청이 pending → processing → completed로 잘 넘어가는지 확인하세요.</p>
+        </div>
 
         <section className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-3xl bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black">최근 Research_Request</h2>
+            <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
+              {requests.map((it) => (
+                <div key={it.rowNumber} className="rounded-2xl bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black">{it.id}</p>
+                    <Badge status={it.status} />
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{it.createdAt} · {it.type} · {it.processedAt}</p>
+                  <p className="mt-2 line-clamp-3 text-xs font-semibold leading-5 text-slate-600">{it.request}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black">최근 Research_Result</h2>
+            <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
+              {results.map((it) => (
+                <div key={it.rowNumber} className="rounded-2xl bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black">{it.requestId || it.id}</p>
+                    <Badge status={it.status} />
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{it.createdAt}</p>
+                  <pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-600">{it.result}</pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <div className="pt-2">
+          <h2 className="text-2xl font-black text-slate-900">3️⃣ 나온 제안 확인 및 확정</h2>
+          <p className="text-sm font-semibold text-slate-500">대기중 제안을 검토해 승인/보류/거절하고, 승인된 로직은 코드 반영 여부를 표시하세요.</p>
+        </div>
+
+        <section className="space-y-6">
           <div className="rounded-3xl bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black">대기중 Logic_Proposal</h2>
             <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-2">
@@ -301,40 +453,22 @@ export default function LogicCenter() {
                   </div>
                   <pre className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-xs font-semibold leading-5 text-slate-700">{it.proposal}</pre>
                   <p className="mt-2 text-xs font-bold text-slate-500">Approved: {it.approvedBy || "-"} · {it.approvedAt || "-"}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-black">최근 Research_Request</h2>
-            <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
-              {requests.map((it) => (
-                <div key={it.rowNumber} className="rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-black">{it.id}</p>
-                    <Badge status={it.status} />
+                  <div className="mt-3 flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-black ${
+                        it.implemented === "반영완료" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                      }`}
+                    >
+                      {it.implemented === "반영완료" ? "✅ 코드 반영완료" : "⏳ 아직 미반영"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => markImplemented(it.rowNumber, it.implemented !== "반영완료")}
+                      className="rounded-full border border-slate-300 px-3 py-1 text-xs font-black text-slate-600 hover:bg-slate-100"
+                    >
+                      {it.implemented === "반영완료" ? "미반영으로 되돌리기" : "반영완료로 표시"}
+                    </button>
                   </div>
-                  <p className="mt-1 text-xs font-bold text-slate-500">{it.createdAt} · {it.type} · {it.processedAt}</p>
-                  <p className="mt-2 line-clamp-3 text-xs font-semibold leading-5 text-slate-600">{it.request}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-black">최근 Research_Result</h2>
-            <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
-              {results.map((it) => (
-                <div key={it.rowNumber} className="rounded-2xl bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-black">{it.requestId || it.id}</p>
-                    <Badge status={it.status} />
-                  </div>
-                  <p className="mt-1 text-xs font-bold text-slate-500">{it.createdAt}</p>
-                  <pre className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-600">{it.result}</pre>
                 </div>
               ))}
             </div>

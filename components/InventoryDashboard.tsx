@@ -493,6 +493,186 @@ function normalizeSeason(value: any) {
   return String(value || "").replace(/\s/g, "").trim();
 }
 
+function fmtPct1(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? `${n.toFixed(0)}%` : "-";
+}
+
+function PromotionReportCard({ it, p360 }: { it: any; p360: any }) {
+  const promoPrice = it.promotionPrice || it.currentPrice || it.tagPrice || 0;
+  const costRatio = p360?.cost && promoPrice ? (Number(p360.cost) / promoPrice) * 100 : null;
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+      <p className="text-xs font-semibold text-slate-500">{it.styleCode} · {it.season || "-"}</p>
+      <p className="text-sm font-black">{it.productName}</p>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs sm:grid-cols-6">
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">소진율</p>
+          <p className="font-black">{p360 ? fmtPct1(p360.sellThroughRate) : "조회중"}</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">오프라인재고</p>
+          <p className="font-black">{fmtNum(it.offlineStock)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">온라인재고</p>
+          <p className="font-black">{fmtNum(it.onlineStock)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">매장총재고</p>
+          <p className="font-black">{fmtNum(it.storeStock)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">제안가/할인</p>
+          <p className="font-black">{promoPrice ? `${fmtNum(promoPrice)}원` : "-"} ({it.discountRate || 0}%)</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-2">
+          <p className="font-semibold text-slate-400">할인후 원가율</p>
+          <p className="font-black">{costRatio != null ? fmtPct1(costRatio) : "-"}</p>
+        </div>
+      </div>
+      <p className="mt-2 text-xs font-bold text-orange-700">{it.action}</p>
+    </div>
+  );
+}
+
+function PromotionReportSection({ data }: { data: any }) {
+  const [tab, setTab] = useState<"underperform" | "driving">("underperform");
+  const [productMap, setProductMap] = useState<Record<string, any>>({});
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  const underperformItems = (data.promotionSuggestions || []).slice(0, 30);
+  const drivingItems = (data.suppressedPromotionCandidates || []).slice(0, 30);
+  const activeItems = tab === "underperform" ? underperformItems : drivingItems;
+
+  useEffect(() => {
+    const allCodes = Array.from(new Set([...underperformItems, ...drivingItems].map((it: any) => it.styleCode)));
+    const codes = allCodes.filter((c) => !(c in productMap));
+    if (!codes.length) return;
+    setLoadingProducts(true);
+    Promise.all(
+      codes.map(async (code) => {
+        try {
+          const res = await fetch(`/api/product360?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+          const json = await res.json();
+          return [code, json.ok && json.product ? json.product : null] as const;
+        } catch {
+          return [code, null] as const;
+        }
+      })
+    ).then((pairs) => {
+      setProductMap((prev) => {
+        const next = { ...prev };
+        pairs.forEach(([code, product]) => (next[code] = product));
+        return next;
+      });
+      setLoadingProducts(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  async function downloadExcel() {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+
+    function buildSheet(name: string, items: any[]) {
+      const ws = wb.addWorksheet(name);
+      ws.columns = [
+        { header: "품번", key: "styleCode", width: 14 },
+        { header: "상품명", key: "productName", width: 26 },
+        { header: "시즌", key: "season", width: 10 },
+        { header: "소진율(%)", key: "sellThroughRate", width: 12 },
+        { header: "오프라인재고", key: "offlineStock", width: 12 },
+        { header: "온라인재고", key: "onlineStock", width: 12 },
+        { header: "매장총재고", key: "storeStock", width: 12 },
+        { header: "제안가", key: "promotionPrice", width: 12 },
+        { header: "할인율(%)", key: "discountRate", width: 10 },
+        { header: "할인후 원가율(%)", key: "costRatio", width: 14 },
+        { header: "액션", key: "action", width: 30 },
+      ];
+      ws.getRow(1).eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+        cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+      });
+      items.forEach((it) => {
+        const p360 = productMap[it.styleCode];
+        const promoPrice = it.promotionPrice || it.currentPrice || it.tagPrice || 0;
+        const costRatio = p360?.cost && promoPrice ? Math.round((Number(p360.cost) / promoPrice) * 100) : "-";
+        ws.addRow({
+          styleCode: it.styleCode,
+          productName: it.productName,
+          season: it.season || "-",
+          sellThroughRate: p360 && typeof p360.sellThroughRate === "number" ? Math.round(p360.sellThroughRate) : "-",
+          offlineStock: Math.round(it.offlineStock || 0),
+          onlineStock: Math.round(it.onlineStock || 0),
+          storeStock: Math.round(it.storeStock || 0),
+          promotionPrice: promoPrice,
+          discountRate: it.discountRate || 0,
+          costRatio,
+          action: it.action,
+        }).eachCell((cell) => (cell.alignment = { vertical: "top", wrapText: true }));
+      });
+    }
+
+    buildSheet("부진상품 프로모션", underperformItems);
+    buildSheet("호조상품 매출드라이빙", drivingItems);
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `프로모션제안_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Card
+      title="프로모션 제안 리포트 (부진 · 호조 구분)"
+      tone="orange"
+      right={
+        <button
+          type="button"
+          onClick={downloadExcel}
+          className="rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-700"
+        >
+          📥 엑셀 다운로드
+        </button>
+      }
+    >
+      <div className="mb-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setTab("underperform")}
+          className={`rounded-full px-4 py-2 text-xs font-black ${tab === "underperform" ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}
+        >
+          부진상품 제안 ({underperformItems.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("driving")}
+          className={`rounded-full px-4 py-2 text-xs font-black ${tab === "driving" ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}
+        >
+          호조상품 매출드라이빙 ({drivingItems.length})
+        </button>
+      </div>
+      <p className="mb-3 text-xs font-semibold text-slate-500">
+        {tab === "underperform"
+          ? "소진율이 낮고 재고가 쌓인 상품 — 가격 조정을 통한 소진 목적."
+          : "잘 팔리는 상품을 세트/번들로 묶어 매출을 더 끌어올리기 위한 프로모션 후보."}
+        {loadingProducts && " (소진율/원가 정보 불러오는 중...)"}
+      </p>
+      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-2">
+        {activeItems.length === 0 && <Empty />}
+        {activeItems.map((it: any, i: number) => (
+          <PromotionReportCard key={`${it.styleCode}-${i}`} it={it} p360={productMap[it.styleCode]} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function PromotionSection({ data }: { data: any }) {
   const rawSeasons = data.promotionSeasons || ["전체"];
   const allItems = data.promotionSuggestions || [];
@@ -1578,6 +1758,7 @@ export default function InventoryDashboard() {
         <Briefing lines={data.aiBriefing || []} />
 
         <PromotionSection data={data} />
+        <PromotionReportSection data={data} />
 
         <section className="grid gap-6 xl:grid-cols-2">
           <Card title="품절 위험 점포 TOP5" tone="purple">

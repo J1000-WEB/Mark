@@ -738,6 +738,13 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[], com
     ].filter(Boolean);
 
     if (protectReasons.length) {
+      // MARK 6.46: 호조상품(TOP/판매상승)은 소진용 할인이 아니라 "매출 드라이빙"용 가벼운
+      // 세트/번들 프로모션을 제안합니다. 재고가 얇으면 아예 프로모션 없이 정가 유지를 권장합니다.
+      const salesDrivingEligible = offlineStock >= 15;
+      const drivingDiscountRate = salesDrivingEligible ? (companyRank <= 20 ? 5 : 10) : 0;
+      const drivingBasePrice = Number(inv.currentPrice || 0) || Number(inv.tagPrice || 0) || 0;
+      const drivingPromotionPrice = drivingBasePrice ? Math.round((drivingBasePrice * (100 - drivingDiscountRate)) / 100 / 100) * 100 : 0;
+
       suppressedPromotionCandidates.push({
         ...item,
         onlineStock,
@@ -750,7 +757,11 @@ function buildPromotionSuggestions(productRows: any[], inventoryRows: any[], com
         salesChangeRate,
         amountChangeRate,
         suppressedReason: protectReasons.join(" / "),
-        action: "정가 판매 유지",
+        action: salesDrivingEligible ? "세트/번들 매출드라이빙 프로모션 검토" : "정가 판매 유지 (재고 부족)",
+        tagPrice: Number(inv.tagPrice || 0),
+        currentPrice: drivingBasePrice,
+        promotionPrice: drivingPromotionPrice,
+        discountRate: drivingDiscountRate,
       });
       continue;
     }

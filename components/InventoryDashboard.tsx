@@ -1480,6 +1480,11 @@ export default function InventoryDashboard() {
   const [styleSheetUploading, setStyleSheetUploading] = useState(false);
   const [styleSheetProgress, setStyleSheetProgress] = useState("");
   const [styleSheetError, setStyleSheetError] = useState("");
+  const [backfillFiles, setBackfillFiles] = useState<FileList | null>(null);
+  const [backfillUploading, setBackfillUploading] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState("");
+  const [backfillLog, setBackfillLog] = useState<string[]>([]);
+  const [launchCaptureStatus, setLaunchCaptureStatus] = useState("");
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -1500,6 +1505,69 @@ export default function InventoryDashboard() {
       .then((d) => { if (d.ok) setUploadStatuses(d); })
       .catch(() => {});
   }, []);
+
+  async function runCaptureLaunchDates() {
+    setLaunchCaptureStatus("캡처 중...");
+    try {
+      const res = await fetch("/api/capture-launch-dates", { method: "POST" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "캡처 실패");
+      setLaunchCaptureStatus(`완료: ${data.scanned}개 확인, 새로 ${data.added}개 추가됨`);
+    } catch (e: any) {
+      setLaunchCaptureStatus(e?.message || "캡처 실패");
+    }
+  }
+
+  async function runBackfillUpload() {
+    if (!backfillFiles || !backfillFiles.length) return;
+    setBackfillUploading(true);
+    setBackfillLog([]);
+    const XLSX = await import("xlsx");
+
+    const files = Array.from(backfillFiles);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setBackfillProgress(`처리 중... (${i + 1}/${files.length}) ${file.name}`);
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+        const sheetName = wb.SheetNames.find((n: string) => n.includes("스타일별") && n.includes("채널별")) || wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+        // 기준일자 컬럼을 엑셀 일련번호 대신 "YYYY-MM-DD" 문자열로 변환 (판매데이터 업로드와 동일한 처리)
+        let dateColIdx = -1;
+        for (let r = 0; r < Math.min(rows.length, 6) && dateColIdx < 0; r++) {
+          const idx = (rows[r] || []).findIndex((v: any) => String(v ?? "").trim() === "기준일자");
+          if (idx >= 0) dateColIdx = idx;
+        }
+        if (dateColIdx >= 0) {
+          for (const row of rows) {
+            const v = row[dateColIdx];
+            if (typeof v === "number") {
+              const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+              if (!Number.isNaN(d.getTime())) row[dateColIdx] = d.toISOString().slice(0, 10);
+            }
+          }
+        }
+
+        const res = await fetch("/api/daily-sales-backfill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "백필 실패");
+
+        setBackfillLog((prev) => [...prev, `✅ ${file.name}: ${data.sourceDate} — ${data.newRows}건 반영 (교체 ${data.replacedRows}건)`]);
+      } catch (e: any) {
+        setBackfillLog((prev) => [...prev, `⚠ ${file.name}: ${e?.message || "실패"}`]);
+      }
+    }
+
+    setBackfillProgress("완료.");
+    setBackfillUploading(false);
+  }
 
   async function runStyleSheetUpload() {
     if (!styleSheetFile) return;
@@ -1800,6 +1868,55 @@ export default function InventoryDashboard() {
         </section>
 
         <ProductAnalysisSection data={data} />
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold text-slate-500">입고일 캡처 (1회성)</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">
+            "금주/전주" 시트에서 입고일(최초출고일)을 한 번 읽어와 저장해둡니다. 이미 저장된 품번은 안 건드리고, 새 품번만 추가돼요.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={runCaptureLaunchDates}
+              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white"
+            >
+              입고일 캡처 실행
+            </button>
+            {launchCaptureStatus && <p className="text-xs font-bold text-blue-600">{launchCaptureStatus}</p>}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold text-slate-500">과거 일자별 매출 백필 업로드</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">
+            지난주 수요일 이전 Daily_Sales_History는 금액이 정확하지 않아요. 그날짜의 "스타일별채널별(금액)" 파일을 하나씩(또는 여러 개 한번에) 올리면, 그 날짜 데이터만 정확한 값으로 교체돼요.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              multiple
+              onChange={(e) => setBackfillFiles(e.target.files)}
+              className="text-xs"
+            />
+            <button
+              type="button"
+              onClick={runBackfillUpload}
+              disabled={backfillUploading || !backfillFiles || !backfillFiles.length}
+              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+            >
+              {backfillUploading ? "처리 중..." : "백필 업로드"}
+            </button>
+          </div>
+          {backfillProgress && <p className="mt-2 text-xs font-bold text-blue-600">{backfillProgress}</p>}
+          {backfillLog.length > 0 && (
+            <div className="mt-3 max-h-52 overflow-y-auto rounded-xl bg-slate-50 p-3 text-xs font-semibold">
+              {backfillLog.map((line, i) => (
+                <p key={i} className={line.startsWith("⚠") ? "text-red-600" : "text-slate-600"}>{line}</p>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

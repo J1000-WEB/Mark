@@ -192,6 +192,13 @@ export async function readDailySalesFromMarkDb() {
   const rows = await getSheetValuesById(spreadsheetId, sheetName, "A:ZZ");
   if (rows.length < 4) throw new Error(`${sheetName} 데이터가 부족합니다.`);
 
+  return parseDailySalesRows(rows, sheetName);
+}
+
+// MARK 6.48: 과거 날짜 백필(재업로드) 등에서도 재사용할 수 있도록, "raw rows 2차원 배열"만
+// 받으면 파싱해서 표준 데이터 구조를 돌려주는 순수 함수로 분리했습니다.
+export async function parseDailySalesRows(rows: any[][], sheetName = "업로드 파일") {
+  if (rows.length < 4) throw new Error(`${sheetName} 데이터가 부족합니다.`);
   const row2 = rows[1] || [];
   const row3 = rows[2] || [];
 
@@ -629,6 +636,34 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
     skippedRows: newFlatRows.length - rowsToAdd.length,
     totalDailySales: daily.totalDailySales || 0,
     totalDailyAmount: daily.totalDailyAmount || 0,
+    compactRowCount: writeResult.compactRowCount,
+    flatRowCount: mergedFlatRows.length,
+  };
+}
+
+// MARK 6.48: 과거 파일 백필용 — saveDailySalesToHistory와 달리, 같은 날짜의 기존 행이 있으면
+// "건너뛰지 않고 통째로 교체"합니다. 예전(금액 없던 시절)에 저장된 부정확한 값을 새로
+// 업로드한 정확한 값으로 덮어쓰기 위한 용도입니다.
+export async function backfillDailySalesForDate(data: any) {
+  const spreadsheetId = getHistorySheetId();
+  const newFlatRows = buildDailyHistoryRows(data);
+  if (!newFlatRows.length) throw new Error("업로드한 파일에서 저장할 판매 데이터를 찾지 못했습니다.");
+
+  const targetDates = new Set(newFlatRows.map((r) => r.date));
+
+  const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
+  const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
+
+  // 업로드한 파일에 들어있는 날짜(들)의 기존 행은 전부 빼고, 새로 파싱한 행으로 교체합니다.
+  const keptRows = existingFlatRows.filter((r) => !targetDates.has(r.date));
+  const mergedFlatRows = [...keptRows, ...newFlatRows];
+
+  const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
+
+  return {
+    targetDates: Array.from(targetDates),
+    replacedRows: existingFlatRows.length - keptRows.length,
+    newRows: newFlatRows.length,
     compactRowCount: writeResult.compactRowCount,
     flatRowCount: mergedFlatRows.length,
   };

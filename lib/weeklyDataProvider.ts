@@ -10,6 +10,7 @@ import {
   updateValuesById,
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
+import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 
 type SalesType = "style" | "color";
 type Row = any[];
@@ -582,6 +583,75 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
     stores.add(channelName);
   }
   return { current, previous, stores, productNames, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
+}
+
+// MARK 6.50: "이번주"(아직 스냅샷 없는 현재 주차)는 "금주/전주" 대신 Daily_Sales_History를
+// 직접 집계합니다. 과거 주차는 이미 저장된 스냅샷(Weekly_History)을 그대로 쓰므로 안 건드립니다.
+// 재고(byStoreStock)는 합산하면 안 되므로(스냅샷 성격) 그 기간 중 가장 최근 날짜의 값만 씁니다.
+async function aggregateWeeklyFromDailyHistory(type: SalesType, weekStart: string, weekEnd: string) {
+  const current = new Map<string, SalesAgg>();
+  const previous = new Map<string, SalesAgg>();
+  const stores = new Set<string>();
+  const productNames = new Map<string, string>();
+
+  const historyId = getHistorySheetId();
+  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
+
+  const prevWeekEnd = (() => {
+    const d = new Date(`${weekStart}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const prevWeekStart = (() => {
+    const d = new Date(`${prevWeekEnd}T00:00:00`);
+    d.setDate(d.getDate() - 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  // 1차: 각 (key+매장)별로 이번주/전주 범위 안에서 가장 최근 날짜가 언제인지 파악합니다.
+  const latestCurDate = new Map<string, string>();
+  const latestPrevDate = new Map<string, string>();
+  for (const r of flatRows) {
+    if (!isOfflineStore(r.storeName)) continue;
+    const key = `${salesKey(r.styleCode, r.colorCode, type)}__${r.storeName}`;
+    if (r.date >= weekStart && r.date <= weekEnd) {
+      if (!latestCurDate.has(key) || r.date > latestCurDate.get(key)!) latestCurDate.set(key, r.date);
+    } else if (r.date >= prevWeekStart && r.date <= prevWeekEnd) {
+      if (!latestPrevDate.has(key) || r.date > latestPrevDate.get(key)!) latestPrevDate.set(key, r.date);
+    }
+  }
+
+  // 2차: 실제 집계. qty/amount는 합산, stock은 "가장 최근 날짜" 행에서만 반영.
+  for (const r of flatRows) {
+    if (!isOfflineStore(r.storeName)) continue;
+    const key = salesKey(r.styleCode, r.colorCode, type);
+    const storeStockKey = `${key}__${r.storeName}`;
+    if (r.productName && !productNames.get(r.styleCode)) productNames.set(r.styleCode, r.productName);
+
+    if (r.date >= weekStart && r.date <= weekEnd) {
+      stores.add(r.storeName);
+      const isLatest = latestCurDate.get(storeStockKey) === r.date;
+      addAggValue(current, key, {
+        qty: Number(r.qty || 0),
+        amount: Number(r.amount || 0),
+        byStore: { [r.storeName]: Number(r.qty || 0) },
+        byStoreAmount: { [r.storeName]: Number(r.amount || 0) },
+        byStoreStock: isLatest ? { [r.storeName]: Number(r.stock || 0) } : {},
+      });
+    } else if (r.date >= prevWeekStart && r.date <= prevWeekEnd) {
+      const isLatest = latestPrevDate.get(storeStockKey) === r.date;
+      addAggValue(previous, key, {
+        qty: Number(r.qty || 0),
+        amount: Number(r.amount || 0),
+        byStore: { [r.storeName]: Number(r.qty || 0) },
+        byStoreAmount: { [r.storeName]: Number(r.amount || 0) },
+        byStoreStock: isLatest ? { [r.storeName]: Number(r.stock || 0) } : {},
+      });
+    }
+  }
+
+  return { current, previous, stores, productNames, columns: {} };
 }
 
 function preferQtyFromDailyAndAmountFromPrice(daily: Map<string, SalesAgg>, price: Map<string, SalesAgg>) {
@@ -1314,11 +1384,11 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
   const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
   const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
   const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
-  const weeklyPriceRaw = await readFirstAvailableSheet([mainId, dbId, historyId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
   const productMaps = buildProductMaster(productRaw.rows);
   mergeOnOffStock(stockRaw.rows, productMaps);
-  const styleAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "style");
-  const colorAgg = aggregateWeeklyPriceSheet(weeklyPriceRaw.rows, "color");
+  // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
+  const styleAgg = await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd);
+  const colorAgg = await aggregateWeeklyFromDailyHistory("color", selected.analysisStart, selected.analysisEnd);
   const appended = await upsertWeeklyHistorySnapshot({
     historyId,
     selected,
@@ -1328,7 +1398,7 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
     colorPrev: colorAgg.previous,
     productMaps,
   });
-  return { appended, weeklyPriceRaw, productRaw, stockRaw };
+  return { appended, productRaw, stockRaw };
 }
 
 export async function getSalesDataPayload(type: SalesType, requestedWeek = "", options: { refresh?: boolean } = {}): Promise<WeeklyProviderPayload> {
@@ -1338,9 +1408,9 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const mainId = getSheetId();
 
   const salesRows = await getSheetValuesById(legacyHistoryId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
-  const currentWeeklyRaw = await readFirstAvailableSheet([mainId, dbId, legacyHistoryId].filter(Boolean), ["금주전주", "금주/전주", "금주 전주"], "A:AZ");
-  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
-  const currentBasis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  // MARK 6.50: "이번주가 언제인지"도 이제 "금주/전주" B2 셀 대신 오늘(KST) 기준 월요일로 계산합니다.
+  // (금주/전주는 주 1회만 갱신되어 최대 6일까지 최신 주차 판단이 늦어질 수 있었음)
+  const currentBasis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));
   const requested = explicitWeekInfo(requestedWeek);
   let historyBundle = await readDedicatedWeeklyHistory(weeklyHistoryId);
   let historyRecords = historyBundle.productRecords;
@@ -1389,9 +1459,9 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
     stores: mapped.stores,
     sources: {
       primary: "MARK_WEEKLY_HISTORY / Weekly_history",
-      fallback: "금주/전주 시트 → 전용 Weekly_history 자동 Snapshot",
-      currentWeeklySheet: currentWeeklyRaw.sheetName || "not found",
-      basisCell: "금주/전주!B2",
+      fallback: "Daily_Sales_History 직접 집계 → 전용 Weekly_history 자동 Snapshot",
+      currentWeeklySheet: "Daily_Sales_History",
+      basisCell: "오늘(KST) 기준 월요일",
       historySheet: WEEKLY_HISTORY_SHEET,
       historyWorkbook: "MARK_WEEKLY_HISTORY",
     },

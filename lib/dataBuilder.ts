@@ -1,6 +1,7 @@
 import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
-import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows } from "./dailySales";
+import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows } from "./dailySales";
+import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
 
@@ -2291,23 +2292,114 @@ function colorLevelStats(row: any, colorCode: string) {
   return { stock, weekNet, colorName, found: matches.length > 0 };
 }
 
+function todayKST() {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysKST(dateKey: string, days: number) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// MARK 6.49: "금주/전주" 시트(주 1회 갱신, 최대 6일 지연) 대신 Daily_Sales_History(매일 갱신,
+// 실제 판매금액 포함)를 직접 집계해서 RT제안/재고이관/프로모션제안이 쓰는 것과 같은 모양의
+// productRows를 만듭니다. 재고(storeStock)는 합산이 아니라 "그 기간 중 가장 최근 날짜의 값"을
+// 씁니다(재고는 누적이 아니라 스냅샷이라서). 입고일은 Style_Launch_Master에서 보완합니다.
+export async function buildProductRowsFromDailyHistory(anchorDate = todayKST()) {
+  const weekEnd = anchorDate;
+  const weekStart = addDaysKST(weekEnd, -6);
+  const prevWeekEnd = addDaysKST(weekStart, -1);
+  const prevWeekStart = addDaysKST(prevWeekEnd, -6);
+
+  const historyId = getHistorySheetId();
+  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
+  const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
+
+  const grouped = new Map<string, any>();
+  const latestStockDateByStyle = new Map<string, string>();
+  const latestStockDateBySku = new Map<string, string>();
+
+  for (const r of flatRows) {
+    if (r.date < prevWeekStart || r.date > weekEnd) continue;
+    if (!isCoreOfflineSalesStore(r.storeName)) continue;
+
+    const storeKey = normalizeStoreKey(r.storeName);
+    const key = `${storeKey}__${r.styleCode}`;
+    if (!grouped.has(key)) {
+      const launchDate = launchMap.get(r.styleCode) || "";
+      grouped.set(key, {
+        season: "미지정",
+        storeName: r.storeName,
+        storeKey,
+        styleCode: r.styleCode,
+        productName: r.productName,
+        storeStock: 0,
+        weekNet: 0,
+        weekAmount: 0,
+        prevNet: 0,
+        prevAmount: 0,
+        launchDate,
+        launchTime: launchDate ? new Date(launchDate).getTime() : 0,
+        skuRows: [] as any[],
+      });
+    }
+    const item = grouped.get(key);
+
+    if (r.date >= weekStart && r.date <= weekEnd) {
+      item.weekNet += Number(r.qty || 0);
+      item.weekAmount += Number(r.amount || 0);
+    } else if (r.date >= prevWeekStart && r.date <= prevWeekEnd) {
+      item.prevNet += Number(r.qty || 0);
+      item.prevAmount += Number(r.amount || 0);
+    }
+
+    // 재고는 "가장 최근 날짜"의 값만 사용 (합산 금지 — 스냅샷 성격)
+    const lastStyleDate = latestStockDateByStyle.get(key);
+    if (!lastStyleDate || r.date > lastStyleDate) {
+      latestStockDateByStyle.set(key, r.date);
+      item.storeStock = Number(r.stock || 0);
+    }
+
+    // 컬러/사이즈별 상세 (skuRows) — RT 컬러 지정 이관에 쓰임 (기존 parseProducts와 같은 필드명 사용)
+    let sku = item.skuRows.find((s: any) => s.color === r.colorCode && s.size === r.size);
+    if (!sku) {
+      sku = { color: r.colorCode, colorName: r.colorName, size: r.size, stock: 0, weekNet: 0, weekAmount: 0, prevNet: 0, prevAmount: 0 };
+      item.skuRows.push(sku);
+    }
+    if (r.date >= weekStart && r.date <= weekEnd) {
+      sku.weekNet += Number(r.qty || 0);
+      sku.weekAmount += Number(r.amount || 0);
+    } else if (r.date >= prevWeekStart && r.date <= prevWeekEnd) {
+      sku.prevNet += Number(r.qty || 0);
+      sku.prevAmount += Number(r.amount || 0);
+    }
+
+    const skuKey = `${key}__${r.colorCode}__${r.size}`;
+    const lastSkuDate = latestStockDateBySku.get(skuKey);
+    if (!lastSkuDate || r.date > lastSkuDate) {
+      latestStockDateBySku.set(skuKey, r.date);
+      sku.stock = Number(r.stock || 0);
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
 export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number, colorInput?: string) {
   const styleCode = text(styleCodeInput).toUpperCase();
   if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
   if (!text(toStoreInput)) return { ok: false, error: "요청 점포를 입력해주세요." };
 
-  const titles = await getSpreadsheetTitles();
-  const productSheet = pickProductSheet(titles);
-  if (!productSheet) return { ok: false, error: "금주/전주 시트를 찾지 못했습니다." };
-
-  const values = await getManySheetValues([productSheet], "A:AZ");
-  const productRowsRaw = parseProducts(values[productSheet] || []);
+  const productRowsRaw = await buildProductRowsFromDailyHistory();
 
   const coreRows = productRowsRaw.filter(
     (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
   );
   if (!coreRows.length) {
-    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 금주/전주 시트에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
+    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 2주 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
   }
 
   const colorCode = text(colorInput).toUpperCase();
@@ -2929,8 +3021,9 @@ export async function buildDashboardDataFromGoogleSheet() {
   const monthCmp = historyStores?.monthCmp || [];
   const monthYear = historyStores?.monthYear || [];
 
-  // 상품/재고CTRL은 실재고와 제안 로직 때문에 현재 ERP 보조 데이터를 유지합니다.
-  const productRowsRaw = parseProducts(productValues);
+  // MARK 6.49: RT제안/재고이관/프로모션제안은 이제 "금주/전주"(주 1회 갱신) 대신
+  // Daily_Sales_History(매일 갱신, 실제 판매금액 포함)를 직접 집계해서 씁니다.
+  const productRowsRaw = await buildProductRowsFromDailyHistory();
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { appendValues, ensureSheetExists, getSheetValues, updateValues } from "@/lib/googleSheets";
+import { logAction } from "@/lib/actionLog";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -197,6 +198,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "rowNumber가 필요합니다." }, { status: 400 });
       }
       await updateValues(`'${MASTER_SHEET}'!K${rowNumber}`, [[implemented]]);
+
+      // MARK 6.47: 키네틱 레이어 첫 연결 — "이 로직을 코드로 반영했다"는 결정을 Action_Log에 남깁니다.
+      if (implemented === "반영완료") {
+        const masterRows = await getSheetValues(MASTER_SHEET, "A:K").catch(() => []);
+        const row = masterRows[rowNumber - 1] || [];
+        await logAction({
+          actionType: "로직반영",
+          triggerRef: String(row[0] || `row${rowNumber}`),
+          afterState: { title: row[3] || "", status: "반영완료" },
+          decidedBy: "소천",
+          executedAt: nowKST(),
+        }).catch(() => {});
+      }
+
       return NextResponse.json({ ok: true });
     }
 

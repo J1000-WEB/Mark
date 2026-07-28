@@ -511,8 +511,8 @@ function PromotionReportCard({ it, p360 }: { it: any; p360: any }) {
           <p className="font-black">{p360 ? fmtPct1(p360.sellThroughRate) : "조회중"}</p>
         </div>
         <div className="rounded-xl bg-slate-50 p-2">
-          <p className="font-semibold text-slate-400">오프라인재고</p>
-          <p className="font-black">{fmtNum(it.offlineStock)}</p>
+          <p className="font-semibold text-slate-400">오프가용재고</p>
+          <p className="font-black">{fmtNum(it.warehouseOfflineStock)}</p>
         </div>
         <div className="rounded-xl bg-slate-50 p-2">
           <p className="font-semibold text-slate-400">온라인재고</p>
@@ -582,7 +582,7 @@ function PromotionReportSection({ data }: { data: any }) {
         { header: "상품명", key: "productName", width: 26 },
         { header: "시즌", key: "season", width: 10 },
         { header: "소진율(%)", key: "sellThroughRate", width: 12 },
-        { header: "오프라인재고", key: "offlineStock", width: 12 },
+        { header: "오프가용재고", key: "offlineStock", width: 12 },
         { header: "온라인재고", key: "onlineStock", width: 12 },
         { header: "매장총재고", key: "storeStock", width: 12 },
         { header: "제안가", key: "promotionPrice", width: 12 },
@@ -603,7 +603,7 @@ function PromotionReportSection({ data }: { data: any }) {
           productName: it.productName,
           season: it.season || "-",
           sellThroughRate: p360 && typeof p360.sellThroughRate === "number" ? Math.round(p360.sellThroughRate) : "-",
-          offlineStock: Math.round(it.offlineStock || 0),
+          offlineStock: Math.round(it.warehouseOfflineStock || 0),
           onlineStock: Math.round(it.onlineStock || 0),
           storeStock: Math.round(it.storeStock || 0),
           promotionPrice: promoPrice,

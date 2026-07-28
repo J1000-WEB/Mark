@@ -9,6 +9,7 @@ import {
   renameSheetById,
 } from "@/lib/googleSheets";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
+import { loadChannelMaster, isOnlineType, seedUnknownChannels, type ChannelType } from "@/lib/channelMaster";
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -82,7 +83,16 @@ function isExcludedSalesChannel(channelName: string) {
   );
 }
 
-function isOnlineChannel(channelName: string) {
+function isOnlineChannel(channelName: string, masterMap?: Map<string, ChannelType>) {
+  if (masterMap) {
+    const type = masterMap.get(text(channelName));
+    if (type) return isOnlineType(type);
+  }
+  return isOnlineChannelHeuristic(channelName);
+}
+
+// MARK 6.47 이전의 키워드 추측 로직 — Channel_Master에 아직 없는 채널의 폴백으로만 씁니다.
+function isOnlineChannelHeuristic(channelName: string) {
   const raw = text(channelName);
   const s = raw.toLowerCase();
   return (
@@ -244,7 +254,13 @@ export async function readDailySalesFromMarkDb() {
     }
   }
 
-  const offlineItems = items.filter((item) => !isOnlineChannel(item.channelName));
+  const channelMasterMap = await loadChannelMaster();
+  const allChannelNames = Array.from(new Set(items.map((item) => text(item.channelName)).filter(Boolean)));
+  seedUnknownChannels(allChannelNames, (name) =>
+    isOnlineChannelHeuristic(name) ? "온라인마켓" : "오프라인매장"
+  ).catch(() => {});
+
+  const offlineItems = items.filter((item) => !isOnlineChannel(item.channelName, channelMasterMap));
 
   const totalDailySales = offlineItems.reduce((sum, item) => sum + num(item.dailySales), 0);
   const totalDailyAmount = offlineItems.reduce((sum, item) => sum + num(item.dailyAmount), 0);

@@ -33,6 +33,7 @@ export default function LogicCenter() {
   const [proposals, setProposals] = useState<any[]>([]);
   const [masters, setMasters] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
+  const [actions, setActions] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [status, setStatus] = useState("");
 
@@ -60,6 +61,11 @@ export default function LogicCenter() {
     setResults(data.results || []);
     setUnlocked(true);
     setStatus("");
+
+    fetch("/api/action-log", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => d.ok && setActions(d.actions || []))
+      .catch(() => {});
   }
 
   async function createLogic() {
@@ -486,6 +492,29 @@ export default function LogicCenter() {
                     <Badge status={it.status} />
                   </div>
                   <p className="mt-1 text-xs font-bold text-slate-500">{it.category} · {it.priority} · {it.approvedBy || "-"}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {actions.length > 0 && (
+          <section className="rounded-3xl bg-white p-5 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-900">4️⃣ Action_Log (실행 기록)</h2>
+            <p className="text-sm font-semibold text-slate-500">
+              어떤 로직 때문에 어떤 결정·실행이 있었는지 기록됩니다 (지금은 "반영완료" 표시할 때 자동 기록).
+            </p>
+            <div className="mt-4 space-y-2">
+              {actions.map((a) => (
+                <div key={a.actionId} className="rounded-2xl bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-black">{a.actionType}</p>
+                    <p className="text-xs font-bold text-slate-400">{a.decidedAt}</p>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    trigger: {a.triggerRef || "-"} · 실행자: {a.decidedBy || "-"}
+                  </p>
+                  {a.afterState && <p className="mt-1 text-xs text-slate-600">{a.afterState}</p>}
                 </div>
               ))}
             </div>

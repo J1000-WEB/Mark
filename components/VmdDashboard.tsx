@@ -340,6 +340,133 @@ function StyleDirectivesSection() {
   );
 }
 
+function CandidateBadge({ kind }: { kind: string }) {
+  const label = kind === "lookbook" ? "룩북" : kind === "copurchase" ? "함께담김" : "매장회전";
+  const cls =
+    kind === "lookbook" ? "bg-violet-100 text-violet-700" : kind === "copurchase" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600";
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${cls}`}>{label}</span>;
+}
+
+function GiBoardVmdSection() {
+  const [stores, setStores] = useState<any[]>([]);
+  const [storeName, setStoreName] = useState("");
+  const [items, setItems] = useState<any[]>([]);
+  const [crossCheck, setCrossCheck] = useState<any>(null);
+  const [status, setStatus] = useState("매장 목록 불러오는 중...");
+  const [onlyStalled, setOnlyStalled] = useState(false);
+  const [onlyDiscrepant, setOnlyDiscrepant] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/vmd-directives", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) {
+          setStatus(d.error || "불러오기 실패");
+          return;
+        }
+        setStores(d.stores || []);
+        setStatus("");
+      })
+      .catch((e) => setStatus(e?.message || "불러오기 실패"));
+  }, []);
+
+  async function loadStore(name: string) {
+    setStoreName(name);
+    setItems([]);
+    setCrossCheck(null);
+    if (!name) return;
+    setStatus("매장 데이터 불러오는 중... (용량이 커서 시간이 좀 걸릴 수 있어요)");
+    try {
+      const params = new URLSearchParams({ store: name });
+      if (onlyStalled) params.set("stalled", "1");
+      const res = await fetch(`/api/vmd-directives?${params.toString()}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "불러오기 실패");
+      setItems(data.items || []);
+      setCrossCheck(data.crossCheck || null);
+      setStatus("");
+    } catch (e: any) {
+      setStatus(e?.message || "불러오기 실패");
+    }
+  }
+
+  const filteredItems = onlyDiscrepant ? items.filter((it) => it.stockDiscrepant) : items;
+
+  return (
+    <Card title="👗 gi-board 진열 코디 제안 (매장별)">
+      <p className="mb-3 text-xs font-semibold text-slate-500">
+        룩북/함께담김/매장회전 근거로 gi-board가 만든 진열 제안이에요. 재고는 MARK 자체 데이터와 교차검증해서, 어긋나는 항목은 표시돼요.
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <select
+          value={storeName}
+          onChange={(e) => loadStore(e.target.value)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+        >
+          <option value="">매장 선택</option>
+          {stores.map((s: any) => (
+            <option key={s.store} value={s.store}>
+              {s.store} ({s.pairCount ?? s.count ?? "-"})
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1 text-xs font-bold text-slate-600">
+          <input type="checkbox" checked={onlyStalled} onChange={(e) => { setOnlyStalled(e.target.checked); if (storeName) loadStore(storeName); }} />
+          안 도는 것만
+        </label>
+        <label className="flex items-center gap-1 text-xs font-bold text-slate-600">
+          <input type="checkbox" checked={onlyDiscrepant} onChange={(e) => setOnlyDiscrepant(e.target.checked)} />
+          재고 불일치만
+        </label>
+      </div>
+
+      {status && <p className="text-xs font-bold text-blue-600">{status}</p>}
+
+      {crossCheck && (
+        <p className="mb-3 text-xs font-bold text-slate-500">
+          교차검증: 전체 {crossCheck.itemCount}건 중 <span className={crossCheck.discrepancyCount > 0 ? "text-rose-600" : "text-emerald-600"}>불일치 {crossCheck.discrepancyCount}건</span>
+        </p>
+      )}
+
+      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-2">
+        {filteredItems.slice(0, 60).map((it: any, i: number) => (
+          <div key={`${it.sku}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-black">
+                {it.sku} · {it.name} <span className="text-xs font-semibold text-slate-400">({it.slot})</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">gi재고 {it.stock}</span>
+                {it.markStock !== null && (
+                  <span className={`text-xs font-black ${it.stockDiscrepant ? "text-rose-600" : "text-slate-400"}`}>
+                    MARK재고 {it.markStock}{it.stockDiscrepant ? " ⚠" : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+            {(it.candidates || []).length > 0 && (
+              <div className="mt-2 space-y-1">
+                {it.candidates.map((c: any, ci: number) => (
+                  <div key={ci} className="flex items-center gap-2 text-xs">
+                    <CandidateBadge kind={c.kind} />
+                    <span className="font-bold">{c.style} · {c.name}</span>
+                    <span className="text-slate-400">{c.relation} · {c.colorName} · 재고{c.stock}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(!it.candidates || !it.candidates.length) && (
+              <p className="mt-1 text-xs font-semibold text-slate-400">실근거로 준비된 짝이 아직 없어요 (매장 회전 제안만 가능)</p>
+            )}
+          </div>
+        ))}
+        {!status && storeName && filteredItems.length === 0 && <Empty />}
+      </div>
+    </Card>
+  );
+}
+
 export default function VmdDashboard() {
   const [payload, setPayload] = useState<VmdPayload | null>(null);
   const [month, setMonth] = useState(ymd(new Date()).slice(0, 7));
@@ -489,6 +616,8 @@ export default function VmdDashboard() {
         </Card>
 
         <StyleDirectivesSection />
+
+        <GiBoardVmdSection />
 
         <OutfitPreviewSection />
       </div>

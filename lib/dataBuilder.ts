@@ -1034,7 +1034,7 @@ function buildOnlineTransferSuggestions(offlineRows: any[], onlineRows: any[], i
 }
 
 
-function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
+async function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
@@ -1425,50 +1425,79 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     };
   });
 
-  // MARK 6.51: Layer 0(전사지시) — VMD가 "이번주 뭘 밀지" 한 곳에서 보게, 이미 계산된
-  // 부진/호조 프로모션 후보 + 신상품(최근 4주 입고)을 하나의 지시 리스트로 합칩니다.
-  const nowForDirectives = new Date();
-  const styleLaunchInfo = new Map<string, { productName: string; launchTime: number; launchDate: string }>();
-  for (const r of productRows) {
-    if (!r.launchTime) continue;
-    const existing = styleLaunchInfo.get(r.styleCode);
-    if (!existing) styleLaunchInfo.set(r.styleCode, { productName: r.productName, launchTime: r.launchTime, launchDate: r.launchDate });
-  }
-  const newProductDirectives = Array.from(styleLaunchInfo.entries())
-    .map(([styleCode, info]) => ({
-      styleCode,
-      productName: info.productName,
-      weeksSinceLaunch: (nowForDirectives.getTime() - info.launchTime) / (1000 * 60 * 60 * 24 * 7),
-      launchDate: info.launchDate,
-    }))
-    .filter((x) => x.weeksSinceLaunch >= 0 && x.weeksSinceLaunch <= 4)
-    .sort((a, b) => a.weeksSinceLaunch - b.weeksSinceLaunch);
+  // MARK 6.55: Layer 0(전사지시) 재설계 — 매장 확산도 기반
+  // 1단계(자격): 오프라인 매장 12개 이상이 각각 재고 10장 이상 보유해야 후보
+  // 2단계(태깅): 창고가용재고 500장 이상 여부 + 2주 판매추이(양호/부진)로 4갈래 분류
+  // 3단계(매장갭): 자격 통과한 스타일인데 이 매장엔 재고 10장 미만 → "투입필요"
+  const trendRows = await buildProductRowsFromDailyHistory(todayKST(), 14);
 
-  const styleDirectives = [
-    ...promotion.promotionSuggestions.map((it: any) => ({
-      styleCode: it.styleCode,
-      productName: it.productName,
-      directiveType: "소진" as const,
-      reason: it.action,
-      priority: Math.round(Math.min(100, (it.stockWeeks || 0) * 5)),
-    })),
-    ...(promotion.suppressedPromotionCandidates || [])
-      .filter((it: any) => it.action && it.action.includes("매출드라이빙"))
-      .map((it: any) => ({
-        styleCode: it.styleCode,
-        productName: it.productName,
-        directiveType: "매출드라이빙" as const,
-        reason: it.action,
-        priority: Math.round(Math.max(0, 100 - (it.companyRank || 100))),
-      })),
-    ...newProductDirectives.map((it) => ({
-      styleCode: it.styleCode,
-      productName: it.productName,
-      directiveType: "신상품노출" as const,
-      reason: `입고 ${it.weeksSinceLaunch.toFixed(1)}주 차 신상품`,
-      priority: Math.round(Math.max(0, 100 - it.weeksSinceLaunch * 20)),
-    })),
-  ].sort((a, b) => b.priority - a.priority);
+  const styleStoreMap = new Map<string, { storeName: string; stock: number }[]>();
+  const styleWeekNet = new Map<string, number>();
+  const stylePrevNet = new Map<string, number>();
+  const styleProductName = new Map<string, string>();
+
+  for (const r of trendRows) {
+    if (!styleStoreMap.has(r.styleCode)) styleStoreMap.set(r.styleCode, []);
+    styleStoreMap.get(r.styleCode)!.push({ storeName: r.storeName, stock: r.storeStock });
+    styleWeekNet.set(r.styleCode, (styleWeekNet.get(r.styleCode) || 0) + r.weekNet);
+    stylePrevNet.set(r.styleCode, (stylePrevNet.get(r.styleCode) || 0) + r.prevNet);
+    if (!styleProductName.has(r.styleCode)) styleProductName.set(r.styleCode, r.productName);
+  }
+
+  const allCoreStoreNames = Array.from(new Set(trendRows.map((r) => r.storeName)));
+
+  const styleDirectives: any[] = [];
+  for (const [styleCode, storeStocks] of styleStoreMap.entries()) {
+    const qualifyingStores = storeStocks.filter((s) => s.stock >= 10);
+    if (qualifyingStores.length < 12) continue; // 1단계 자격 미달 — 확산도 부족
+
+    const warehouseStock = Number(invMap.get(styleCode)?.offlineStock || 0);
+    const weekNet = styleWeekNet.get(styleCode) || 0;
+    const prevNet = stylePrevNet.get(styleCode) || 0;
+    const salesGood = weekNet >= prevNet; // 2주 추세: 유지/증가=양호
+
+    let directiveType: string;
+    let reason: string;
+    let priority: number;
+    if (warehouseStock >= 500 && salesGood) {
+      directiveType = "주력상품-공급형";
+      reason = `${qualifyingStores.length}개 매장 확산 + 창고재고 ${Math.round(warehouseStock)}장 + 2주 판매 양호 — 적극 확대 가능`;
+      priority = 90;
+    } else if (warehouseStock >= 500 && !salesGood) {
+      directiveType = "소진필요";
+      reason = `${qualifyingStores.length}개 매장 확산 + 창고재고 ${Math.round(warehouseStock)}장인데 2주 판매 둔화 — 소진 필요`;
+      priority = 75;
+    } else if (warehouseStock < 500 && salesGood) {
+      directiveType = "주력상품-회전형";
+      reason = `${qualifyingStores.length}개 매장 확산 + 2주 판매 양호 (창고 추가공급 제한적, 이미 매장 중심으로 퍼짐)`;
+      priority = 60;
+    } else {
+      directiveType = "관찰";
+      reason = `${qualifyingStores.length}개 매장 확산됐지만 2주 판매 둔화, 창고재고도 제한적`;
+      priority = 30;
+    }
+
+    // 매장 갭: 이 스타일이 자격 기준(10장)에 못 미치는 매장들 → 투입필요 알림 대상
+    const gapStores = allCoreStoreNames.filter((storeName) => {
+      const found = storeStocks.find((s) => s.storeName === storeName);
+      return !found || found.stock < 10;
+    });
+
+    styleDirectives.push({
+      styleCode,
+      productName: styleProductName.get(styleCode) || "",
+      directiveType,
+      reason,
+      priority,
+      qualifyingStoreCount: qualifyingStores.length,
+      warehouseStock,
+      weekNet,
+      prevNet,
+      gapStores: gapStores.slice(0, 10),
+      gapStoreCount: gapStores.length,
+    });
+  }
+  styleDirectives.sort((a, b) => b.priority - a.priority);
 
   return {
     periodLabel: "재고CTRL 기준: RT=오프라인 점포 간 이동 / 온라인 이관=온라인 가용재고→오프라인 배분 / 프로모션=오프라인 운영재고",
@@ -2353,11 +2382,11 @@ function addDaysKST(dateKey: string, days: number) {
 // 실제 판매금액 포함)를 직접 집계해서 RT제안/재고이관/프로모션제안이 쓰는 것과 같은 모양의
 // productRows를 만듭니다. 재고(storeStock)는 합산이 아니라 "그 기간 중 가장 최근 날짜의 값"을
 // 씁니다(재고는 누적이 아니라 스냅샷이라서). 입고일은 Style_Launch_Master에서 보완합니다.
-export async function buildProductRowsFromDailyHistory(anchorDate = todayKST()) {
+export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7) {
   const weekEnd = anchorDate;
-  const weekStart = addDaysKST(weekEnd, -6);
+  const weekStart = addDaysKST(weekEnd, -(windowDays - 1));
   const prevWeekEnd = addDaysKST(weekStart, -1);
-  const prevWeekStart = addDaysKST(prevWeekEnd, -6);
+  const prevWeekStart = addDaysKST(prevWeekEnd, -(windowDays - 1));
 
   const historyId = getHistorySheetId();
   const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
@@ -3100,7 +3129,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const topProduct = companyTopProducts[0];
 
   // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지
-  const inventory = { ...buildInventory(productRowsRaw, inventoryRows, companyTopProducts), performance };
+  const inventory = { ...(await buildInventory(productRowsRaw, inventoryRows, companyTopProducts)), performance };
   const latestPerformance = performance?.byDate?.[performance?.latestDate || ""] || {};
   const rtBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "RT") || {};
   const promoBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "PROMOTION") || {};

@@ -269,6 +269,77 @@ function Calendar({ month, events, stores }: { month: string; events: VmdEvent[]
   );
 }
 
+function DirectiveBadge({ type }: { type: string }) {
+  const cls =
+    type === "매출드라이빙"
+      ? "bg-emerald-100 text-emerald-700"
+      : type === "소진"
+      ? "bg-rose-100 text-rose-700"
+      : "bg-sky-100 text-sky-700";
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${cls}`}>{type}</span>;
+}
+
+function StyleDirectivesSection() {
+  const [directives, setDirectives] = useState<any[]>([]);
+  const [status, setStatus] = useState("불러오는 중...");
+  const [filterType, setFilterType] = useState("전체");
+
+  useEffect(() => {
+    fetch("/api/style-directives", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) {
+          setStatus(d.error || "불러오기 실패");
+          return;
+        }
+        setDirectives(d.directives || []);
+        setStatus("");
+      })
+      .catch((e) => setStatus(e?.message || "불러오기 실패"));
+  }, []);
+
+  const filtered = filterType === "전체" ? directives : directives.filter((d) => d.directiveType === filterType);
+
+  return (
+    <Card title="🎯 이번주 전사지시 (Layer 0 — 가안)">
+      <p className="mb-3 text-xs font-semibold text-slate-500">
+        RT/프로모션제안이 이미 계산한 "매출드라이빙·소진·신상품" 후보를 한 곳에 모은 리스트예요.
+        VMD가 코디를 짤 때 "이 중에서 매장 재고 있는 것"을 고르는 데 참고용입니다.
+      </p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {["전체", "매출드라이빙", "소진", "신상품노출"].map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setFilterType(t)}
+            className={`rounded-full px-4 py-2 text-xs font-black ${filterType === t ? "bg-slate-900 text-white" : "bg-white text-slate-500 border border-slate-200"}`}
+          >
+            {t} {t !== "전체" ? `(${directives.filter((d) => d.directiveType === t).length})` : `(${directives.length})`}
+          </button>
+        ))}
+      </div>
+
+      {status && <p className="text-xs font-bold text-blue-600">{status}</p>}
+
+      <div className="max-h-[500px] space-y-2 overflow-y-auto pr-2">
+        {filtered.slice(0, 50).map((d, i) => (
+          <div key={`${d.styleCode}-${i}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">{d.styleCode} · {d.productName}</p>
+              <p className="text-xs font-semibold text-slate-500">{d.reason}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <DirectiveBadge type={d.directiveType} />
+              <span className="text-xs font-bold text-slate-400">우선순위 {d.priority}</span>
+            </div>
+          </div>
+        ))}
+        {!status && filtered.length === 0 && <Empty />}
+      </div>
+    </Card>
+  );
+}
+
 export default function VmdDashboard() {
   const [payload, setPayload] = useState<VmdPayload | null>(null);
   const [month, setMonth] = useState(ymd(new Date()).slice(0, 7));
@@ -416,6 +487,8 @@ export default function VmdDashboard() {
             })}
           </div>
         </Card>
+
+        <StyleDirectivesSection />
 
         <OutfitPreviewSection />
       </div>

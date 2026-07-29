@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import ProductThumb from "@/components/ProductThumb";
@@ -282,7 +282,7 @@ function DirectiveBadge({ type }: { type: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${cls}`}>{type}</span>;
 }
 
-function StyleDirectivesSection() {
+function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordination: (styleCode: string) => void }) {
   const [directives, setDirectives] = useState<any[]>([]);
   const [status, setStatus] = useState("불러오는 중...");
   const [filterType, setFilterType] = useState("전체");
@@ -330,7 +330,7 @@ function StyleDirectivesSection() {
           <div key={`${d.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex items-center gap-2">
-                <ProductThumb styleCode={d.styleCode} size={48} />
+                <ProductThumb styleCode={d.styleCode} size={144} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black">{d.styleCode} · {d.productName}</p>
                   <p className="text-xs font-semibold text-slate-500">{d.reason}</p>
@@ -339,6 +339,13 @@ function StyleDirectivesSection() {
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <DirectiveBadge type={d.directiveType} />
                 <span className="text-xs font-bold text-slate-400">우선순위 {d.priority}</span>
+                <button
+                  type="button"
+                  onClick={() => onRequestCoordination(d.styleCode)}
+                  className="rounded-full bg-violet-600 px-3 py-1 text-[11px] font-black text-white hover:bg-violet-700"
+                >
+                  코디 후보 찾기
+                </button>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-slate-400">
@@ -367,7 +374,7 @@ function CandidateBadge({ kind }: { kind: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${cls}`}>{label}</span>;
 }
 
-function GiBoardVmdSection() {
+function GiBoardVmdSection({ presetSearch, sectionRef }: { presetSearch?: string; sectionRef?: { current: HTMLDivElement | null } }) {
   const [stores, setStores] = useState<any[]>([]);
   const [storeName, setStoreName] = useState("");
   const [items, setItems] = useState<any[]>([]);
@@ -375,6 +382,11 @@ function GiBoardVmdSection() {
   const [status, setStatus] = useState("매장 목록 불러오는 중...");
   const [onlyStalled, setOnlyStalled] = useState(false);
   const [onlyDiscrepant, setOnlyDiscrepant] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (presetSearch) setSearchQuery(presetSearch);
+  }, [presetSearch]);
 
   useEffect(() => {
     fetch("/api/vmd-directives", { cache: "no-store" })
@@ -410,9 +422,12 @@ function GiBoardVmdSection() {
     }
   }
 
-  const filteredItems = onlyDiscrepant ? items.filter((it) => it.stockDiscrepant) : items;
+  const filteredItems = items
+    .filter((it) => !onlyDiscrepant || it.stockDiscrepant)
+    .filter((it) => !searchQuery || `${it.sku} ${it.name}`.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
+    <div ref={sectionRef}>
     <Card title="👗 gi-board 진열 코디 제안 (매장별)">
       <p className="mb-3 text-xs font-semibold text-slate-500">
         룩북/함께담김/매장회전 근거로 gi-board가 만든 진열 제안이에요. 재고는 MARK 자체 데이터와 교차검증해서, 어긋나는 항목은 표시돼요.
@@ -427,7 +442,9 @@ function GiBoardVmdSection() {
           <option value="">매장 선택</option>
           {stores.map((s: any) => {
             const name = s.store || s.storeName || s.name || String(s);
-            const count = s.pairCount ?? s.count ?? s.combos ?? s.total ?? s.skuWithPair ?? "-";
+            const count =
+              s.pairCount ?? s.count ?? s.combos ?? s.total ?? s.skuWithPair ??
+              s.counts?.skuWithPair ?? s.counts?.lookbookPairs ?? s.counts?.copurchasePairs ?? "-";
             return (
               <option key={name} value={name}>
                 {name} ({count})
@@ -435,6 +452,13 @@ function GiBoardVmdSection() {
             );
           })}
         </select>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="품번/상품명 검색 (전사지시에서 넘어온 품번 여기 자동 입력됨)"
+          className="min-w-[240px] rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+        />
         <label className="flex items-center gap-1 text-xs font-bold text-slate-600">
           <input type="checkbox" checked={onlyStalled} onChange={(e) => { setOnlyStalled(e.target.checked); if (storeName) loadStore(storeName); }} />
           안 도는 것만
@@ -458,7 +482,7 @@ function GiBoardVmdSection() {
           <div key={`${it.sku}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <ProductThumb styleCode={String(it.sku || "").split("::")[0]} size={56} />
+                <ProductThumb styleCode={String(it.sku || "").split("::")[0]} size={168} />
                 <p className="text-sm font-black">
                   {it.sku} · {it.name} <span className="text-xs font-semibold text-slate-400">({it.slot})</span>
                 </p>
@@ -476,7 +500,7 @@ function GiBoardVmdSection() {
               <div className="mt-2 space-y-1">
                 {it.candidates.map((c: any, ci: number) => (
                   <div key={ci} className="flex items-center gap-2 text-xs">
-                    <ProductThumb styleCode={c.style} size={36} />
+                    <ProductThumb styleCode={c.style} size={108} />
                     <CandidateBadge kind={c.kind} />
                     <span className="font-bold">{c.style} · {c.name}</span>
                     <span className="text-slate-400">{c.relation} · {c.colorName} · 재고{c.stock}</span>
@@ -492,6 +516,7 @@ function GiBoardVmdSection() {
         {!status && storeName && filteredItems.length === 0 && <Empty />}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -499,6 +524,13 @@ export default function VmdDashboard() {
   const [payload, setPayload] = useState<VmdPayload | null>(null);
   const [month, setMonth] = useState(ymd(new Date()).slice(0, 7));
   const [whoFilter, setWhoFilter] = useState("전체");
+  const [coordSearchStyle, setCoordSearchStyle] = useState("");
+  const giBoardSectionRef = useRef<HTMLDivElement>(null);
+
+  function requestCoordination(styleCode: string) {
+    setCoordSearchStyle(styleCode);
+    giBoardSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function load() {
     const res = await fetch("/api/vmd", { cache: "no-store" });
@@ -643,9 +675,9 @@ export default function VmdDashboard() {
           </div>
         </Card>
 
-        <StyleDirectivesSection />
+        <StyleDirectivesSection onRequestCoordination={requestCoordination} />
 
-        <GiBoardVmdSection />
+        <GiBoardVmdSection presetSearch={coordSearchStyle} sectionRef={giBoardSectionRef} />
 
         <OutfitPreviewSection />
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import ProductThumb from "@/components/ProductThumb";
@@ -282,10 +282,14 @@ function DirectiveBadge({ type }: { type: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${cls}`}>{type}</span>;
 }
 
-function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordination: (styleCode: string) => void }) {
+function StyleDirectivesSection() {
   const [directives, setDirectives] = useState<any[]>([]);
   const [status, setStatus] = useState("불러오는 중...");
   const [filterType, setFilterType] = useState("전체");
+  const [expandedStyle, setExpandedStyle] = useState("");
+  const [coordItems, setCoordItems] = useState<any[]>([]);
+  const [coordStore, setCoordStore] = useState("");
+  const [coordStatus, setCoordStatus] = useState("");
 
   useEffect(() => {
     fetch("/api/style-directives", { cache: "no-store" })
@@ -300,6 +304,32 @@ function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordinati
       })
       .catch((e) => setStatus(e?.message || "불러오기 실패"));
   }, []);
+
+  async function toggleCoordination(d: any) {
+    if (expandedStyle === d.styleCode) {
+      setExpandedStyle("");
+      return;
+    }
+    setExpandedStyle(d.styleCode);
+    setCoordItems([]);
+    if (!d.topQualifyingStore) {
+      setCoordStatus("이 품번 재고가 충분한 매장을 찾지 못했어요.");
+      return;
+    }
+    setCoordStore(d.topQualifyingStore);
+    setCoordStatus(`"${d.topQualifyingStore}" 기준으로 코디 후보 찾는 중...`);
+    try {
+      const params = new URLSearchParams({ store: d.topQualifyingStore });
+      const res = await fetch(`/api/vmd-directives?${params.toString()}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "조회 실패");
+      const matched = (data.items || []).filter((it: any) => String(it.sku || "").startsWith(d.styleCode));
+      setCoordItems(matched);
+      setCoordStatus(matched.length ? "" : `"${d.topQualifyingStore}"엔 이 품번의 코디 근거가 없어요.`);
+    } catch (e: any) {
+      setCoordStatus(e?.message || "조회 실패");
+    }
+  }
 
   const filtered = filterType === "전체" ? directives : directives.filter((d) => d.directiveType === filterType);
   const types = ["전체", "주력상품-공급형", "소진필요", "주력상품-회전형", "관찰"];
@@ -325,7 +355,7 @@ function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordinati
 
       {status && <p className="text-xs font-bold text-blue-600">{status}</p>}
 
-      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-2">
+      <div className="max-h-[700px] space-y-2 overflow-y-auto pr-2">
         {filtered.slice(0, 50).map((d, i) => (
           <div key={`${d.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -341,10 +371,10 @@ function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordinati
                 <span className="text-xs font-bold text-slate-400">우선순위 {d.priority}</span>
                 <button
                   type="button"
-                  onClick={() => onRequestCoordination(d.styleCode)}
+                  onClick={() => toggleCoordination(d)}
                   className="rounded-full bg-violet-600 px-3 py-1 text-[11px] font-black text-white hover:bg-violet-700"
                 >
-                  코디 후보 찾기
+                  {expandedStyle === d.styleCode ? "코디 후보 닫기" : "코디 후보 보기"}
                 </button>
               </div>
             </div>
@@ -358,6 +388,31 @@ function StyleDirectivesSection({ onRequestCoordination }: { onRequestCoordinati
                 ⚠ 투입필요 매장 {d.gapStoreCount}곳: {(d.gapStores || []).join(", ")}
                 {d.gapStoreCount > (d.gapStores || []).length ? " 외" : ""}
               </p>
+            )}
+
+            {expandedStyle === d.styleCode && (
+              <div className="mt-3 rounded-2xl bg-violet-50 p-3">
+                <p className="mb-2 text-xs font-black text-violet-700">👗 코디 후보 — 기준 매장: {coordStore}</p>
+                {coordStatus && <p className="text-xs font-bold text-slate-500">{coordStatus}</p>}
+                <div className="space-y-2">
+                  {coordItems.map((it: any, ii: number) => (
+                    <div key={ii} className="rounded-xl bg-white p-2">
+                      <p className="text-xs font-black">{it.sku} · {it.name} ({it.slot})</p>
+                      {(it.candidates || []).map((c: any, ci: number) => (
+                        <div key={ci} className="mt-1 flex items-center gap-2 text-xs">
+                          <ProductThumb styleCode={c.style} size={108} />
+                          <CandidateBadge kind={c.kind} />
+                          <span className="font-bold">{c.style} · {c.name}</span>
+                          <span className="text-slate-400">{c.relation} · {c.colorName} · 재고{c.stock}</span>
+                        </div>
+                      ))}
+                      {(!it.candidates || !it.candidates.length) && (
+                        <p className="mt-1 text-xs font-semibold text-slate-400">이 자리엔 실근거 짝이 없어요.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         ))}
@@ -441,13 +496,11 @@ function GiBoardVmdSection({ presetSearch, sectionRef }: { presetSearch?: string
         >
           <option value="">매장 선택</option>
           {stores.map((s: any) => {
-            const name = s.store || s.storeName || s.name || String(s);
-            const count =
-              s.pairCount ?? s.count ?? s.combos ?? s.total ?? s.skuWithPair ??
-              s.counts?.skuWithPair ?? s.counts?.lookbookPairs ?? s.counts?.copurchasePairs ?? "-";
+            const name = s.name || s.store || s.storeName || String(s);
+            const count = s.comboCount ?? s.pairCount ?? s.count ?? "-";
             return (
               <option key={name} value={name}>
-                {name} ({count})
+                {name} ({s.channel ? `${s.channel} · ` : ""}{count})
               </option>
             );
           })}
@@ -524,13 +577,6 @@ export default function VmdDashboard() {
   const [payload, setPayload] = useState<VmdPayload | null>(null);
   const [month, setMonth] = useState(ymd(new Date()).slice(0, 7));
   const [whoFilter, setWhoFilter] = useState("전체");
-  const [coordSearchStyle, setCoordSearchStyle] = useState("");
-  const giBoardSectionRef = useRef<HTMLDivElement>(null);
-
-  function requestCoordination(styleCode: string) {
-    setCoordSearchStyle(styleCode);
-    giBoardSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   async function load() {
     const res = await fetch("/api/vmd", { cache: "no-store" });
@@ -675,9 +721,9 @@ export default function VmdDashboard() {
           </div>
         </Card>
 
-        <StyleDirectivesSection onRequestCoordination={requestCoordination} />
+        <StyleDirectivesSection />
 
-        <GiBoardVmdSection presetSearch={coordSearchStyle} sectionRef={giBoardSectionRef} />
+        <GiBoardVmdSection />
 
         <OutfitPreviewSection />
       </div>

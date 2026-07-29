@@ -1425,6 +1425,51 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     };
   });
 
+  // MARK 6.51: Layer 0(전사지시) — VMD가 "이번주 뭘 밀지" 한 곳에서 보게, 이미 계산된
+  // 부진/호조 프로모션 후보 + 신상품(최근 4주 입고)을 하나의 지시 리스트로 합칩니다.
+  const nowForDirectives = new Date();
+  const styleLaunchInfo = new Map<string, { productName: string; launchTime: number; launchDate: string }>();
+  for (const r of productRows) {
+    if (!r.launchTime) continue;
+    const existing = styleLaunchInfo.get(r.styleCode);
+    if (!existing) styleLaunchInfo.set(r.styleCode, { productName: r.productName, launchTime: r.launchTime, launchDate: r.launchDate });
+  }
+  const newProductDirectives = Array.from(styleLaunchInfo.entries())
+    .map(([styleCode, info]) => ({
+      styleCode,
+      productName: info.productName,
+      weeksSinceLaunch: (nowForDirectives.getTime() - info.launchTime) / (1000 * 60 * 60 * 24 * 7),
+      launchDate: info.launchDate,
+    }))
+    .filter((x) => x.weeksSinceLaunch >= 0 && x.weeksSinceLaunch <= 4)
+    .sort((a, b) => a.weeksSinceLaunch - b.weeksSinceLaunch);
+
+  const styleDirectives = [
+    ...promotion.promotionSuggestions.map((it: any) => ({
+      styleCode: it.styleCode,
+      productName: it.productName,
+      directiveType: "소진" as const,
+      reason: it.action,
+      priority: Math.round(Math.min(100, (it.stockWeeks || 0) * 5)),
+    })),
+    ...(promotion.suppressedPromotionCandidates || [])
+      .filter((it: any) => it.action && it.action.includes("매출드라이빙"))
+      .map((it: any) => ({
+        styleCode: it.styleCode,
+        productName: it.productName,
+        directiveType: "매출드라이빙" as const,
+        reason: it.action,
+        priority: Math.round(Math.max(0, 100 - (it.companyRank || 100))),
+      })),
+    ...newProductDirectives.map((it) => ({
+      styleCode: it.styleCode,
+      productName: it.productName,
+      directiveType: "신상품노출" as const,
+      reason: `입고 ${it.weeksSinceLaunch.toFixed(1)}주 차 신상품`,
+      priority: Math.round(Math.max(0, 100 - it.weeksSinceLaunch * 20)),
+    })),
+  ].sort((a, b) => b.priority - a.priority);
+
   return {
     periodLabel: "재고CTRL 기준: RT=오프라인 점포 간 이동 / 온라인 이관=온라인 가용재고→오프라인 배분 / 프로모션=오프라인 운영재고",
     stockoutRisk: stockoutRisk.sort((a, b) => a.offlineWeeks - b.offlineWeeks).slice(0, 10),
@@ -1438,6 +1483,7 @@ function buildInventory(productRows: any[], inventoryRows: any[], companyTopProd
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     overstockStoreTop5: finalize(send).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     ...promotion,
+    styleDirectives,
     productAnalysisList,
     aiBriefing: [
       `RT 이동 우선 검토 대상은 ${rtSuggestions.length}건입니다.`,

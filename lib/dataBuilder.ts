@@ -1483,6 +1483,8 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
       return !found || found.stock < 10;
     });
 
+    const topQualifyingStore = [...qualifyingStores].sort((a, b) => b.stock - a.stock)[0]?.storeName || "";
+
     styleDirectives.push({
       styleCode,
       productName: styleProductName.get(styleCode) || "",
@@ -1490,6 +1492,7 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
       reason,
       priority,
       qualifyingStoreCount: qualifyingStores.length,
+      topQualifyingStore,
       warehouseStock,
       weekNet,
       prevNet,

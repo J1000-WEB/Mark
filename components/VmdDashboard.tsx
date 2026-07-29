@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
+import ProductThumb from "@/components/ProductThumb";
 
 function drawContain(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const scale = Math.min(w / img.width, h / img.height);
@@ -271,11 +272,13 @@ function Calendar({ month, events, stores }: { month: string; events: VmdEvent[]
 
 function DirectiveBadge({ type }: { type: string }) {
   const cls =
-    type === "매출드라이빙"
+    type === "주력상품-공급형"
       ? "bg-emerald-100 text-emerald-700"
-      : type === "소진"
+      : type === "소진필요"
       ? "bg-rose-100 text-rose-700"
-      : "bg-sky-100 text-sky-700";
+      : type === "주력상품-회전형"
+      ? "bg-sky-100 text-sky-700"
+      : "bg-slate-200 text-slate-600";
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${cls}`}>{type}</span>;
 }
 
@@ -299,15 +302,16 @@ function StyleDirectivesSection() {
   }, []);
 
   const filtered = filterType === "전체" ? directives : directives.filter((d) => d.directiveType === filterType);
+  const types = ["전체", "주력상품-공급형", "소진필요", "주력상품-회전형", "관찰"];
 
   return (
-    <Card title="🎯 이번주 전사지시 (Layer 0 — 가안)">
+    <Card title="🎯 이번주 전사지시 (Layer 0)">
       <p className="mb-3 text-xs font-semibold text-slate-500">
-        RT/프로모션제안이 이미 계산한 "매출드라이빙·소진·신상품" 후보를 한 곳에 모은 리스트예요.
-        VMD가 코디를 짤 때 "이 중에서 매장 재고 있는 것"을 고르는 데 참고용입니다.
+        오프라인 매장 12곳 이상이 재고 10장 이상 보유한 스타일만 후보로 삼고, 창고재고(500장 기준)와
+        2주 판매추이로 분류했어요. 재고 10장 미만인 매장은 "투입필요"로 따로 표시돼요.
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
-        {["전체", "매출드라이빙", "소진", "신상품노출"].map((t) => (
+        {types.map((t) => (
           <button
             key={t}
             type="button"
@@ -321,17 +325,33 @@ function StyleDirectivesSection() {
 
       {status && <p className="text-xs font-bold text-blue-600">{status}</p>}
 
-      <div className="max-h-[500px] space-y-2 overflow-y-auto pr-2">
+      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-2">
         {filtered.slice(0, 50).map((d, i) => (
-          <div key={`${d.styleCode}-${i}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black">{d.styleCode} · {d.productName}</p>
-              <p className="text-xs font-semibold text-slate-500">{d.reason}</p>
+          <div key={`${d.styleCode}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex items-center gap-2">
+                <ProductThumb styleCode={d.styleCode} size={48} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black">{d.styleCode} · {d.productName}</p>
+                  <p className="text-xs font-semibold text-slate-500">{d.reason}</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <DirectiveBadge type={d.directiveType} />
+                <span className="text-xs font-bold text-slate-400">우선순위 {d.priority}</span>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <DirectiveBadge type={d.directiveType} />
-              <span className="text-xs font-bold text-slate-400">우선순위 {d.priority}</span>
+            <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-slate-400">
+              <span>확산매장 {d.qualifyingStoreCount}곳</span>
+              <span>창고재고 {Math.round(d.warehouseStock || 0)}장</span>
+              <span>2주 판매 {Math.round(d.weekNet || 0)}개 (전 2주 {Math.round(d.prevNet || 0)}개)</span>
             </div>
+            {d.gapStoreCount > 0 && (
+              <p className="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-bold text-amber-700">
+                ⚠ 투입필요 매장 {d.gapStoreCount}곳: {(d.gapStores || []).join(", ")}
+                {d.gapStoreCount > (d.gapStores || []).length ? " 외" : ""}
+              </p>
+            )}
           </div>
         ))}
         {!status && filtered.length === 0 && <Empty />}
@@ -364,7 +384,7 @@ function GiBoardVmdSection() {
           setStatus(d.error || "불러오기 실패");
           return;
         }
-        setStores(d.stores || []);
+        setStores(d.stores || d.storeList || []);
         setStatus("");
       })
       .catch((e) => setStatus(e?.message || "불러오기 실패"));
@@ -405,11 +425,15 @@ function GiBoardVmdSection() {
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
         >
           <option value="">매장 선택</option>
-          {stores.map((s: any) => (
-            <option key={s.store} value={s.store}>
-              {s.store} ({s.pairCount ?? s.count ?? "-"})
-            </option>
-          ))}
+          {stores.map((s: any) => {
+            const name = s.store || s.storeName || s.name || String(s);
+            const count = s.pairCount ?? s.count ?? s.combos ?? s.total ?? s.skuWithPair ?? "-";
+            return (
+              <option key={name} value={name}>
+                {name} ({count})
+              </option>
+            );
+          })}
         </select>
         <label className="flex items-center gap-1 text-xs font-bold text-slate-600">
           <input type="checkbox" checked={onlyStalled} onChange={(e) => { setOnlyStalled(e.target.checked); if (storeName) loadStore(storeName); }} />
@@ -433,9 +457,12 @@ function GiBoardVmdSection() {
         {filteredItems.slice(0, 60).map((it: any, i: number) => (
           <div key={`${it.sku}-${i}`} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-black">
-                {it.sku} · {it.name} <span className="text-xs font-semibold text-slate-400">({it.slot})</span>
-              </p>
+              <div className="flex items-center gap-2">
+                <ProductThumb styleCode={String(it.sku || "").split("::")[0]} size={56} />
+                <p className="text-sm font-black">
+                  {it.sku} · {it.name} <span className="text-xs font-semibold text-slate-400">({it.slot})</span>
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-500">gi재고 {it.stock}</span>
                 {it.markStock !== null && (
@@ -449,6 +476,7 @@ function GiBoardVmdSection() {
               <div className="mt-2 space-y-1">
                 {it.candidates.map((c: any, ci: number) => (
                   <div key={ci} className="flex items-center gap-2 text-xs">
+                    <ProductThumb styleCode={c.style} size={36} />
                     <CandidateBadge kind={c.kind} />
                     <span className="font-bold">{c.style} · {c.name}</span>
                     <span className="text-slate-400">{c.relation} · {c.colorName} · 재고{c.stock}</span>

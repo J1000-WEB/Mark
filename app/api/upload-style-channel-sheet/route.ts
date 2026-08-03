@@ -31,11 +31,37 @@ export async function POST(req: Request) {
       const titles = await getSpreadsheetTitlesById(spreadsheetId);
       const liveSheetName = titles.find((t) => t.includes("스타일별") && t.includes("채널별") && t.includes("금액")) || LIVE_SHEET_DEFAULT;
 
-      await deleteSheetByTitleIfExistsById(spreadsheetId, liveSheetName).catch(() => {});
+      try {
+        await deleteSheetByTitleIfExistsById(spreadsheetId, liveSheetName);
+      } catch (delErr: any) {
+        console.error("기존 시트 삭제 실패:", delErr);
+        return NextResponse.json(
+          { ok: false, error: `기존 시트("${liveSheetName}") 삭제에 실패했습니다: ${delErr?.message || delErr}` },
+          { status: 500 }
+        );
+      }
+
+      // 삭제가 진짜 반영됐는지 확인 (구글 API가 비동기로 늦게 반영하는 경우 대비)
+      const titlesAfterDelete = await getSpreadsheetTitlesById(spreadsheetId);
+      if (titlesAfterDelete.includes(liveSheetName)) {
+        return NextResponse.json(
+          { ok: false, error: `기존 시트("${liveSheetName}")가 삭제되지 않은 상태로 남아있습니다. 잠시 후 다시 시도해주세요.` },
+          { status: 500 }
+        );
+      }
+
       // MARK 6.59: 전체 행/열 수를 미리 알려주면, 그 크기로 그리드를 딱 맞게 만들어서
       // 자동 확장 과정에서 순간적으로 셀 수가 튀는 걸 막습니다.
       const gridSize = totalRows && totalCols ? { rowCount: Number(totalRows) + 5, columnCount: Number(totalCols) + 2 } : undefined;
-      await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || [], gridSize);
+      try {
+        await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || [], gridSize);
+      } catch (createErr: any) {
+        console.error("새 시트 생성 실패:", createErr);
+        return NextResponse.json(
+          { ok: false, error: `새 시트 생성에 실패했습니다: ${createErr?.message || createErr}` },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({ ok: true, written: (rows || []).length, liveSheetName });
     }
 

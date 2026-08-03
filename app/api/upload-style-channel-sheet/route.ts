@@ -50,9 +50,15 @@ export async function POST(req: Request) {
         );
       }
 
-      // MARK 6.59: 전체 행/열 수를 미리 알려주면, 그 크기로 그리드를 딱 맞게 만들어서
-      // 자동 확장 과정에서 순간적으로 셀 수가 튀는 걸 막습니다.
-      const gridSize = totalRows && totalCols ? { rowCount: Number(totalRows) + 5, columnCount: Number(totalCols) + 2 } : undefined;
+      // MARK 6.62: 시트 이름은 삭제 직후 목록에서 바로 사라져도, 그 시트가 차지하던 셀 용량은
+      // 구글 내부적으로 몇 초 늦게 반영(정리)될 수 있습니다. 그 사이에 새 시트를 만들면
+      // "아직 안 풀린 용량 + 새 시트"로 계산되어 1000만 한도에 걸릴 수 있어서, 잠깐 대기합니다.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // MARK 6.63: 여유분(+5행 +2열)이 오히려 독이 될 수 있음을 확인 — 이 스프레드시트는
+      // 남은 여유가 몇만 셀 단위로 빠듯해서, 조금이라도 여유를 더 두면 바로 한도에 걸립니다.
+      // 그래서 이제 정확히 필요한 크기만 할당합니다(패딩 없음).
+      const gridSize = totalRows && totalCols ? { rowCount: Number(totalRows), columnCount: Number(totalCols) } : undefined;
       try {
         await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || [], gridSize);
       } catch (createErr: any) {

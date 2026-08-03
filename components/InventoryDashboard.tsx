@@ -1629,7 +1629,12 @@ export default function InventoryDashboard() {
       const startRes = await fetch("/api/upload-style-channel-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "start", rows: chunks[0] }),
+        body: JSON.stringify({
+          mode: "start",
+          rows: chunks[0],
+          totalRows: rows.length,
+          totalCols: Math.max(...rows.map((r) => r.length)),
+        }),
       });
       const startData = await startRes.json();
       if (!startData.ok) throw new Error(startData.error || "업로드 시작 실패");

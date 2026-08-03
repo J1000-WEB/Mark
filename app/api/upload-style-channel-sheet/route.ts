@@ -24,7 +24,7 @@ const LIVE_SHEET_DEFAULT = "스타일별 채널별 입고/판매/재고현황(�
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { mode, rows, expectedTotalRows } = body || {};
+    const { mode, rows, expectedTotalRows, totalRows, totalCols } = body || {};
     const spreadsheetId = getDailySourceSheetId();
 
     if (mode === "start") {
@@ -32,7 +32,10 @@ export async function POST(req: Request) {
       const liveSheetName = titles.find((t) => t.includes("스타일별") && t.includes("채널별") && t.includes("금액")) || LIVE_SHEET_DEFAULT;
 
       await deleteSheetByTitleIfExistsById(spreadsheetId, liveSheetName).catch(() => {});
-      await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || []);
+      // MARK 6.59: 전체 행/열 수를 미리 알려주면, 그 크기로 그리드를 딱 맞게 만들어서
+      // 자동 확장 과정에서 순간적으로 셀 수가 튀는 걸 막습니다.
+      const gridSize = totalRows && totalCols ? { rowCount: Number(totalRows) + 5, columnCount: Number(totalCols) + 2 } : undefined;
+      await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || [], gridSize);
       return NextResponse.json({ ok: true, written: (rows || []).length, liveSheetName });
     }
 

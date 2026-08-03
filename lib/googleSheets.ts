@@ -197,12 +197,36 @@ export async function deleteSheetByTitleIfExistsById(spreadsheetId: string, titl
  * pick a unique staging title) and writes values into it in one shot. Nothing existing is
  * ever cleared here — this only ever adds a new sheet.
  */
-export async function createSheetWithValuesById(spreadsheetId: string, title: string, values: any[][]) {
+export async function createSheetWithValuesById(spreadsheetId: string, title: string, values: any[][], gridSize?: { rowCount: number; columnCount: number }) {
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.batchUpdate({
+  const addResult = await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
     requestBody: { requests: [{ addSheet: { properties: { title } } }] },
   });
+
+  // MARK 6.59: 그리드 크기를 지정 안 하면 구글 기본값(1000행×26열)에서 시작해서,
+  // 데이터가 그보다 훨씬 크면(특히 열이 많을 때) 자동 확장 과정에서 순간적으로
+  // 필요 이상 커졌다가 스프레드시트 전체 1000만 셀 한도를 넘을 수 있습니다.
+  // 최종 크기를 미리 정확히 지정해서 이 문제를 피합니다.
+  if (gridSize) {
+    const sheetId = addResult.data.replies?.[0]?.addSheet?.properties?.sheetId;
+    if (sheetId !== undefined && sheetId !== null) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              updateSheetProperties: {
+                properties: { sheetId, gridProperties: { rowCount: gridSize.rowCount, columnCount: gridSize.columnCount } },
+                fields: "gridProperties.rowCount,gridProperties.columnCount",
+              },
+            },
+          ],
+        },
+      });
+    }
+  }
+
   if (!values.length) return;
   const escaped = title.replace(/'/g, "''");
   await sheets.spreadsheets.values.update({

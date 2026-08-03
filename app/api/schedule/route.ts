@@ -3,6 +3,8 @@ import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById, getHistoryShe
 import { isCoreOfflineSalesStore } from "@/lib/dataBuilder";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { buildSpecialOfferEvents } from "@/lib/specialOfferWeek";
+import { loadStoreAmountRows } from "@/lib/dailyBriefing";
+import { mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -105,11 +107,15 @@ export async function GET() {
     }).filter((event) => event.startDate && event.title);
 
     // MARK 6.10: Daily_Sales_History를 한 번 읽어서 스페셜오퍼위크 매장별 매출 매칭 + 일별 매출 시리즈에 같이 사용합니다.
+    // MARK 6.57: 일간/매장 탭과 동일하게, Daily_Sales_History가 없는 날짜는 일간매출(26년)으로 보완합니다.
     let dailyFlatRows: { date: string; storeName: string; amount: number }[] = [];
     try {
       const historyId = getHistorySheetId();
       const dailyRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ");
-      dailyFlatRows = expandAnyDailyHistoryRows(dailyRaw || []).map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+      const primaryRows = expandAnyDailyHistoryRows(dailyRaw || []).map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+      const fallbackRows = await loadStoreAmountRows().catch(() => []);
+      const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
+      dailyFlatRows = flattenMergedAmounts(merged);
     } catch (error) {
       console.error("Daily_Sales_History load failed (schedule):", error);
     }

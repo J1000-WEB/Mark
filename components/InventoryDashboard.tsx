@@ -1633,26 +1633,27 @@ export default function InventoryDashboard() {
       });
       const startData = await startRes.json();
       if (!startData.ok) throw new Error(startData.error || "업로드 시작 실패");
+      const liveSheetName = startData.liveSheetName;
 
       for (let i = 1; i < chunks.length; i++) {
         setStyleSheetProgress(`업로드 중... (${i + 1}/${chunks.length})`);
         const res = await fetch("/api/upload-style-channel-sheet", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "chunk", rows: chunks[i] }),
+          body: JSON.stringify({ mode: "chunk", rows: chunks[i], liveSheetName }),
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `${i + 1}번째 청크 업로드 실패`);
       }
 
-      setStyleSheetProgress("마무리 중(검증 + 교체)...");
+      setStyleSheetProgress("마무리 중(검증)...");
       const finishRes = await fetch("/api/upload-style-channel-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "finish", expectedTotalRows: rows.length }),
+        body: JSON.stringify({ mode: "finish", expectedTotalRows: rows.length, liveSheetName }),
       });
       const finishData = await finishRes.json();
-      if (!finishData.ok) throw new Error(finishData.error || "마무리(교체) 실패");
+      if (!finishData.ok) throw new Error(finishData.error || "마무리 실패");
 
       setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요.`);
     } catch (e: any) {

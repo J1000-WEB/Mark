@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { updateSpecialOfferActuals } from "@/lib/specialOfferWeek";
+import { loadStoreAmountRows } from "@/lib/dailyBriefing";
+import { mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,11 +25,15 @@ export async function GET(req: Request) {
 
     const historyId = getHistorySheetId();
     const dailyRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ");
-    const dailyFlatRows = expandAnyDailyHistoryRows(dailyRaw || []).map((r) => ({
+    const primaryRows = expandAnyDailyHistoryRows(dailyRaw || []).map((r) => ({
       date: r.date,
       storeName: r.storeName,
       amount: r.amount,
     }));
+    // MARK 6.57: 일간/매장 탭과 동일하게, Daily_Sales_History가 없는 날짜는 일간매출(26년)으로 보완합니다.
+    const fallbackRows = await loadStoreAmountRows().catch(() => []);
+    const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
+    const dailyFlatRows = flattenMergedAmounts(merged);
 
     const result = await updateSpecialOfferActuals(dailyFlatRows);
 

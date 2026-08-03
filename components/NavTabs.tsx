@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" }) {
+export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" }) {
   const tabs = [
     { key: "schedule", label: "판매전체상", href: "/schedule" },
     { key: "weekly", label: "주간", href: "/weekly" },

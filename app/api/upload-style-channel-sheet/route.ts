@@ -4,22 +4,23 @@ import {
   createSheetWithValuesById,
   appendValuesById,
   deleteSheetByTitleIfExistsById,
-  renameSheetById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
 } from "@/lib/googleSheets";
+import { sendEmailAlert } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const STAGING_SHEET = "스타일별채널별입고판매재고현황_staging";
-const BACKUP_SHEET = "스타일별채널별입고판매재고현황_backup";
+const LIVE_SHEET_DEFAULT = "스타일별 채널별 입고/판매/재고현황(금액)";
 
-// MARK 6.30: 스타일별 채널별 입고/판매/재고현황(온라인 포함 31만 셀 등)을 브라우저에서 한 번에
-// 붙여넣으면 오류가 나서, 대신 이 라우트로 잘게 쪼개서(청크) 안전하게 업로드합니다.
-// [1] start: 스테이징 시트를 새로 만들고 첫 청크를 씀
-// [2] chunk: 스테이징 시트에 이어서 씀 (여러 번 반복)
-// [3] finish: 스테이징 행 수를 검증한 뒤, 기존 시트는 백업으로 이름을 바꾸고 스테이징을 실제 이름으로 승격
+// MARK 6.58: 파일이 892만 셀까지 커져서, 예전 방식(스테이징 만들고 → 검증 → 기존 걸 백업으로
+// 이름바꾸기 → 스테이징 승격)은 순간적으로 신구 데이터가 동시에 존재해서 2배 공간이 필요했고,
+// 이제 구글시트 전체 한도(1000만 셀)를 넘어버립니다. 그래서 "지우고 다시 쓰기" 방식으로 전환:
+// [1] start: 기존 라이브 시트를 먼저 지우고, 그 이름으로 새 시트를 만들어 첫 청크를 씀
+// [2] chunk: 그 시트에 이어서 씀
+// [3] finish: 행 수를 검증만 함(교체할 게 없음 — 이미 그 이름으로 쓰고 있었음)
+// 위험: 업로드 도중 실패하면 잠깐 데이터가 비어있을 수 있음 — 그래서 실패 시 이메일 알림을 보냄.
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -27,43 +28,43 @@ export async function POST(req: Request) {
     const spreadsheetId = getDailySourceSheetId();
 
     if (mode === "start") {
-      // MARK 6.37: 백업 삭제를 finish 시점이 아니라 여기(start)에서 먼저 합니다.
-      // 그래야 업로드 도중에 [기존백업]+[기존라이브]+[새 스테이징] 3벌이 동시에 존재하는 걸 피하고,
-      // [기존라이브]+[새 스테이징] 2벌만 유지해서 스프레드시트 전체 셀 한도(1000만)에 덜 걸립니다.
-      await deleteSheetByTitleIfExistsById(spreadsheetId, BACKUP_SHEET).catch(() => {});
-      await deleteSheetByTitleIfExistsById(spreadsheetId, STAGING_SHEET).catch(() => {});
-      await createSheetWithValuesById(spreadsheetId, STAGING_SHEET, rows || []);
-      return NextResponse.json({ ok: true, written: (rows || []).length });
+      const titles = await getSpreadsheetTitlesById(spreadsheetId);
+      const liveSheetName = titles.find((t) => t.includes("스타일별") && t.includes("채널별") && t.includes("금액")) || LIVE_SHEET_DEFAULT;
+
+      await deleteSheetByTitleIfExistsById(spreadsheetId, liveSheetName).catch(() => {});
+      await createSheetWithValuesById(spreadsheetId, liveSheetName, rows || []);
+      return NextResponse.json({ ok: true, written: (rows || []).length, liveSheetName });
     }
 
     if (mode === "chunk") {
       if (!rows || !rows.length) return NextResponse.json({ ok: true, written: 0 });
-      await appendValuesById(spreadsheetId, `'${STAGING_SHEET}'!A:ZZ`, rows);
+      const liveSheetName = body.liveSheetName || LIVE_SHEET_DEFAULT;
+      try {
+        await appendValuesById(spreadsheetId, `'${liveSheetName}'!A:ZZ`, rows);
+      } catch (error: any) {
+        await sendEmailAlert(
+          "⚠ MARK 업로드 실패 — 스타일별채널별(금액) 청크 저장 오류",
+          `<p>청크 업로드 중 오류가 발생했습니다. 현재 시트가 불완전한 상태일 수 있습니다.</p><p>오류: ${error?.message || error}</p>`
+        ).catch(() => {});
+        throw error;
+      }
       return NextResponse.json({ ok: true, written: rows.length });
     }
 
     if (mode === "finish") {
-      const stagingRows = await getSheetValuesById(spreadsheetId, STAGING_SHEET, "A:B").catch(() => []);
+      const liveSheetName = body.liveSheetName || LIVE_SHEET_DEFAULT;
+      const stagingRows = await getSheetValuesById(spreadsheetId, liveSheetName, "A:B").catch(() => []);
       const actualRows = stagingRows.length;
       if (expectedTotalRows && Math.abs(actualRows - expectedTotalRows) > 5) {
+        await sendEmailAlert(
+          "⚠ MARK 업로드 실패 — 스타일별채널별(금액) 행 수 불일치",
+          `<p>업로드된 행수(${actualRows})가 예상(${expectedTotalRows})과 많이 달라요. 시트가 불완전할 수 있으니 확인 후 다시 업로드해주세요.</p>`
+        ).catch(() => {});
         return NextResponse.json(
           { ok: false, error: `업로드된 행수(${actualRows})가 예상(${expectedTotalRows})과 많이 달라요. 다시 시도해주세요.` },
           { status: 400 }
         );
       }
-
-      const titles = await getSpreadsheetTitlesById(spreadsheetId);
-      // 업로드 대상은 항상 "(금액)" 시트로 고정합니다 — 기존 "스타일별 채널별 입고/판매/재고현황"(금액 없는 구버전)은
-      // 건드리지 않고 그대로 둡니다.
-      const liveSheetName = "스타일별 채널별 입고/판매/재고현황(금액)";
-
-      if (titles.includes(BACKUP_SHEET)) {
-        await deleteSheetByTitleIfExistsById(spreadsheetId, BACKUP_SHEET);
-      }
-      if (titles.includes(liveSheetName)) {
-        await renameSheetById(spreadsheetId, liveSheetName, BACKUP_SHEET);
-      }
-      await renameSheetById(spreadsheetId, STAGING_SHEET, liveSheetName);
 
       return NextResponse.json({ ok: true, totalRows: actualRows, liveSheetName });
     }
@@ -71,6 +72,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "mode가 올바르지 않습니다(start/chunk/finish 중 하나여야 함)." }, { status: 400 });
   } catch (error: any) {
     console.error("upload-style-channel-sheet failed:", error);
+    await sendEmailAlert(
+      "⚠ MARK 업로드 실패 — 스타일별채널별(금액)",
+      `<p>업로드 중 예상치 못한 오류가 발생했습니다.</p><p>오류: ${error?.message || error}</p>`
+    ).catch(() => {});
     return NextResponse.json({ ok: false, error: error?.message || "업로드 실패" }, { status: 500 });
   }
 }

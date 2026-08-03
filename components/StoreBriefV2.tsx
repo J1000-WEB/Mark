@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProductThumb from "@/components/ProductThumb";
+import NavTabs from "@/components/NavTabs";
 
 const ACCENT = "#4F46E5";
 
@@ -134,6 +135,7 @@ export default function StoreBriefV2() {
   return (
     <main style={{ minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 820, padding: "24px 20px 80px", display: "flex", flexDirection: "column", gap: 18 }}>
+        <NavTabs active="store" />
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".14em", color: ACCENT }}>매장 아침 브리핑 (가안)</div>
           <select
@@ -222,7 +224,12 @@ export default function StoreBriefV2() {
                 {(cards.top10Comparison || []).slice(0, 5).map((it: any, i: number) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F8FAFC", borderRadius: 14 }}>
                     <ProductThumb styleCode={it.styleCode} size={48} />
-                    <div style={{ flex: 1, fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                      <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
+                        판매량 {it.storeQty ?? 0}개 · 재고 {it.storeStock ?? "-"}개
+                      </div>
+                    </div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: it.storeRank ? "#059669" : "#94A3B8" }}>
                       {it.storeRank ? `이 매장 ${it.storeRank}위` : "미판매"}
                     </div>

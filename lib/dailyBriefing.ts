@@ -1,7 +1,8 @@
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
-import { getWeatherForStoreOnDate } from "@/lib/storeRegion";
+import { getWeatherForStoreOnDate, weatherActionTip } from "@/lib/storeRegion";
+import { loadStyleLaunchMap } from "@/lib/styleLaunchMaster";
 import { mergeDateTotals, getComparisonDateForDaily } from "@/lib/storeDailyAmount";
 
 // MARK 6.27: "스타일별 채널별 입고/판매/재고현황"(→Daily_Sales_History, qty×Style_Price_History 단가로
@@ -402,6 +403,63 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     .filter((s) => s.storeStock === null || s.storeStock >= 10)
     .slice(0, 5);
 
+  // ---- STEP4.5 우리 매장 유독 잘 팔리는 상품 (전사 평균 대비 이 매장 판매비중이 두드러지게 높은 것) ----
+  const trendWindowStart14 = addDays(targetDate, -13);
+  const storeQtyByStyle = new Map<string, { productName: string; qty: number }>();
+  let storeTotalQty14 = 0;
+  for (const r of storeRows) {
+    if (r.date < trendWindowStart14 || r.date > targetDate) continue;
+    if (!storeQtyByStyle.has(r.styleCode)) storeQtyByStyle.set(r.styleCode, { productName: r.productName, qty: 0 });
+    storeQtyByStyle.get(r.styleCode)!.qty += Number(r.qty || 0);
+    storeTotalQty14 += Number(r.qty || 0);
+  }
+  const companyQtyByStyle = new Map<string, number>();
+  let companyTotalQty14 = 0;
+  for (const r of companyRows) {
+    if (r.date < trendWindowStart14 || r.date > targetDate) continue;
+    companyQtyByStyle.set(r.styleCode, (companyQtyByStyle.get(r.styleCode) || 0) + Number(r.qty || 0));
+    companyTotalQty14 += Number(r.qty || 0);
+  }
+  const storeOutperformers = Array.from(storeQtyByStyle.entries())
+    .filter(([, v]) => v.qty >= 3) // 노이즈 방지: 최근 14일 3개 이상 팔린 것만 후보
+    .map(([styleCode, v]) => {
+      const storeShare = storeTotalQty14 ? v.qty / storeTotalQty14 : 0;
+      const companyQty = companyQtyByStyle.get(styleCode) || 0;
+      const companyShare = companyTotalQty14 ? companyQty / companyTotalQty14 : 0;
+      const ratio = companyShare > 0 ? storeShare / companyShare : storeShare > 0 ? 99 : 0;
+      return { styleCode, productName: v.productName, storeQty: v.qty, companyQty, ratio };
+    })
+    .filter((x) => x.ratio >= 1.8) // 전사 평균 대비 1.8배 이상 팔림 = "유독 잘 팔림"
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 5);
+
+  // ---- STEP4.6 최근 입고 신상품 (이 매장에 재고가 있는 것만) ----
+  const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
+  const storeLatestStock = new Map<string, { productName: string; stock: number; date: string }>();
+  for (const r of storeRows) {
+    if (r.date > targetDate) continue;
+    const existing = storeLatestStock.get(r.styleCode);
+    if (!existing || r.date > existing.date) {
+      storeLatestStock.set(r.styleCode, { productName: r.productName, stock: Number(r.stock || 0), date: r.date });
+    }
+  }
+  const recentArrivals = Array.from(launchMap.entries())
+    .filter(([styleCode, launchDate]) => {
+      if (!launchDate) return false;
+      const days = (new Date(targetDate).getTime() - new Date(launchDate).getTime()) / (1000 * 60 * 60 * 24);
+      if (days < 0 || days > 21) return false; // 최근 21일 이내 입고
+      const stockInfo = storeLatestStock.get(styleCode);
+      return stockInfo && stockInfo.stock > 0; // 이 매장에 재고가 있어야 의미 있음
+    })
+    .map(([styleCode, launchDate]) => ({
+      styleCode,
+      productName: storeLatestStock.get(styleCode)?.productName || "",
+      launchDate,
+      storeStock: storeLatestStock.get(styleCode)?.stock || 0,
+    }))
+    .sort((a, b) => (a.launchDate < b.launchDate ? 1 : -1))
+    .slice(0, 8);
+
   // ---- STEP5 재고/RT 현황 ----
   const totalStock = Array.from(
     storeRows.filter((r) => r.date === targetDate).reduce((map, r) => {
@@ -432,6 +490,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
 
   // ---- STEP6 날씨 ----
   const weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
+  const weatherTip = weatherActionTip(weather);
 
   // ---- STEP7 진행중 이벤트 스페셜오퍼위크 ----
   const activeEvents = storeEvents.filter((e: any) => e.startDate <= targetDate && e.endDate >= targetDate);
@@ -454,8 +513,11 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     month: { start: monthStart, end: monthEnd, elapsedDays: monthElapsedDays, totalDays: monthTotalDays, cumulative: monthCumulative, targetEstimate: monthTargetEstimate, projected: monthProjected, projectedRate: monthProjectedRate },
     top10Comparison,
     stockInsights,
+    storeOutperformers,
+    recentArrivals,
     inventory: { totalStock, rtIn, rtOut },
     weather,
+    weatherTip,
     activeEvents,
     trend,
   };

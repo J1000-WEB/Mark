@@ -645,16 +645,22 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
 // "건너뛰지 않고 통째로 교체"합니다. 예전(금액 없던 시절)에 저장된 부정확한 값을 새로
 // 업로드한 정확한 값으로 덮어쓰기 위한 용도입니다.
 export async function backfillDailySalesForDate(data: any) {
-  const spreadsheetId = getHistorySheetId();
   const newFlatRows = buildDailyHistoryRows(data);
   if (!newFlatRows.length) throw new Error("업로드한 파일에서 저장할 판매 데이터를 찾지 못했습니다.");
+  return backfillFlatRows(newFlatRows);
+}
+
+// MARK 6.53: ERP 스크래퍼처럼 이미 "일자/매장/품번/컬러/사이즈/수량/금액" 형태로 만들어진
+// flat row를 직접 받는 버전. 같은 날짜의 기존 행은 통째로 교체합니다(백필과 동일한 원칙).
+export async function backfillFlatRows(newFlatRows: FlatDailyHistoryRow[]) {
+  const spreadsheetId = getHistorySheetId();
+  if (!newFlatRows.length) throw new Error("저장할 판매 데이터가 없습니다.");
 
   const targetDates = new Set(newFlatRows.map((r) => r.date));
 
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
   const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
 
-  // 업로드한 파일에 들어있는 날짜(들)의 기존 행은 전부 빼고, 새로 파싱한 행으로 교체합니다.
   const keptRows = existingFlatRows.filter((r) => !targetDates.has(r.date));
   const mergedFlatRows = [...keptRows, ...newFlatRows];
 

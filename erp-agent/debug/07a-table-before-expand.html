@@ -1,0 +1,313 @@
+<form name="SesFrm" id="SesFrm">
+    <input type="hidden" name="gv_CompCd" id="gv_CompCd" value="GI001" style="">
+    <input type="hidden" name="gv_AdminYn" id="gv_AdminYn" value="N" style="">
+    <input type="hidden" name="gv_EmplId" id="gv_EmplId" value="sjc" style="">
+    <input type="hidden" name="gv_EmplNm" id="gv_EmplNm" value="소재천" style="">
+    <input type="hidden" name="gv_EmplLevel" id="gv_EmplLevel" value="EMP" style="">
+    <input type="hidden" name="gv_JobCd" id="gv_JobCd" value="04" style="">
+    <input type="hidden" name="gv_AccountYn" id="gv_AccountYn" value="null" style="">
+    <input type="hidden" name="gv_CustCd" id="gv_CustCd" value="null" style="">
+    <input type="hidden" name="gv_DeptCd" id="gv_DeptCd" value="10005" style="">
+    <input type="hidden" name="gv_Language" id="gv_Language" value="null" style="">
+    <input type="hidden" name="gv_FrMenuNr" id="gv_FrMenuNr" value="null" style="">
+    <input type="hidden" name="outurl" id="outurl" value="/indexGI.jsp" style="">
+    <input type="hidden" name="sIp" id="sip" value="125.129.214.32" style="">
+</form>
+
+<div id="calDiv" style="POSITION:absolute;vertical-align:top;margin-left:0px;z-index:20000;display:none;">
+    <iframe name="calIframe" id="calIframe" src="" frameborder="0" height="210" width="193" scrolling="no"></iframe>
+    <iframe name="ezIframe" id="ezIframe" src="" frameborder="0" height="0" width="0" scrolling="no"></iframe>
+    <iframe name="ezIframe2" id="ezIframe2" src="" frameborder="0" height="0" width="0" scrolling="no"></iframe>
+</div>
+
+<!--엑셀관련 -->
+<form name="xlsFrm" id="xlsFrm" method="post">
+    <input type="hidden" name="html" id="html" style="">
+    <input type="hidden" name="filename" id="filename" value="jqxGrid" style="">
+</form>
+
+
+
+	
+<script type="text/javascript">
+	var prm_emplAuth;
+	var prm_favoritesYn;
+	var prm_openerYn;
+	
+	//------------------------------------------------------------------------------------------------
+	// Document Ready
+	//------------------------------------------------------------------------------------------------
+	$(document).ready(function(){
+		/* 새창여부 체크*/
+		try{
+			var chkwin = window.opener.document;
+			if (chkwin) {
+				prm_openerYn = "Y";
+			}
+		}
+		catch(e){
+			prm_openerYn = "N";
+		}
+		
+		
+// 		fn_getEmplAuth();
+// 		fn_getFavoriesYn();
+		
+// 		var searchAuth   = prm_emplAuth.substr(0, 1);
+// 		var newAuth      = prm_emplAuth.substr(1, 1);
+// 		var saveAuth     = prm_emplAuth.substr(2, 1);
+// 		var deleteAuth   = prm_emplAuth.substr(3, 1);
+// 		var printAuth    = prm_emplAuth.substr(4, 1);
+// 		var etc1Auth     = prm_emplAuth.substr(5, 1);
+// 		var etc2Auth     = prm_emplAuth.substr(6, 1);
+		
+// 		/* 즐겨찾기 */
+// 		if( prm_favoritesYn == "Y" ){
+// 			$("#btnFavoritesOff").css("display", "none");
+// 			$("#btnFavoritesOn" ).css("display", "");
+// 		}
+// 		else if( prm_favoritesYn == "N" ){
+// 			$("#btnFavoritesOff").css("display", "");
+// 			$("#btnFavoritesOn" ).css("display", "none");
+// 		}
+		
+// 		/* 초기화 */
+// 		document.getElementById("btnReset").style.display = "";
+		
+// 		/* 조회 */
+		document.getElementById("btnSearch").style.display = "";
+// 		if( searchAuth == "0" ) document.getElementById("btnSearch").style.display = "none";
+		
+// 		/* 신규 */
+// 		if( newAuth == "1" ) 	document.getElementById("btnNew").style.display = "";
+// 		if( newAuth == "0" ) 	document.getElementById("btnNew").style.display = "none";
+		
+// 		/* 저장 */
+// 		if( saveAuth == "1" ) 	document.getElementById("btnSave").style.display = "";
+// 		if( saveAuth == "0" ) 	document.getElementById("btnSave").style.display = "none";
+		
+// 		/* 삭제 */
+// 		if( deleteAuth == "1" ) document.getElementById("btnDelete").style.display = "";
+// 		if( deleteAuth == "0" ) document.getElementById("btnDelete").style.display = "none";
+		
+// 		/* 출력 */
+// 		if( printAuth == "1" ) 	document.getElementById("btnPrint").style.display = "";
+// 		if( printAuth == "0" ) 	document.getElementById("btnPrint").style.display = "none";
+		
+// 		/* 기타1 */
+// 		if( etc1Auth == "1" ) 	document.getElementById("btnEtc1").style.display = "";
+// 		if( etc1Auth == "0" ) 	document.getElementById("btnEtc1").style.display = "none";
+		
+// 		/* 기타2 */
+// 		if( etc2Auth == "1" ) 	document.getElementById("btnEtc2").style.display = "";
+// 		if( etc2Auth == "0" ) 	document.getElementById("btnEtc2").style.display = "none";
+		
+// 		$("#btnFavoritesOff").click(function(){
+// 			if( !confirm("즐겨찾기에 추가하시겠습니까?") ) return;
+
+// 			fn_saveFavorites("C");
+			
+// 			$(this).css("display", "none");
+// 			$("#btnFavoritesOn").css("display", "");
+// 		});
+		
+// 		$("#btnFavoritesOn").click(function(){
+// 			if( !confirm("즐겨찾기에서 삭제하시겠습니까?") ) return;
+			
+// 			fn_saveFavorites("D");
+			
+// 			$(this).css("display", "none");
+// 			$("#btnFavoritesOff").css("display", "");
+// 		});
+		
+// 		$(":input:text:visible:enabled:first").focus();
+	});
+
+	//------------------------------------------------------------------------------------------------
+	// fn_saveFavorites
+	// prmSaveGb : 저장구분 (C:저장, D:삭제)
+	//------------------------------------------------------------------------------------------------
+	function fn_saveFavorites(prmSaveGb){
+		var result;
+		$.ajax({
+			url			: "/common/saveFavories.do",
+			data		: { 
+						    COMP_CD : gfn_getCompoValue("gv_CompCd")
+						  , EMPL_ID : gfn_getCompoValue("gv_EmplId")
+						  , MENU_ID : gfn_getCompoValue("prm_MenuId")
+						  , SAVE_GB : prmSaveGb
+						  },
+			type		: "post",
+			dataType	: "json",
+			async		: false,
+			success		: function(rst){
+				result = rst;
+				if( prm_openerYn == "N" ) parent.fn_getFavoritesList();
+				if( prm_openerYn == "Y" ) opener.parent.fn_getFavoritesList();
+				
+			}
+			, error		: function(error){
+				goSessionOut(error, MSG_LOAD_ERROR, $("#outurl").val());
+			}
+		 	, complete 	: function(xhr, textStatus) {
+				alert(result.RESULT_MSG);
+			}
+		});
+	}
+
+	//------------------------------------------------------------------------------------------------
+	// fn_onDblClick
+	//------------------------------------------------------------------------------------------------
+	function fn_onDblClick(prmObj){
+		if( !$("#topMenuId").is(":visible") ){
+			document.getElementById("topMenuId").style.display = "";
+			document.getElementById("topMenuNm").style.display = "none";
+		}
+		else{
+			document.getElementById("topMenuId").style.display = "none";
+			document.getElementById("topMenuNm").style.display = "";
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	// fn_getEmplAuth
+	//------------------------------------------------------------------------------------------------
+	function fn_getEmplAuth(){
+		$.ajax({
+			url			: "/common/getEmplAuth.do",
+			data		: { 
+					    	COMP_CD 	: gfn_getCompoValue("gv_CompCd")
+						  , ADMIN_YN  	: gfn_getCompoValue("gv_AdminYn")
+						  , EMPL_ID 	: gfn_getCompoValue("gv_EmplId")
+						  , MENU_ID 	: gfn_getCompoValue("prm_MenuId")
+						  },
+			type		: "post",
+			dataType	: "json",
+			async		: false,
+			success		: function(result){
+				$(result.RESULT_DATA).each(function(index, data){
+					prm_emplAuth = data.empl_auth;
+				});
+			},
+			error:function(error){
+				goSessionOut(error, MSG_LOAD_ERROR, $("#outurl").val());
+			}
+		});
+	}
+	
+	//------------------------------------------------------------------------------------------------
+	// fn_getFavoriesYn
+	//------------------------------------------------------------------------------------------------
+	function fn_getFavoriesYn(){
+		$.ajax({
+			url			: "/common/getFavoriesYn.do",
+			data		: { 
+					    	COMP_CD 	: gfn_getCompoValue("gv_CompCd")
+						  , EMPL_ID 	: gfn_getCompoValue("gv_EmplId")
+						  , MENU_ID 	: gfn_getCompoValue("prm_MenuId")
+						  },
+			type		: "post",
+			dataType	: "json",
+			async		: false,
+			success		: function(result){
+				prm_favoritesYn = result.RESULT_DATA;
+			},
+			error:function(error){
+				goSessionOut(error, MSG_LOAD_ERROR, $("#outurl").val());
+			}
+		});
+	}
+</script>
+<div class="top-header" style="display: none;">
+	<span id="topMenuNm" class="top-menu-name" ondblclick="fn_onDblClick(this);"></span>
+	<span id="topMenuId" class="top-menu-id" ondblclick="fn_onDblClick(this);" style="display:none;"></span>
+	<span class="top-location">
+		<input id="btnFavoritesOff" type="button" value="" class="btn-info" btnimgname="btn-favorites_off" style="width: 30px;">
+		<input id="btnFavoritesOn" type="button" value="" class="btn-info" btnimgname="btn-favorites_on" style="width: 30px; display: none;">
+		<input id="btnReset" type="button" value=" 초기화 " class="btn-info" btnimgname="btn-reset" style="display: none;">
+		<input id="btnSearch" type="button" value=" 조회 " class="btn-info" style="">
+		<input id="btnNew" type="button" value=" 신규 " class="btn-info" style="display: none;">
+		<input id="btnSave" type="button" value=" 저장 " class="btn-info" style="display: none;">
+		<input id="btnDelete" type="button" value=" 삭제 " class="btn-info" style="display: none;">
+		<input id="btnPrint" type="button" value=" 출력 " class="btn-info" style="display: none;">
+		<input id="btnEtc1" type="button" value=" 기타1 " class="btn-info" style="display: none;">
+		<input id="btnEtc2" type="button" value=" 기타2 " class="btn-info" style="display: none;">
+	</span>
+</div>
+<input type="hidden" name="prm_MenuId" id="prm_MenuId" value="" style="">
+<input type="hidden" name="prm_MenuNm" id="prm_MenuNm" value="" style="">
+<input type="hidden" name="prm_ProgId" id="prm_ProgId" value="" style="">
+
+	
+<script type="text/javascript" src="/webpages/GI/SL/SL1010/SL1010.js?ver=16"></script>
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+
+
+<header>
+
+</header>
+
+<div id="container" style="width: 1270px; height: 100%;">
+    <div class="search-box" style="height: 36px;">
+        <table class="tbl-width-100">
+            <tbody><tr>
+                <td class="td_input">
+                    <table class="tbl-none">
+                        <tbody><tr>
+                            <th class="td_title" width="60">기준일자</th>
+                            <td>
+                                <input type="date" id="fr_dt" name="fr_dt" style="width: 100px; height: 24px;" maxlength="10" size="11">
+                            </td>
+                            <td>
+                                <button class="w3-btn w3-ripple w3-black w3-padding-small" style="margin-left: 5px; float: right;" onclick="btnSearch_onClick();">조회
+                                </button>
+                            </td>
+                            <td class="td_input">
+                                <input type="radio" name="day_div" value="2" id="type03" checked="checked" style="margin-left: 5px;"><label for="type03">요일</label>
+                                <input type="radio" name="day_div" value="1" id="type04" style="margin-left: 5px;"><label for="type04">일자</label>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </td>
+            </tr>
+        </tbody></table>
+    </div>
+    <div class="search-box" style="height: 36px;">
+        <table class="tbl-width-100">
+            <tbody><tr>
+                <td class="td_input">
+                    <table class="tbl-width-100">
+                        <tbody><tr>
+                            <th class="td_title" width="60">채널구분</th>
+                            <td>
+                                <div id="select_shop_gb" class="jqx-dropdownlist jqx-dropdownlist-arctic jqx-widget jqx-widget-arctic jqx-dropdownlist-state-normal jqx-dropdownlist-state-normal-arctic jqx-rc-all jqx-rc-all-arctic jqx-fill-state-normal jqx-fill-state-normal-arctic jqx-default jqx-default-arctic" role="combobox" aria-autocomplete="both" aria-readonly="false" tabindex="0" aria-owns="listBoxselect_shop_gb" aria-haspopup="true" style="width: 1178px; height: 23px;" aria-expanded="false"><div style="background-color: transparent; -webkit-appearance: none; outline: none; width:100%; height: 100%; padding: 0px; margin: 0px; border: 0px; position: relative;"><div id="dropdownlistWrapperselect_shop_gb" style="overflow: hidden; outline: none; background-color: transparent; border: none; float: left; width:100%; height: 100%; position: relative;"><div id="dropdownlistContentselect_shop_gb" unselectable="on" style="outline: none; background-color: transparent; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; float: left; position: relative; margin-top: 12px; margin-bottom: 12px; width: 1155px; height: 23px; left: 0px; top: 0px;" class="jqx-dropdownlist-content jqx-dropdownlist-content-arctic jqx-disableselect jqx-disableselect-arctic"><span unselectable="on" style="color: inherit; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background-color: transparent; padding-top: 0px; padding-bottom: 0px;" class=""></span></div><div id="dropdownlistArrowselect_shop_gb" unselectable="on" style="background-color: transparent; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; float: right; position: relative; width: 17px; height: 23px;"><div unselectable="on" class="jqx-icon-arrow-down jqx-icon-arrow-down-arctic jqx-icon jqx-icon-arctic"></div></div><label class="jqx-input-label jqx-input-label-arctic jqx-default jqx-default-arctic"></label><span class="jqx-input-bar jqx-input-bar-arctic jqx-default jqx-default-arctic" style="top: 23px;"></span></div></div><input type="hidden" value="" style=""></div>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </td>
+            </tr>
+        </tbody></table>
+    </div>
+    <div class="search-box" style="height: 36px; border-bottom: 1px #99b8d5 solid;">
+        <table class="tbl-width-100">
+            <tbody><tr>
+                <td class="td_input">
+                    <table class="tbl-width-100">
+                        <tbody><tr>
+                            <th class="td_title" width="60">채널형태</th>
+                            <td>
+                                <div id="select_shop_tp" class="jqx-dropdownlist jqx-dropdownlist-arctic jqx-widget jqx-widget-arctic jqx-dropdownlist-state-normal jqx-dropdownlist-state-normal-arctic jqx-rc-all jqx-rc-all-arctic jqx-fill-state-normal jqx-fill-state-normal-arctic jqx-default jqx-default-arctic" role="combobox" aria-autocomplete="both" aria-readonly="false" tabindex="0" aria-owns="listBoxselect_shop_tp" aria-haspopup="true" style="width: 1178px; height: 23px;" aria-expanded="false"><div style="background-color: transparent; -webkit-appearance: none; outline: none; width:100%; height: 100%; padding: 0px; margin: 0px; border: 0px; position: relative;"><div id="dropdownlistWrapperselect_shop_tp" style="overflow: hidden; outline: none; background-color: transparent; border: none; float: left; width:100%; height: 100%; position: relative;"><div id="dropdownlistContentselect_shop_tp" unselectable="on" style="outline: none; background-color: transparent; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; float: left; position: relative; margin-top: 12px; margin-bottom: 12px; width: 1155px; height: 23px; left: 0px; top: 0px;" class="jqx-dropdownlist-content jqx-dropdownlist-content-arctic jqx-disableselect jqx-disableselect-arctic"><span unselectable="on" style="color: inherit; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background-color: transparent; padding-top: 0px; padding-bottom: 0px;" class=""></span></div><div id="dropdownlistArrowselect_shop_tp" unselectable="on" style="background-color: transparent; border-width: medium; border-style: none; border-color: currentcolor; border-image: none; float: right; position: relative; width: 17px; height: 23px;"><div unselectable="on" class="jqx-icon-arrow-down jqx-icon-arrow-down-arctic jqx-icon jqx-icon-arctic"></div></div><label class="jqx-input-label jqx-input-label-arctic jqx-default jqx-default-arctic"></label><span class="jqx-input-bar jqx-input-bar-arctic jqx-default jqx-default-arctic" style="top: 23px;"></span></div></div><input type="hidden" value="" style=""></div>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </td>
+            </tr>
+        </tbody></table>
+    </div>
+    <div class="wrap" style="clear: both"></div>
+    <div id="unit_name" style="float: right; margin-top:3px; margin-bottom:3px; margin-right:5px; font-size: 12px;">단위
+        천원
+    </div>
+    <div id="div_grid1" class="wrap" style="clear: both"><div class="ui-jqgrid ui-widget ui-widget-content ui-corner-all" id="gbox_grid1" dir="ltr" style="width: 1265px;"><div class="ui-widget-overlay jqgrid-overlay" id="lui_grid1"></div><div class="loading ui-state-default ui-state-active" id="load_grid1" style="display: none;">Loading...</div><div class="ui-jqgrid-view" id="gview_grid1" style="width: 1265px;"><div class="ui-jqgrid-titlebar ui-widget-header ui-corner-top ui-helper-clearfix"><a role="link" href="javascript:void(0)" class="ui-jqgrid-titlebar-close HeaderButton" style="right: 0px;"><span class="ui-icon ui-icon-circle-triangle-n"></span></a><span class="ui-jqgrid-title">채널별 매출현황</span></div><div class="ui-state-default ui-jqgrid-hdiv" style="width: 1265px;"><div class="ui-jqgrid-hbox"><table class="ui-jqgrid-htable" style="width:895px" role="grid" aria-labelledby="gbox_grid1" cellspacing="0" cellpadding="0" border="0"><thead><tr class="ui-jqgrid-labels" role="rowheader"><th id="grid1_rn" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 20px;"><div id="jqgh_grid1_rn"><span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_subgrid" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 25px;"><div id="jqgh_grid1_subgrid"><span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_SHOP_CD" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 90px; display: none;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_SHOP_CD" class="ui-jqgrid-sortable"><span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_SHOP_NM" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 140px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_SHOP_NM" class="ui-jqgrid-sortable">채널<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_PLAN_AMT_DAILY" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 60px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_PLAN_AMT_DAILY" class="ui-jqgrid-sortable">일목표<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_SALES_AMT_DAILY" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 60px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_SALES_AMT_DAILY" class="ui-jqgrid-sortable">일판매<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_RATE_DAILY" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 50px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_RATE_DAILY" class="ui-jqgrid-sortable">달성율<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_PLAN_AMT_MONTH" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 80px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_PLAN_AMT_MONTH" class="ui-jqgrid-sortable">당월목표<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_SALES_AMT_MONTH" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 80px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_SALES_AMT_MONTH" class="ui-jqgrid-sortable">당월판매<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_RATE_MONTH" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 45px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_RATE_MONTH" class="ui-jqgrid-sortable">달성율<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_BF_D_AMT" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 60px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_BF_D_AMT" class="ui-jqgrid-sortable">전년일<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_BF_SALES_AMT_MONTH" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 80px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_BF_SALES_AMT_MONTH" class="ui-jqgrid-sortable">전년동월<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_BF_RATE" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 55px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_BF_RATE" class="ui-jqgrid-sortable">신장율<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th><th id="grid1_SHOP_NM2" role="columnheader" class="ui-state-default ui-th-column ui-th-ltr" style="width: 140px;"><span class="ui-jqgrid-resize ui-jqgrid-resize-ltr" style="cursor: col-resize;">&nbsp;</span><div id="jqgh_grid1_SHOP_NM2" class="ui-jqgrid-sortable">채널<span class="s-ico" style="display:none"><span sort="asc" class="ui-grid-ico-sort ui-icon-asc ui-state-disabled ui-icon ui-icon-triangle-1-n ui-sort-ltr"></span><span sort="desc" class="ui-grid-ico-sort ui-icon-desc ui-state-disabled ui-icon ui-icon-triangle-1-s ui-sort-ltr"></span></span></div></th></tr></thead></table></div></div><div class="ui-jqgrid-bdiv" style="height: 443px; width: 1265px;"><div style="position:relative;"><div></div><table id="grid1" class="ui-jqgrid-btable" tabindex="0" cellspacing="0" cellpadding="0" border="0" role="grid" aria-multiselectable="false" aria-labelledby="gbox_grid1" style="width: 895px;"><tbody><tr class="jqgfirstrow" role="row" style="height:auto"><td role="gridcell" style="height:0px;width:20px;"></td><td role="gridcell" style="height:0px;width:25px;"></td><td role="gridcell" style="height:0px;width:90px;display:none;"></td><td role="gridcell" style="height:0px;width:140px;"></td><td role="gridcell" style="height:0px;width:60px;"></td><td role="gridcell" style="height: 0px; width: 60px; background: rgb(254, 255, 217);"></td><td role="gridcell" style="height:0px;width:50px;"></td><td role="gridcell" style="height:0px;width:80px;"></td><td role="gridcell" style="height: 0px; width: 80px; background: rgb(233, 218, 228);"></td><td role="gridcell" style="height:0px;width:45px;"></td><td role="gridcell" style="height: 0px; width: 60px; background: rgb(254, 255, 217);"></td><td role="gridcell" style="height: 0px; width: 80px; background: rgb(233, 218, 228);"></td><td role="gridcell" style="height:0px;width:55px;"></td><td role="gridcell" style="height:0px;width:140px;"></td></tr><tr role="row" id="1" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;width: 20px;" title="1" aria-describedby="grid1_rn">1</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="41001" aria-describedby="grid1_SHOP_CD">41001</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 서울역점" aria-describedby="grid1_SHOP_NM">롯데아울렛 서울역점</td><td role="gridcell" style="text-align:right;" title="2,500" aria-describedby="grid1_PLAN_AMT_DAILY">2,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="1,232" aria-describedby="grid1_SALES_AMT_DAILY">1,232</td><td role="gridcell" style="text-align:right;" title="49.3" aria-describedby="grid1_RATE_DAILY">49.3</td><td role="gridcell" style="text-align:right;" title="11,500" aria-describedby="grid1_PLAN_AMT_MONTH">11,500</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="11,319" aria-describedby="grid1_SALES_AMT_MONTH">11,319</td><td role="gridcell" style="text-align:right;" title="98.4" aria-describedby="grid1_RATE_MONTH">98.4</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 서울역점" aria-describedby="grid1_SHOP_NM2">롯데아울렛 서울역점</td></tr><tr role="row" id="2" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="2" aria-describedby="grid1_rn">2</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="21030" aria-describedby="grid1_SHOP_CD">21030</td><td role="gridcell" style="text-align:left;" title="성수 플래그십" aria-describedby="grid1_SHOP_NM">성수 플래그십</td><td role="gridcell" style="text-align:right;" title="7,500" aria-describedby="grid1_PLAN_AMT_DAILY">7,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="1,077" aria-describedby="grid1_SALES_AMT_DAILY">1,077</td><td role="gridcell" style="text-align:right;" title="14.4" aria-describedby="grid1_RATE_DAILY">14.4</td><td role="gridcell" style="text-align:right;" title="34,500" aria-describedby="grid1_PLAN_AMT_MONTH">34,500</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="14,118" aria-describedby="grid1_SALES_AMT_MONTH">14,118</td><td role="gridcell" style="text-align:right;" title="40.9" aria-describedby="grid1_RATE_MONTH">40.9</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="성수 플래그십" aria-describedby="grid1_SHOP_NM2">성수 플래그십</td></tr><tr role="row" id="3" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="3" aria-describedby="grid1_rn">3</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="54001" aria-describedby="grid1_SHOP_CD">54001</td><td role="gridcell" style="text-align:left;" title="현대커넥트 청주점" aria-describedby="grid1_SHOP_NM">현대커넥트 청주점</td><td role="gridcell" style="text-align:right;" title="4,250" aria-describedby="grid1_PLAN_AMT_DAILY">4,250</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="985" aria-describedby="grid1_SALES_AMT_DAILY">985</td><td role="gridcell" style="text-align:right;" title="23.2" aria-describedby="grid1_RATE_DAILY">23.2</td><td role="gridcell" style="text-align:right;" title="19,550" aria-describedby="grid1_PLAN_AMT_MONTH">19,550</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="18,716" aria-describedby="grid1_SALES_AMT_MONTH">18,716</td><td role="gridcell" style="text-align:right;" title="95.7" aria-describedby="grid1_RATE_MONTH">95.7</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="5,112" aria-describedby="grid1_BF_D_AMT">5,112</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="22,150" aria-describedby="grid1_BF_SALES_AMT_MONTH">22,150</td><td role="gridcell" style="text-align: right; color: rgb(255, 0, 0);" title="-15.5" aria-describedby="grid1_BF_RATE">-15.5</td><td role="gridcell" style="text-align:left;" title="현대커넥트 청주점" aria-describedby="grid1_SHOP_NM2">현대커넥트 청주점</td></tr><tr role="row" id="4" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="4" aria-describedby="grid1_rn">4</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="36001" aria-describedby="grid1_SHOP_CD">36001</td><td role="gridcell" style="text-align:left;" title="롯데백화점 광복점" aria-describedby="grid1_SHOP_NM">롯데백화점 광복점</td><td role="gridcell" style="text-align:right;" title="3,750" aria-describedby="grid1_PLAN_AMT_DAILY">3,750</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="685" aria-describedby="grid1_SALES_AMT_DAILY">685</td><td role="gridcell" style="text-align:right;" title="18.3" aria-describedby="grid1_RATE_DAILY">18.3</td><td role="gridcell" style="text-align:right;" title="17,250" aria-describedby="grid1_PLAN_AMT_MONTH">17,250</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="14,743" aria-describedby="grid1_SALES_AMT_MONTH">14,743</td><td role="gridcell" style="text-align:right;" title="85.5" aria-describedby="grid1_RATE_MONTH">85.5</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="롯데백화점 광복점" aria-describedby="grid1_SHOP_NM2">롯데백화점 광복점</td></tr><tr role="row" id="5" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="5" aria-describedby="grid1_rn">5</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="46004" aria-describedby="grid1_SHOP_CD">46004</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 동부산" aria-describedby="grid1_SHOP_NM">롯데아울렛 동부산</td><td role="gridcell" style="text-align:right;" title="375" aria-describedby="grid1_PLAN_AMT_DAILY">375</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="651" aria-describedby="grid1_SALES_AMT_DAILY">651</td><td role="gridcell" style="text-align:right;" title="173.6" aria-describedby="grid1_RATE_DAILY">173.6</td><td role="gridcell" style="text-align:right;" title="15,975" aria-describedby="grid1_PLAN_AMT_MONTH">15,975</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="17,775" aria-describedby="grid1_SALES_AMT_MONTH">17,775</td><td role="gridcell" style="text-align:right;" title="111.3" aria-describedby="grid1_RATE_MONTH">111.3</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 동부산" aria-describedby="grid1_SHOP_NM2">롯데아울렛 동부산</td></tr><tr role="row" id="6" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="6" aria-describedby="grid1_rn">6</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="21011" aria-describedby="grid1_SHOP_CD">21011</td><td role="gridcell" style="text-align:left;" title="신사 플래그십" aria-describedby="grid1_SHOP_NM">신사 플래그십</td><td role="gridcell" style="text-align:right;" title="3,250" aria-describedby="grid1_PLAN_AMT_DAILY">3,250</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="594" aria-describedby="grid1_SALES_AMT_DAILY">594</td><td role="gridcell" style="text-align:right;" title="18.3" aria-describedby="grid1_RATE_DAILY">18.3</td><td role="gridcell" style="text-align:right;" title="14,950" aria-describedby="grid1_PLAN_AMT_MONTH">14,950</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="7,062" aria-describedby="grid1_SALES_AMT_MONTH">7,062</td><td role="gridcell" style="text-align:right;" title="47.2" aria-describedby="grid1_RATE_MONTH">47.2</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="1,967" aria-describedby="grid1_BF_D_AMT">1,967</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="12,212" aria-describedby="grid1_BF_SALES_AMT_MONTH">12,212</td><td role="gridcell" style="text-align: right; color: rgb(255, 0, 0);" title="-42.2" aria-describedby="grid1_BF_RATE">-42.2</td><td role="gridcell" style="text-align:left;" title="신사 플래그십" aria-describedby="grid1_SHOP_NM2">신사 플래그십</td></tr><tr role="row" id="7" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="7" aria-describedby="grid1_rn">7</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="34002" aria-describedby="grid1_SHOP_CD">34002</td><td role="gridcell" style="text-align:left;" title="신세계 대전점" aria-describedby="grid1_SHOP_NM">신세계 대전점</td><td role="gridcell" style="text-align:right;" title="1,750" aria-describedby="grid1_PLAN_AMT_DAILY">1,750</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="591" aria-describedby="grid1_SALES_AMT_DAILY">591</td><td role="gridcell" style="text-align:right;" title="33.8" aria-describedby="grid1_RATE_DAILY">33.8</td><td role="gridcell" style="text-align:right;" title="8,050" aria-describedby="grid1_PLAN_AMT_MONTH">8,050</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="11,363" aria-describedby="grid1_SALES_AMT_MONTH">11,363</td><td role="gridcell" style="text-align:right;" title="141.2" aria-describedby="grid1_RATE_MONTH">141.2</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="신세계 대전점" aria-describedby="grid1_SHOP_NM2">신세계 대전점</td></tr><tr role="row" id="8" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="8" aria-describedby="grid1_rn">8</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="42002" aria-describedby="grid1_SHOP_CD">42002</td><td role="gridcell" style="text-align:left;" title="현대아울렛 송도점" aria-describedby="grid1_SHOP_NM">현대아울렛 송도점</td><td role="gridcell" style="text-align:right;" title="4,500" aria-describedby="grid1_PLAN_AMT_DAILY">4,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="537" aria-describedby="grid1_SALES_AMT_DAILY">537</td><td role="gridcell" style="text-align:right;" title="11.9" aria-describedby="grid1_RATE_DAILY">11.9</td><td role="gridcell" style="text-align:right;" title="20,700" aria-describedby="grid1_PLAN_AMT_MONTH">20,700</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="13,331" aria-describedby="grid1_SALES_AMT_MONTH">13,331</td><td role="gridcell" style="text-align:right;" title="64.4" aria-describedby="grid1_RATE_MONTH">64.4</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="3,646" aria-describedby="grid1_BF_D_AMT">3,646</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="14,389" aria-describedby="grid1_BF_SALES_AMT_MONTH">14,389</td><td role="gridcell" style="text-align: right; color: rgb(255, 0, 0);" title="-7.4" aria-describedby="grid1_BF_RATE">-7.4</td><td role="gridcell" style="text-align:left;" title="현대아울렛 송도점" aria-describedby="grid1_SHOP_NM2">현대아울렛 송도점</td></tr><tr role="row" id="9" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="9" aria-describedby="grid1_rn">9</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="31001" aria-describedby="grid1_SHOP_CD">31001</td><td role="gridcell" style="text-align:left;" title="신세계 센텀시티점" aria-describedby="grid1_SHOP_NM">신세계 센텀시티점</td><td role="gridcell" style="text-align:right;" title="3,750" aria-describedby="grid1_PLAN_AMT_DAILY">3,750</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="510" aria-describedby="grid1_SALES_AMT_DAILY">510</td><td role="gridcell" style="text-align:right;" title="13.6" aria-describedby="grid1_RATE_DAILY">13.6</td><td role="gridcell" style="text-align:right;" title="17,250" aria-describedby="grid1_PLAN_AMT_MONTH">17,250</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="12,903" aria-describedby="grid1_SALES_AMT_MONTH">12,903</td><td role="gridcell" style="text-align:right;" title="74.8" aria-describedby="grid1_RATE_MONTH">74.8</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="신세계 센텀시티점" aria-describedby="grid1_SHOP_NM2">신세계 센텀시티점</td></tr><tr role="row" id="10" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="10" aria-describedby="grid1_rn">10</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="21012" aria-describedby="grid1_SHOP_CD">21012</td><td role="gridcell" style="text-align:left;" title="한남 플래그십" aria-describedby="grid1_SHOP_NM">한남 플래그십</td><td role="gridcell" style="text-align:right;" title="1,375" aria-describedby="grid1_PLAN_AMT_DAILY">1,375</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="498" aria-describedby="grid1_SALES_AMT_DAILY">498</td><td role="gridcell" style="text-align:right;" title="36.2" aria-describedby="grid1_RATE_DAILY">36.2</td><td role="gridcell" style="text-align:right;" title="6,325" aria-describedby="grid1_PLAN_AMT_MONTH">6,325</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="2,600" aria-describedby="grid1_SALES_AMT_MONTH">2,600</td><td role="gridcell" style="text-align:right;" title="41.1" aria-describedby="grid1_RATE_MONTH">41.1</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="935" aria-describedby="grid1_BF_D_AMT">935</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="4,734" aria-describedby="grid1_BF_SALES_AMT_MONTH">4,734</td><td role="gridcell" style="text-align: right; color: rgb(255, 0, 0);" title="-45.1" aria-describedby="grid1_BF_RATE">-45.1</td><td role="gridcell" style="text-align:left;" title="한남 플래그십" aria-describedby="grid1_SHOP_NM2">한남 플래그십</td></tr><tr role="row" id="11" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="11" aria-describedby="grid1_rn">11</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="46003" aria-describedby="grid1_SHOP_CD">46003</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 김해점" aria-describedby="grid1_SHOP_NM">롯데아울렛 김해점</td><td role="gridcell" style="text-align:right;" title="2,500" aria-describedby="grid1_PLAN_AMT_DAILY">2,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="463" aria-describedby="grid1_SALES_AMT_DAILY">463</td><td role="gridcell" style="text-align:right;" title="18.5" aria-describedby="grid1_RATE_DAILY">18.5</td><td role="gridcell" style="text-align:right;" title="11,500" aria-describedby="grid1_PLAN_AMT_MONTH">11,500</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="11,102" aria-describedby="grid1_SALES_AMT_MONTH">11,102</td><td role="gridcell" style="text-align:right;" title="96.5" aria-describedby="grid1_RATE_MONTH">96.5</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="롯데아울렛 김해점" aria-describedby="grid1_SHOP_NM2">롯데아울렛 김해점</td></tr><tr role="row" id="12" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="12" aria-describedby="grid1_rn">12</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="42004" aria-describedby="grid1_SHOP_CD">42004</td><td role="gridcell" style="text-align:left;" title="현대아울렛 남양주점" aria-describedby="grid1_SHOP_NM">현대아울렛 남양주점</td><td role="gridcell" style="text-align:right;" title="3,825" aria-describedby="grid1_PLAN_AMT_DAILY">3,825</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="246" aria-describedby="grid1_SALES_AMT_DAILY">246</td><td role="gridcell" style="text-align:right;" title="6.4" aria-describedby="grid1_RATE_DAILY">6.4</td><td role="gridcell" style="text-align:right;" title="17,595" aria-describedby="grid1_PLAN_AMT_MONTH">17,595</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="11,435" aria-describedby="grid1_SALES_AMT_MONTH">11,435</td><td role="gridcell" style="text-align:right;" title="65.0" aria-describedby="grid1_RATE_MONTH">65.0</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="현대아울렛 남양주점" aria-describedby="grid1_SHOP_NM2">현대아울렛 남양주점</td></tr><tr role="row" id="13" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="13" aria-describedby="grid1_rn">13</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="52006" aria-describedby="grid1_SHOP_CD">52006</td><td role="gridcell" style="text-align:left;" title="스타필드 고양점" aria-describedby="grid1_SHOP_NM">스타필드 고양점</td><td role="gridcell" style="text-align:right;" title="2,500" aria-describedby="grid1_PLAN_AMT_DAILY">2,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="235" aria-describedby="grid1_SALES_AMT_DAILY">235</td><td role="gridcell" style="text-align:right;" title="9.4" aria-describedby="grid1_RATE_DAILY">9.4</td><td role="gridcell" style="text-align:right;" title="11,500" aria-describedby="grid1_PLAN_AMT_MONTH">11,500</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="7,942" aria-describedby="grid1_SALES_AMT_MONTH">7,942</td><td role="gridcell" style="text-align:right;" title="69.1" aria-describedby="grid1_RATE_MONTH">69.1</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="스타필드 고양점" aria-describedby="grid1_SHOP_NM2">스타필드 고양점</td></tr><tr role="row" id="14" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="14" aria-describedby="grid1_rn">14</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="51024" aria-describedby="grid1_SHOP_CD">51024</td><td role="gridcell" style="text-align:left;" title="타임스퀘어 영등포점" aria-describedby="grid1_SHOP_NM">타임스퀘어 영등포점</td><td role="gridcell" style="text-align:right;" title="2,500" aria-describedby="grid1_PLAN_AMT_DAILY">2,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="235" aria-describedby="grid1_SALES_AMT_DAILY">235</td><td role="gridcell" style="text-align:right;" title="9.4" aria-describedby="grid1_RATE_DAILY">9.4</td><td role="gridcell" style="text-align:right;" title="11,500" aria-describedby="grid1_PLAN_AMT_MONTH">11,500</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="9,705" aria-describedby="grid1_SALES_AMT_MONTH">9,705</td><td role="gridcell" style="text-align:right;" title="84.4" aria-describedby="grid1_RATE_MONTH">84.4</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="타임스퀘어 영등포점" aria-describedby="grid1_SHOP_NM2">타임스퀘어 영등포점</td></tr><tr role="row" id="15" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="15" aria-describedby="grid1_rn">15</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="55001" aria-describedby="grid1_SHOP_CD">55001</td><td role="gridcell" style="text-align:left;" title="LF스퀘어 광양점" aria-describedby="grid1_SHOP_NM">LF스퀘어 광양점</td><td role="gridcell" style="text-align:right;" title="3,000" aria-describedby="grid1_PLAN_AMT_DAILY">3,000</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="219" aria-describedby="grid1_SALES_AMT_DAILY">219</td><td role="gridcell" style="text-align:right;" title="7.3" aria-describedby="grid1_RATE_DAILY">7.3</td><td role="gridcell" style="text-align:right;" title="13,800" aria-describedby="grid1_PLAN_AMT_MONTH">13,800</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="10,954" aria-describedby="grid1_SALES_AMT_MONTH">10,954</td><td role="gridcell" style="text-align:right;" title="79.4" aria-describedby="grid1_RATE_MONTH">79.4</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="LF스퀘어 광양점" aria-describedby="grid1_SHOP_NM2">LF스퀘어 광양점</td></tr><tr role="row" id="16" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="16" aria-describedby="grid1_rn">16</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="52034" aria-describedby="grid1_SHOP_CD">52034</td><td role="gridcell" style="text-align:left;" title="스타필드 빌리지 운정점" aria-describedby="grid1_SHOP_NM">스타필드 빌리지 운정점</td><td role="gridcell" style="text-align:right;" title="2,000" aria-describedby="grid1_PLAN_AMT_DAILY">2,000</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="216" aria-describedby="grid1_SALES_AMT_DAILY">216</td><td role="gridcell" style="text-align:right;" title="10.8" aria-describedby="grid1_RATE_DAILY">10.8</td><td role="gridcell" style="text-align:right;" title="9,200" aria-describedby="grid1_PLAN_AMT_MONTH">9,200</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="5,076" aria-describedby="grid1_SALES_AMT_MONTH">5,076</td><td role="gridcell" style="text-align:right;" title="55.2" aria-describedby="grid1_RATE_MONTH">55.2</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="0" aria-describedby="grid1_BF_SALES_AMT_MONTH">0</td><td role="gridcell" style="text-align:right;" title="0.00" aria-describedby="grid1_BF_RATE">0.00</td><td role="gridcell" style="text-align:left;" title="스타필드 빌리지 운정점" aria-describedby="grid1_SHOP_NM2">스타필드 빌리지 운정점</td></tr><tr role="row" id="17" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="17" aria-describedby="grid1_rn">17</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="51018" aria-describedby="grid1_SHOP_CD">51018</td><td role="gridcell" style="text-align:left;" title="아이파크몰 용산점" aria-describedby="grid1_SHOP_NM">아이파크몰 용산점</td><td role="gridcell" style="text-align:right;" title="4,750" aria-describedby="grid1_PLAN_AMT_DAILY">4,750</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="210" aria-describedby="grid1_SALES_AMT_DAILY">210</td><td role="gridcell" style="text-align:right;" title="4.4" aria-describedby="grid1_RATE_DAILY">4.4</td><td role="gridcell" style="text-align:right;" title="21,850" aria-describedby="grid1_PLAN_AMT_MONTH">21,850</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="9,489" aria-describedby="grid1_SALES_AMT_MONTH">9,489</td><td role="gridcell" style="text-align:right;" title="43.4" aria-describedby="grid1_RATE_MONTH">43.4</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="2,514" aria-describedby="grid1_BF_D_AMT">2,514</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="16,196" aria-describedby="grid1_BF_SALES_AMT_MONTH">16,196</td><td role="gridcell" style="text-align: right; color: rgb(255, 0, 0);" title="-41.4" aria-describedby="grid1_BF_RATE">-41.4</td><td role="gridcell" style="text-align:left;" title="아이파크몰 용산점" aria-describedby="grid1_SHOP_NM2">아이파크몰 용산점</td></tr><tr role="row" id="18" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="18" aria-describedby="grid1_rn">18</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span class="ui-icon ui-icon-plus"></span></a></td><td role="gridcell" style="text-align:left;display:none;" title="35002" aria-describedby="grid1_SHOP_CD">35002</td><td role="gridcell" style="text-align:left;" title="신세계 광주점" aria-describedby="grid1_SHOP_NM">신세계 광주점</td><td role="gridcell" style="text-align:right;" title="1,500" aria-describedby="grid1_PLAN_AMT_DAILY">1,500</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="186" aria-describedby="grid1_SALES_AMT_DAILY">186</td><td role="gridcell" style="text-align:right;" title="12.4" aria-describedby="grid1_RATE_DAILY">12.4</td><td role="gridcell" style="text-align:right;" title="6,900" aria-describedby="grid1_PLAN_AMT_MONTH">6,900</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="9,294" aria-describedby="grid1_SALES_AMT_MONTH">9,294</td><td role="gridcell" style="text-align:right;" title="134.7" aria-describedby="grid1_RATE_MONTH">134.7</td><td role="gridcell" style="text-align: right; background: rgb(254, 255, 217);" title="0" aria-describedby="grid1_BF_D_AMT">0</td><td role="gridcell" style="text-align: right; background: rgb(233, 218, 228);" title="3,868" aria-describedby="grid1_BF_SALES_AMT_MONTH">3,868</td><td role="gridcell" style="text-align:right;" title="140.3" aria-describedby="grid1_BF_RATE">140.3</td><td role="gridcell" style="text-align:left;" title="신세계 광주점" aria-describedby="grid1_SHOP_NM2">신세계 광주점</td></tr><tr role="row" id="19" tabindex="-1" class="ui-widget-content jqgrow ui-row-ltr"><td role="gridcell" class="ui-state-default jqgrid-rownum" style="text-align:center;" title="19" aria-describedby="grid1_rn">19</td><td role="gridcell" aria-describedby="grid1_subgrid" class="ui-sgcollapsed sgcollapsed" style=""><a href="javascript:void(0);"><span clas

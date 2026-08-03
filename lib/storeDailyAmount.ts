@@ -40,6 +40,18 @@ export function getMergedAmount(map: Map<string, Map<string, number>>, storeName
   return map.get(storeName)?.get(date) || 0;
 }
 
+// mergeStoreDailyAmounts()의 결과(매장별×날짜별 맵)를 다시 평평한 {date, storeName, amount}[]로
+// 되돌립니다. 기존에 flat rows를 기대하는 함수(스페셜오퍼위크 등)에 그대로 꽂아 쓰기 위함입니다.
+export function flattenMergedAmounts(map: Map<string, Map<string, number>>): { date: string; storeName: string; amount: number }[] {
+  const out: { date: string; storeName: string; amount: number }[] = [];
+  for (const [storeName, byDate] of map.entries()) {
+    for (const [date, amount] of byDate.entries()) {
+      out.push({ date, storeName, amount });
+    }
+  }
+  return out;
+}
+
 // 매장 구분 없이(단일 매장이든, 여러 매장 합계든) 날짜별 합계만 필요할 때 쓰는 단순 버전.
 export function mergeDateTotals(primaryRows: AmountRow[], fallbackRows: AmountRow[]): Map<string, number> {
   const byDate = new Map<string, number>();

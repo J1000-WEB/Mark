@@ -3,7 +3,7 @@ import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
 import { getWeatherForStoreOnDate, weatherActionTip } from "@/lib/storeRegion";
 import { loadStyleLaunchMap } from "@/lib/styleLaunchMaster";
-import { mergeDateTotals, getComparisonDateForDaily } from "@/lib/storeDailyAmount";
+import { mergeDateTotals, getComparisonDateForDaily, mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
 
 // MARK 6.27: "스타일별 채널별 입고/판매/재고현황"(→Daily_Sales_History, qty×Style_Price_History 단가로
 // 금액을 역산) 은 수량은 정확하지만 금액에 오차가 있을 수 있습니다. 그래서 "매출 총액/누계/추이"처럼
@@ -11,7 +11,7 @@ import { mergeDateTotals, getComparisonDateForDaily } from "@/lib/storeDailyAmou
 // 품번 단위 TOP10/재고 확인처럼 스타일 상세가 필요한 계산만 계속 Daily_Sales_History를 씁니다.
 type StoreAmountRow = { date: string; storeName: string; amount: number };
 let cachedStoreAmountRows: StoreAmountRow[] | null = null;
-async function loadStoreAmountRows(): Promise<StoreAmountRow[]> {
+export async function loadStoreAmountRows(): Promise<StoreAmountRow[]> {
   if (cachedStoreAmountRows) return cachedStoreAmountRows;
   try {
     const { rows } = await loadDailyStoreSalesFromMarkDb();
@@ -276,7 +276,9 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   let storeEvents: any[] = [];
   try {
     const { buildSpecialOfferEvents } = await import("@/lib/specialOfferWeek");
-    const flatForEvents = allRows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+    const primaryForEvents = allRows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+    const mergedForEvents = mergeStoreDailyAmounts(primaryForEvents, companyAmountRows);
+    const flatForEvents = flattenMergedAmounts(mergedForEvents);
     const { events } = await buildSpecialOfferEvents(flatForEvents);
     storeEvents = events.filter((e: any) => normalizeStoreKey(e.storeName) === normalizeStoreKey(storeName));
   } catch {
@@ -342,20 +344,26 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
 
   // ---- STEP3 전사 TOP10 vs 점포 TOP10 ----
   function top10ForDate(rows: FlatRow[]) {
-    const byStyle = new Map<string, { productName: string; amount: number }>();
+    const byStyle = new Map<string, { productName: string; amount: number; qty: number }>();
     for (const r of rows) {
       if (r.date !== targetDate) continue;
-      if (!byStyle.has(r.styleCode)) byStyle.set(r.styleCode, { productName: r.productName, amount: 0 });
-      byStyle.get(r.styleCode)!.amount += Number(r.amount || 0);
+      if (!byStyle.has(r.styleCode)) byStyle.set(r.styleCode, { productName: r.productName, amount: 0, qty: 0 });
+      const bucket = byStyle.get(r.styleCode)!;
+      bucket.amount += Number(r.amount || 0);
+      bucket.qty += Number(r.qty || 0);
     }
     return Array.from(byStyle.entries())
-      .map(([styleCode, v]) => ({ styleCode, productName: v.productName, amount: v.amount }))
+      .map(([styleCode, v]) => ({ styleCode, productName: v.productName, amount: v.amount, qty: v.qty }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
   }
   const companyTop10 = top10ForDate(companyRows);
   const storeTop10 = top10ForDate(storeRows);
   const storeRankMap = new Map(storeTop10.map((p, i) => [p.styleCode, i + 1]));
+  const storeStockLatest = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date === targetDate) storeStockLatest.set(r.styleCode, Number(r.stock || 0));
+  }
   const top10Comparison = companyTop10.map((p, i) => {
     const storeRank = storeRankMap.get(p.styleCode) || null;
     const storeMatch = storeTop10.find((s) => s.styleCode === p.styleCode);
@@ -366,6 +374,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
       companyAmount: p.amount,
       storeRank,
       storeAmount: storeMatch ? storeMatch.amount : 0,
+      storeQty: storeMatch ? storeMatch.qty : 0,
+      storeStock: storeStockLatest.get(p.styleCode) ?? null,
       diff: storeRank ? i + 1 - storeRank : null,
     };
   });

@@ -1640,15 +1640,17 @@ export default function InventoryDashboard() {
       if (!startData.ok) throw new Error(startData.error || "업로드 시작 실패");
       const liveSheetName = startData.liveSheetName;
 
+      let rowOffset = chunks[0].length + 1; // 1행부터 시작, chunks[0]은 start에서 이미 씀
       for (let i = 1; i < chunks.length; i++) {
         setStyleSheetProgress(`업로드 중... (${i + 1}/${chunks.length})`);
         const res = await fetch("/api/upload-style-channel-sheet", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "chunk", rows: chunks[i], liveSheetName }),
+          body: JSON.stringify({ mode: "chunk", rows: chunks[i], liveSheetName, startRow: rowOffset }),
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `${i + 1}번째 청크 업로드 실패`);
+        rowOffset += chunks[i].length;
       }
 
       setStyleSheetProgress("마무리 중(검증)...");

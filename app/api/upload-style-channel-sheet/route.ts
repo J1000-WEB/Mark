@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getDailySourceSheetId,
   createSheetWithValuesById,
-  appendValuesById,
+  updateValuesById,
   deleteSheetByTitleIfExistsById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
@@ -74,8 +74,16 @@ export async function POST(req: Request) {
     if (mode === "chunk") {
       if (!rows || !rows.length) return NextResponse.json({ ok: true, written: 0 });
       const liveSheetName = body.liveSheetName || LIVE_SHEET_DEFAULT;
+      const startRow = Number(body.startRow); // 1-indexed, 이 청크가 써야 할 시작 행
+      if (!startRow) {
+        return NextResponse.json({ ok: false, error: "chunk 요청에 startRow가 필요합니다." }, { status: 400 });
+      }
       try {
-        await appendValuesById(spreadsheetId, `'${liveSheetName}'!A:ZZ`, rows);
+        // MARK 6.64: appendValuesById(INSERT_ROWS)는 "새 행을 끼워넣는" 방식이라, 이미
+        // 딱 맞게 만들어둔 그리드 위에 계속 행을 추가해서 그리드가 계속 커지는 버그가 있었습니다.
+        // 대신 정확한 시작 행(startRow)에 값을 "덮어쓰기"(update)해서, 미리 만들어둔 그리드
+        // 크기 안에서만 채워지도록 합니다(그리드 자체는 안 커짐).
+        await updateValuesById(spreadsheetId, `'${liveSheetName}'!A${startRow}:ZZ`, rows);
       } catch (error: any) {
         await sendEmailAlert(
           "⚠ MARK 업로드 실패 — 스타일별채널별(금액) 청크 저장 오류",

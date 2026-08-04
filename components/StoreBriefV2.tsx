@@ -1,10 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState } from "react";
 import ProductThumb from "@/components/ProductThumb";
 import NavTabs from "@/components/NavTabs";
 
 const ACCENT = "#4F46E5";
+
+// MARK 6.68: 바코드 스캔 중 예상 못한 오류가 나도, 화면 전체가 죽지 않고 이 섹션만
+// 에러 메시지로 대체되도록 하는 안전장치. (예전엔 크래시 나면 뒤로가기도 안 먹혀서
+// 답답한 상황이 됐었음 — 최소한 나머지 화면은 계속 쓸 수 있게)
+class ScanErrorBoundary extends Component<{ children: any }, { error: string | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { error: error?.message || String(error) || "알 수 없는 오류" };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, borderRadius: 14, background: "#FEF2F2", border: "1px solid #FCA5A5", fontSize: 13, color: "#991B1B" }}>
+          ⚠ 바코드 스캔 화면에서 오류가 났어요: {this.state.error}
+          <br />
+          <button
+            onClick={() => this.setState({ error: null })}
+            style={{ marginTop: 8, padding: "6px 14px", borderRadius: 10, border: "1px solid #FCA5A5", background: "#fff", color: "#991B1B", fontWeight: 700 }}
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function man(n: number) {
   return `${(Math.round((n || 0) / 10000 * 10) / 10).toFixed(1)}만원`;
@@ -148,18 +178,28 @@ function StockLookupSection({ storeName }: { storeName: string }) {
           { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.4 },
           async (decodedText: string) => {
             try {
-              await scanner.stop();
-            } catch {}
-            setScanning(false);
-            setStyleCodeInput(decodedText);
-            lookup({ barcode: decodedText.toUpperCase() });
+              try {
+                await scanner.stop();
+              } catch {}
+              setScanning(false);
+              setStyleCodeInput(decodedText);
+              lookup({ barcode: decodedText.toUpperCase() });
+            } catch (scanErr: any) {
+              setStatus("스캔 처리 중 오류: " + (scanErr?.message || scanErr));
+              setScanning(false);
+            }
           },
           () => {}
         );
         if (!cancelled) setStatus("");
       } catch (e: any) {
         if (!cancelled) {
-          setStatus("카메라를 열 수 없어요: " + (e?.message || e));
+          const name = e?.name || "";
+          let friendly = e?.message || String(e);
+          if (name === "NotAllowedError") friendly = "카메라 권한이 차단되어 있어요. 브라우저 설정에서 카메라 권한을 허용해주세요.";
+          else if (name === "NotFoundError") friendly = "이 기기에서 카메라를 찾지 못했어요.";
+          else if (name === "NotReadableError") friendly = "카메라가 다른 앱에서 사용 중일 수 있어요. 다른 카메라 앱을 닫고 다시 시도해주세요.";
+          setStatus("카메라를 열 수 없어요: " + friendly);
           setScanning(false);
         }
       }
@@ -499,7 +539,9 @@ export default function StoreBriefV2() {
               </section>
             )}
 
-            <StockLookupSection storeName={storeName} />
+            <ScanErrorBoundary>
+              <StockLookupSection storeName={storeName} />
+            </ScanErrorBoundary>
 
             {/* F. 소통 게시판 - 틀만 */}
             <section style={{ ...cardStyle, opacity: 0.6 }}>

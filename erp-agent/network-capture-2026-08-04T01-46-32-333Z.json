@@ -1,0 +1,1094 @@
+[
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/login/loginChkGI.do",
+    "postData": {
+      "COMP_ID": "GI001",
+      "EMPL_ID": "sjc",
+      "PASSWORD": "[REDACTED]"
+    },
+    "timestamp": "2026-08-04T01:43:06.378Z",
+    "status": 200,
+    "responseBody": "[본문 읽기 실패: response.text: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation.]"
+  },
+  {
+    "method": "GET",
+    "url": "https://gim.sgerp.com/GI/MAIN/main.do",
+    "postData": null,
+    "timestamp": "2026-08-04T01:43:06.408Z",
+    "status": 200,
+    "responseBody": "\r\n\r\n\r\n\r\n<!doctype html>\r\n<html>\r\n<head>\r\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\" />\r\n\t\r\n\r\n\r\n\r\n<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\r\n<title>\r\n    GENERAL IDEA Mobile System\r\n</title>\r\n\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"icon\" type=\"image/x-icon\"/>\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"shortcut icon\" type=\"image/x-icon\"/>\r\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge, chrome=1\"/>\r\n<meta name=\"viewport\"\r\n      content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no\"/>\r\n<!-- Page No Cache -->\r\n<meta http-equiv=\"Cache-Control\" content=\"no-cache\">\r\n<meta http-equiv=\"Expires\" content=\"0\">\r\n<meta http-equiv=\"Pragma\" content=\"no-cache\">\r\n<meta name=\"keywords\" content=\"\"/>\r\n<!-- #Page No Cache -->\r\n\r\n<script type=\"text/javascript\" src=\"/GI/common/js/message/message.js\"></script>\r\n\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/sg-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\" href=\"/GI/common/css/w3.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.base-4.3.0.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbase.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgmenu.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbtn.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgtab.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/grid-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.base.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.black.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.dark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.energyblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.darkblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.arctic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.shinyblack.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.classic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metro.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metrodark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-lightness.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-darkness.css\"\r\n      type=\"...[truncated]"
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/menu/getGiMenuList.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "EMPL_ID": "sjc",
+      "EMPL_LEVEL": "EMP"
+    },
+    "timestamp": "2026-08-04T01:43:06.659Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": null,
+          "PMENU_ID": null,
+          "SYSTEM_NO": 1,
+          "MENU_ID": "SL10",
+          "DEPTH": "1",
+          "MENU_NM": "채널매출"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL1020/SL1020.do",
+          "PMENU_ID": "SL10",
+          "SYSTEM_NO": 2,
+          "MENU_ID": "SL1020",
+          "DEPTH": "2",
+          "MENU_NM": "> 유통망별 매출현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL1010/SL1010.do",
+          "PMENU_ID": "SL10",
+          "SYSTEM_NO": 3,
+          "MENU_ID": "SL1010",
+          "DEPTH": "2",
+          "MENU_NM": "> 채널별 매출현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL1030/SL1030.do",
+          "PMENU_ID": "SL10",
+          "SYSTEM_NO": 4,
+          "MENU_ID": "SL1030",
+          "DEPTH": "2",
+          "MENU_NM": "> 일자별 매출현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL1040/SL1040.do",
+          "PMENU_ID": "SL10",
+          "SYSTEM_NO": 5,
+          "MENU_ID": "SL1040",
+          "DEPTH": "2",
+          "MENU_NM": "> 시간대별 매출현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": null,
+          "PMENU_ID": null,
+          "SYSTEM_NO": 6,
+          "MENU_ID": "SL20",
+          "DEPTH": "1",
+          "MENU_NM": "품목판매"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL2010/SL2010.do",
+          "PMENU_ID": "SL20",
+          "SYSTEM_NO": 7,
+          "MENU_ID": "SL2010",
+          "DEPTH": "2",
+          "MENU_NM": "> BEST판매현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL2020/SL2020.do",
+          "PMENU_ID": "SL20",
+          "SYSTEM_NO": 8,
+          "MENU_ID": "SL2020",
+          "DEPTH": "2",
+          "MENU_NM": "> 품목별 매출현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": null,
+          "PMENU_ID": null,
+          "SYSTEM_NO": 9,
+          "MENU_ID": "SL50",
+          "DEPTH": "1",
+          "MENU_NM": "온라인"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL5010/SL5010.do",
+          "PMENU_ID": "SL50",
+          "SYSTEM_NO": 10,
+          "MENU_ID": "SL5010",
+          "DEPTH": "2",
+          "MENU_NM": "> 온라인 주문 현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL5020/SL5020.do",
+          "PMENU_ID": "SL50",
+          "SYSTEM_NO": 11,
+          "MENU_ID": "SL5020",
+          "DEPTH": "2",
+          "MENU_NM": "> 사방넷 주문내역"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": null,
+          "PMENU_ID": null,
+          "SYSTEM_NO": 12,
+          "MENU_ID": "SL40",
+          "DEPTH": "1",
+          "MENU_NM": "재고"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL4010/SL4010.do",
+          "PMENU_ID": "SL40",
+          "SYSTEM_NO": 13,
+          "MENU_ID": "SL4010",
+          "DEPTH": "2",
+          "MENU_NM": "> 품목 물류채널 재고"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL4020/SL4020.do",
+          "PMENU_ID": "SL40",
+          "SYSTEM_NO": 14,
+          "MENU_ID": "SL4020",
+          "DEPTH": "2",
+          "MENU_NM": "> 매장 품목수불현황"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": null,
+          "PMENU_ID": null,
+          "SYSTEM_NO": 15,
+          "MENU_ID": "SL30",
+          "DEPTH": "1",
+          "MENU_NM": "관리"
+        },
+        {
+          "COMP_CD": "GI001",
+          "MENU_URL": "/GI/SL/SL3020/SL3020.do",
+          "PMENU_ID": "SL30",
+          "SYSTEM_NO": 16,
+          "MENU_ID": "SL3020",
+          "DEPTH": "2",
+          "MENU_NM": "> 채널 공지사항"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/menu/goGiLogmenuSave.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "EMPL_ID": "sjc",
+      "MENU_ID": "SL1020",
+      "MENU_NM": "> 유통망별 매출현황"
+    },
+    "timestamp": "2026-08-04T01:43:06.679Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://gim.sgerp.com/GI/SL/SL1020/SL1020.do",
+    "postData": null,
+    "timestamp": "2026-08-04T01:43:06.678Z",
+    "status": 200,
+    "responseBody": "\r\n\r\n\r\n<!doctype html>\r\n<html lang=\"ko\">\r\n<head>\r\n\t<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\" />\r\n\t\r\n\r\n\r\n\r\n<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\r\n<title>\r\n    GENERAL IDEA Mobile System\r\n</title>\r\n\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"icon\" type=\"image/x-icon\"/>\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"shortcut icon\" type=\"image/x-icon\"/>\r\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge, chrome=1\"/>\r\n<meta name=\"viewport\"\r\n      content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no\"/>\r\n<!-- Page No Cache -->\r\n<meta http-equiv=\"Cache-Control\" content=\"no-cache\">\r\n<meta http-equiv=\"Expires\" content=\"0\">\r\n<meta http-equiv=\"Pragma\" content=\"no-cache\">\r\n<meta name=\"keywords\" content=\"\"/>\r\n<!-- #Page No Cache -->\r\n\r\n<script type=\"text/javascript\" src=\"/GI/common/js/message/message.js\"></script>\r\n\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/sg-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\" href=\"/GI/common/css/w3.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.base-4.3.0.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbase.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgmenu.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbtn.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgtab.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/grid-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.base.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.black.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.dark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.energyblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.darkblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.arctic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.shinyblack.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.classic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metro.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metrodark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-lightness.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-darkness.css\"\r\n   ...[truncated]"
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/common/getGiCfCode.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "GBN_CD": "SL001"
+    },
+    "timestamp": "2026-08-04T01:43:06.742Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "CD": "100",
+          "COMP_CD": "GI001",
+          "NM": "제너럴사업부"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/GI/SL/SL1020/getMainList.do",
+    "postData": {
+      "comp_cd": "GI001",
+      "biz_div": "100",
+      "sale_dt": "20260804"
+    },
+    "timestamp": "2026-08-04T01:43:06.753Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "SHOP_TP": "1",
+          "PLAN_AMT_YEAR_TOT": 42575000,
+          "SALE_AMT_MON_INT": 123717,
+          "MON_TOT_PCT": 6.90768319374651,
+          "SALE_AMT_MON_BF": 124990,
+          "YEAR_BF_PCT": -17.70913675201541,
+          "PLAN_AMT_MON_TOT": 1791000,
+          "PLAN_AMT_DAY": 53730,
+          "SALE_AMT_YEAR_BF": 20108190,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 92.1024425832868,
+          "YEAR_TOT_PCT": 38.86600931767469,
+          "SHOP_TP_NM": "온라인",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 134325,
+          "SALE_AMT_YEAR_TOT": 16547203,
+          "MON_BF_PCT": -1.0184894405464673
+        },
+        {
+          "SHOP_TP": "2",
+          "PLAN_AMT_YEAR_TOT": 7745000,
+          "SALE_AMT_MON_INT": 32855,
+          "MON_TOT_PCT": 6.028440366972477,
+          "SALE_AMT_MON_BF": 21594,
+          "YEAR_BF_PCT": 54.190715425712604,
+          "PLAN_AMT_MON_TOT": 545000,
+          "PLAN_AMT_DAY": 13625,
+          "SALE_AMT_YEAR_BF": 2068680,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 43.06028833551769,
+          "YEAR_TOT_PCT": 41.18415838605552,
+          "SHOP_TP_NM": "로드샵",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 76300,
+          "SALE_AMT_YEAR_TOT": 3189713,
+          "MON_BF_PCT": 52.14663128695999
+        },
+        {
+          "SHOP_TP": "3",
+          "PLAN_AMT_YEAR_TOT": 7526750,
+          "SALE_AMT_MON_INT": 75028,
+          "MON_TOT_PCT": 11.632217054263565,
+          "SALE_AMT_MON_BF": 24697,
+          "YEAR_BF_PCT": 257.5725973512778,
+          "PLAN_AMT_MON_TOT": 645000,
+          "PLAN_AMT_DAY": 16125,
+          "SALE_AMT_YEAR_BF": 855902,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 83.08726467331118,
+          "YEAR_TOT_PCT": 40.66125459195536,
+          "SHOP_TP_NM": "백화점",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 90300,
+          "SALE_AMT_YEAR_TOT": 3060471,
+          "MON_BF_PCT": 203.7931732599101
+        },
+        {
+          "SHOP_TP": "4",
+          "PLAN_AMT_YEAR_TOT": 6671000,
+          "SALE_AMT_MON_INT": 75785,
+          "MON_TOT_PCT": 10.424291609353508,
+          "SALE_AMT_MON_BF": 18035,
+          "YEAR_BF_PCT": 160.0112421036184,
+          "PLAN_AMT_MON_TOT": 727000,
+          "PLAN_AMT_DAY": 16325,
+          "SALE_AMT_YEAR_BF": 1172467,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 71.75213027835638,
+          "YEAR_TOT_PCT": 45.69850172387948,
+          "SHOP_TP_NM": "아울렛",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 105620,
+          "SALE_AMT_YEAR_TOT": 3048547,
+          "MON_BF_PCT": 320.2084835042972
+        },
+        {
+          "SHOP_TP": "5",
+          "PLAN_AMT_YEAR_TOT": 8491000,
+          "SALE_AMT_MON_INT": 73229,
+          "MON_TOT_PCT": 9.635407894736842,
+          "SALE_AMT_MON_BF": 45972,
+          "YEAR_BF_PCT": 187.23331560573206,
+          "PLAN_AMT_MON_TOT": 760000,
+          "PLAN_AMT_DAY": 19000,
+          "SALE_AMT_YEAR_BF": 1096219,
+          "SALE_AMT_DAY": -26,
+          "MON_INT_PCT": 68.82434210526316,
+          "YEAR_TOT_PCT": 37.08286632905429,
+          "SHOP_TP_NM": "쇼핑몰",
+          "DAY_PCT": -0.1368421052631579,
+          "PLAN_AMT_MON_INT": 106400,
+          "SALE_AMT_YEAR_TOT": 3148706,
+          "MON_BF_PCT": 59.29065518141478
+        },
+        {
+          "SHOP_TP": "6",
+          "PLAN_AMT_YEAR_TOT": 1177300,
+          "SALE_AMT_MON_INT": 528,
+          "MON_TOT_PCT": 0,
+          "SALE_AMT_MON_BF": 3335,
+          "YEAR_BF_PCT": -26.558263356817584,
+          "PLAN_AMT_MON_TOT": 0,
+          "PLAN_AMT_DAY": 0,
+          "SALE_AMT_YEAR_BF": 419683,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 0,
+          "YEAR_TOT_PCT": 26.18045026756137,
+          "SHOP_TP_NM": "수출/총판",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 0,
+          "SALE_AMT_YEAR_TOT": 308222,
+          "MON_BF_PCT": -84.16836293455745
+        },
+        {
+          "SHOP_TP": "7",
+          "PLAN_AMT_YEAR_TOT": 10000,
+          "SALE_AMT_MON_INT": 0,
+          "MON_TOT_PCT": 0,
+          "SALE_AMT_MON_BF": 31,
+          "YEAR_BF_PCT": 693.211770657003,
+          "PLAN_AMT_MON_TOT": 0,
+          "PLAN_AMT_DAY": 0,
+          "SALE_AMT_YEAR_BF": 39170,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 0,
+          "YEAR_TOT_PCT": 3107.01701,
+          "SHOP_TP_NM": "기타",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 0,
+          "SALE_AMT_YEAR_TOT": 310702,
+          "MON_BF_PCT": -100
+        },
+        {
+          "SHOP_TP": "8",
+          "PLAN_AMT_YEAR_TOT": 6165000,
+          "SALE_AMT_MON_INT": 24349,
+          "MON_TOT_PCT": 9.051788847583643,
+          "SALE_AMT_MON_BF": 10250,
+          "YEAR_BF_PCT": 186.24363903267306,
+          "PLAN_AMT_MON_TOT": 269000,
+          "PLAN_AMT_DAY": 8070,
+          "SALE_AMT_YEAR_BF": 1034571,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 120.69051796778191,
+          "YEAR_TOT_PCT": 48.03560228710462,
+          "SHOP_TP_NM": "위탁(온)",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 20175,
+          "SALE_AMT_YEAR_TOT": 2961395,
+          "MON_BF_PCT": 137.55426341463414
+        },
+        {
+          "SHOP_TP": "9",
+          "PLAN_AMT_YEAR_TOT": 1603000,
+          "SALE_AMT_MON_INT": 24538,
+          "MON_TOT_PCT": 22.1066990990991,
+          "SALE_AMT_MON_BF": 6391,
+          "YEAR_BF_PCT": 178.98786558447,
+          "PLAN_AMT_MON_TOT": 111000,
+          "PLAN_AMT_DAY": 2775,
+          "SALE_AMT_YEAR_BF": 356974,
+          "SALE_AMT_DAY": 0,
+          "MON_INT_PCT": 157.90499356499356,
+          "YEAR_TOT_PCT": 62.128131503431064,
+          "SHOP_TP_NM": "위탁(오프)",
+          "DAY_PCT": 0,
+          "PLAN_AMT_MON_INT": 15540,
+          "SALE_AMT_YEAR_TOT": 995914,
+          "MON_BF_PCT": 283.9529964011892
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/menu/goGiLogmenuSave.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "EMPL_ID": "sjc",
+      "MENU_ID": "SL4010",
+      "MENU_NM": "> 품목 물류채널 재고"
+    },
+    "timestamp": "2026-08-04T01:43:13.073Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS"
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://gim.sgerp.com/GI/SL/SL4010/SL4010.do",
+    "postData": null,
+    "timestamp": "2026-08-04T01:43:13.073Z",
+    "status": 200,
+    "responseBody": "\r\n\r\n\r\n<!doctype html>\r\n<html lang=\"ko\">\r\n<head>\r\n\t<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\" />\r\n\t\r\n\r\n\r\n\r\n<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\r\n<title>\r\n    GENERAL IDEA Mobile System\r\n</title>\r\n\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"icon\" type=\"image/x-icon\"/>\r\n<link href=\"/GI/common/images/gi_logo.ico\" rel=\"shortcut icon\" type=\"image/x-icon\"/>\r\n<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge, chrome=1\"/>\r\n<meta name=\"viewport\"\r\n      content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no\"/>\r\n<!-- Page No Cache -->\r\n<meta http-equiv=\"Cache-Control\" content=\"no-cache\">\r\n<meta http-equiv=\"Expires\" content=\"0\">\r\n<meta http-equiv=\"Pragma\" content=\"no-cache\">\r\n<meta name=\"keywords\" content=\"\"/>\r\n<!-- #Page No Cache -->\r\n\r\n<script type=\"text/javascript\" src=\"/GI/common/js/message/message.js\"></script>\r\n\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/sg-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\" href=\"/GI/common/css/w3.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.base-4.3.0.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbase.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgmenu.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgbtn.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqx/styles/jqx.sgtab.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/css/grid-style.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.base.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.black.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.dark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.energyblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.darkblue.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.arctic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.shinyblack.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.classic.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metro.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.metrodark.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-lightness.css\"\r\n      type=\"text/css\"/>\r\n<link rel=\"stylesheet\"\r\n      href=\"/GI/common/js/jqwidgets/styles/jqx.ui-darkness.css\"\r\n   ...[truncated]"
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/common/getGiCfCode.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "GBN_CD": "SL008"
+    },
+    "timestamp": "2026-08-04T01:43:13.158Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "CD": "1",
+          "COMP_CD": "GI001",
+          "NM": "온라인"
+        },
+        {
+          "CD": "2",
+          "COMP_CD": "GI001",
+          "NM": "로드샵"
+        },
+        {
+          "CD": "3",
+          "COMP_CD": "GI001",
+          "NM": "백화점"
+        },
+        {
+          "CD": "4",
+          "COMP_CD": "GI001",
+          "NM": "아울렛"
+        },
+        {
+          "CD": "5",
+          "COMP_CD": "GI001",
+          "NM": "쇼핑몰"
+        },
+        {
+          "CD": "6",
+          "COMP_CD": "GI001",
+          "NM": "수출/총판"
+        },
+        {
+          "CD": "7",
+          "COMP_CD": "GI001",
+          "NM": "기타"
+        },
+        {
+          "CD": "8",
+          "COMP_CD": "GI001",
+          "NM": "위탁(온)"
+        },
+        {
+          "CD": "9",
+          "COMP_CD": "GI001",
+          "NM": "위탁(오프)"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/common/getGiStyCd.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "STY_NM": "04512"
+    },
+    "timestamp": "2026-08-04T01:43:29.300Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "CD": "WBD1L04512",
+          "COMP_CD": "GI001",
+          "NM": "소프트 드레이프 가디건"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/common/getGiStyCd.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "STY_NM": "04501"
+    },
+    "timestamp": "2026-08-04T01:43:35.470Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "CD": "WBC1L04501",
+          "COMP_CD": "GI001",
+          "NM": "하트 크롭 가디건"
+        },
+        {
+          "CD": "WBC3L04501",
+          "COMP_CD": "GI001",
+          "NM": "GNRL 케이블 가디건"
+        },
+        {
+          "CD": "WBD3L04501",
+          "COMP_CD": "GI001",
+          "NM": "에센셜 크루넥 가디건"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/common/getGiColCd.do",
+    "postData": {
+      "COMP_CD": "GI001",
+      "STY_CD": "WBD3L04501"
+    },
+    "timestamp": "2026-08-04T01:43:39.170Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "CD": "BK",
+          "COMP_CD": "GI001",
+          "NM": "BLACK"
+        },
+        {
+          "CD": "BP",
+          "COMP_CD": "GI001",
+          "NM": "BLOSSOM PINK"
+        },
+        {
+          "CD": "CA",
+          "COMP_CD": "GI001",
+          "NM": "CAMEL"
+        },
+        {
+          "CD": "CH",
+          "COMP_CD": "GI001",
+          "NM": "CHARCOAL"
+        },
+        {
+          "CD": "DN",
+          "COMP_CD": "GI001",
+          "NM": "DARK NAVY"
+        },
+        {
+          "CD": "GR",
+          "COMP_CD": "GI001",
+          "NM": "GREY"
+        },
+        {
+          "CD": "KH",
+          "COMP_CD": "GI001",
+          "NM": "KHAKI"
+        },
+        {
+          "CD": "LE",
+          "COMP_CD": "GI001",
+          "NM": "LEMON"
+        },
+        {
+          "CD": "MD",
+          "COMP_CD": "GI001",
+          "NM": "MUD"
+        },
+        {
+          "CD": "NA",
+          "COMP_CD": "GI001",
+          "NM": "NAVY"
+        },
+        {
+          "CD": "OA",
+          "COMP_CD": "GI001",
+          "NM": "OATMEAL"
+        },
+        {
+          "CD": "PU",
+          "COMP_CD": "GI001",
+          "NM": "PURPLE"
+        },
+        {
+          "CD": "SM",
+          "COMP_CD": "GI001",
+          "NM": "SAGE MINT"
+        },
+        {
+          "CD": "TO",
+          "COMP_CD": "GI001",
+          "NM": "TOMATO"
+        },
+        {
+          "CD": "WH",
+          "COMP_CD": "GI001",
+          "NM": "WHITE"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/GI/SL/SL4010/getMainList2.do",
+    "postData": {
+      "comp_cd": "GI001",
+      "sty_cd": "WBD3L04501",
+      "col_cd": "BK",
+      "shop_gb": "3"
+    },
+    "timestamp": "2026-08-04T01:43:40.269Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "2",
+          "SIZE_3": "3",
+          "SIZE_4": "3",
+          "SIZE_5": "5",
+          "SIZE_6": "2",
+          "SIZE_17": null,
+          "SHOP_NM": "롯데백화점 광복점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "36001",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "15"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "8",
+          "SIZE_3": "19",
+          "SIZE_4": "7",
+          "SIZE_5": "0",
+          "SIZE_6": "4",
+          "SIZE_17": null,
+          "SHOP_NM": "신세계 대전점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "34002",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "38"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "4",
+          "SIZE_3": "9",
+          "SIZE_4": "5",
+          "SIZE_5": "5",
+          "SIZE_6": "4",
+          "SIZE_17": null,
+          "SHOP_NM": "신세계 센텀시티점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "31001",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "27"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "8",
+          "SIZE_3": "9",
+          "SIZE_4": "10",
+          "SIZE_5": "5",
+          "SIZE_6": "5",
+          "SIZE_17": null,
+          "SHOP_NM": "롯데백화점 평촌점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "32033",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "37"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "5",
+          "SIZE_3": "7",
+          "SIZE_4": "7",
+          "SIZE_5": "5",
+          "SIZE_6": "7",
+          "SIZE_17": null,
+          "SHOP_NM": "현대백화점 신촌점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "31031",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "31"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": null,
+          "SIZE_3": null,
+          "SIZE_4": null,
+          "SIZE_5": null,
+          "SIZE_6": "-2",
+          "SIZE_17": null,
+          "SHOP_NM": "오프라인_현대신촌(교원)",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "31021",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "-2"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "-13",
+          "SIZE_3": "-3",
+          "SIZE_4": "-11",
+          "SIZE_5": "-2",
+          "SIZE_6": "0",
+          "SIZE_17": null,
+          "SHOP_NM": "신세계 광주점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "35002",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "-29"
+        },
+        {
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "-3",
+          "SIZE_3": "1",
+          "SIZE_4": "4",
+          "SIZE_5": "4",
+          "SIZE_6": "-5",
+          "SIZE_17": null,
+          "SHOP_NM": "신세계 의정부점",
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SHOP_CD": "32005",
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://gim.sgerp.com/GI/SL/SL4010/getMainList1.do",
+    "postData": {
+      "comp_cd": "GI001",
+      "sty_cd": "WBD3L04501",
+      "col_cd": "BK",
+      "shop_gb": "3"
+    },
+    "timestamp": "2026-08-04T01:43:40.269Z",
+    "status": 200,
+    "responseBody": {
+      "RESULT_CODE": "SUCCESS",
+      "RESULT_DATA": [
+        {
+          "WH_NM": null,
+          "WH_CD": "9001",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "510",
+          "SIZE_3": "766",
+          "SIZE_4": "1,134",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "2610"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9002",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "766",
+          "SIZE_4": "567",
+          "SIZE_5": null,
+          "SIZE_6": null,
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1588"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9003",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "510",
+          "SIZE_3": "766",
+          "SIZE_4": "1,134",
+          "SIZE_5": "242",
+          "SIZE_6": "158",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "2810"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9004",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1405"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9005",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1405"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9007",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1405"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9015",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": null,
+          "SIZE_6": null,
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1205"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9017",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1405"
+        },
+        {
+          "WH_NM": null,
+          "WH_CD": "9050",
+          "STY_CD": "WBD3L04501",
+          "SIZE_1": null,
+          "SIZE_2": "255",
+          "SIZE_3": "383",
+          "SIZE_4": "567",
+          "SIZE_5": "121",
+          "SIZE_6": "79",
+          "SIZE_17": null,
+          "SIZE_7": null,
+          "SIZE_18": null,
+          "SIZE_8": null,
+          "SIZE_9": null,
+          "SIZE_13": null,
+          "SIZE_14": null,
+          "SIZE_15": null,
+          "SIZE_16": null,
+          "COL_CD": "BK",
+          "SIZE_10": null,
+          "SIZE_11": null,
+          "SIZE_12": null,
+          "TOT_QTY": "1405"
+        }
+      ]
+    }
+  }
+]

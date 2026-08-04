@@ -90,6 +90,150 @@ function UnderperformerCard({ item, storeName }: { item: any; storeName: string 
   );
 }
 
+function StockLookupSection({ storeName }: { storeName: string }) {
+  const [styleCodeInput, setStyleCodeInput] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const [status, setStatus] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  async function lookup(params: { styleCode?: string; barcode?: string }) {
+    setStatus("조회 중...");
+    setResult(null);
+    try {
+      const qs = new URLSearchParams({ store: storeName, ...(params.styleCode ? { styleCode: params.styleCode } : { barcode: params.barcode || "" }) });
+      const res = await fetch(`/api/store-stock-lookup?${qs.toString()}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "조회 실패");
+      if (!data.found) {
+        setStatus(data.error || "이 매장 재고에서 못 찾았어요.");
+        return;
+      }
+      setResult(data);
+      setStatus("");
+    } catch (e: any) {
+      setStatus(e?.message || "조회 실패");
+    }
+  }
+
+  async function startScan() {
+    setScanning(true);
+    setStatus("카메라 불러오는 중...");
+    try {
+      if (!(window as any).Html5Qrcode) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("스캐너 라이브러리 로딩 실패"));
+          document.body.appendChild(script);
+        });
+      }
+      const Html5Qrcode = (window as any).Html5Qrcode;
+      const scanner = new Html5Qrcode("barcode-reader");
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        async (decodedText: string) => {
+          await scanner.stop();
+          setScanning(false);
+          setStyleCodeInput(decodedText);
+          lookup({ barcode: decodedText.toUpperCase() });
+        },
+        () => {}
+      );
+      (window as any).__markScanner = scanner;
+      setStatus("");
+    } catch (e: any) {
+      setStatus("카메라를 열 수 없어요: " + (e?.message || e));
+      setScanning(false);
+    }
+  }
+
+  function stopScan() {
+    const scanner = (window as any).__markScanner;
+    if (scanner) scanner.stop().catch(() => {});
+    setScanning(false);
+  }
+
+  return (
+    <section
+      style={{
+        background: "#fff",
+        borderRadius: 24,
+        padding: 26,
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        border: "1px solid #EDF0F5",
+        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".1em", color: ACCENT }}>실시간재고조회</div>
+        <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800 }}>품번으로 컬러별 재고 바로 확인</h2>
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <input
+          value={styleCodeInput}
+          onChange={(e) => setStyleCodeInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && lookup({ styleCode: styleCodeInput })}
+          placeholder="품번 입력 (예: GF1LPT501)"
+          style={{ flex: 1, padding: "14px 16px", borderRadius: 14, border: "1px solid #E2E8F0", fontSize: 15 }}
+        />
+        <button
+          onClick={() => lookup({ styleCode: styleCodeInput })}
+          style={{ padding: "0 22px", borderRadius: 14, border: "none", background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 800 }}
+        >
+          조회
+        </button>
+        {!scanning ? (
+          <button
+            onClick={startScan}
+            style={{ padding: "0 20px", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
+          >
+            📷 바코드
+          </button>
+        ) : (
+          <button
+            onClick={stopScan}
+            style={{ padding: "0 20px", borderRadius: 14, border: "1.5px solid #EF4444", background: "#fff", color: "#EF4444", fontSize: 14, fontWeight: 800 }}
+          >
+            취소
+          </button>
+        )}
+      </div>
+
+      {scanning && <div id="barcode-reader" style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 16, overflow: "hidden" }} />}
+
+      {status && <p style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
+
+      {result && (
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 800 }}>{result.styleCode} · {result.productName}</p>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+            {result.colors.map((c: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  borderRadius: 14,
+                  padding: "14px 16px",
+                  background: c.scanned ? `${ACCENT}12` : "#F8FAFC",
+                  border: c.scanned ? `1.5px solid ${ACCENT}` : "1px solid #EDF0F5",
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{c.colorName || c.colorCode}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: c.stock > 0 ? "#059669" : "#DC2626" }}>{c.stock}개</div>
+                <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function StoreBriefV2() {
   const [stores, setStores] = useState<string[]>([]);
   const [storeName, setStoreName] = useState("");
@@ -305,150 +449,6 @@ export default function StoreBriefV2() {
                 </div>
               </section>
             )}
-
-function StockLookupSection({ storeName }: { storeName: string }) {
-  const [styleCodeInput, setStyleCodeInput] = useState("");
-  const [result, setResult] = useState<any>(null);
-  const [status, setStatus] = useState("");
-  const [scanning, setScanning] = useState(false);
-
-  async function lookup(params: { styleCode?: string; barcode?: string }) {
-    setStatus("조회 중...");
-    setResult(null);
-    try {
-      const qs = new URLSearchParams({ store: storeName, ...(params.styleCode ? { styleCode: params.styleCode } : { barcode: params.barcode || "" }) });
-      const res = await fetch(`/api/store-stock-lookup?${qs.toString()}`, { cache: "no-store" });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "조회 실패");
-      if (!data.found) {
-        setStatus(data.error || "이 매장 재고에서 못 찾았어요.");
-        return;
-      }
-      setResult(data);
-      setStatus("");
-    } catch (e: any) {
-      setStatus(e?.message || "조회 실패");
-    }
-  }
-
-  async function startScan() {
-    setScanning(true);
-    setStatus("카메라 불러오는 중...");
-    try {
-      if (!(window as any).Html5Qrcode) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("스캐너 라이브러리 로딩 실패"));
-          document.body.appendChild(script);
-        });
-      }
-      const Html5Qrcode = (window as any).Html5Qrcode;
-      const scanner = new Html5Qrcode("barcode-reader");
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        async (decodedText: string) => {
-          await scanner.stop();
-          setScanning(false);
-          setStyleCodeInput(decodedText);
-          lookup({ barcode: decodedText.toUpperCase() });
-        },
-        () => {}
-      );
-      (window as any).__markScanner = scanner;
-      setStatus("");
-    } catch (e: any) {
-      setStatus("카메라를 열 수 없어요: " + (e?.message || e));
-      setScanning(false);
-    }
-  }
-
-  function stopScan() {
-    const scanner = (window as any).__markScanner;
-    if (scanner) scanner.stop().catch(() => {});
-    setScanning(false);
-  }
-
-  return (
-    <section
-      style={{
-        background: "#fff",
-        borderRadius: 24,
-        padding: 26,
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-        border: "1px solid #EDF0F5",
-        boxShadow: "0 1px 3px rgba(15,23,42,.05)",
-      }}
-    >
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".1em", color: ACCENT }}>실시간재고조회</div>
-        <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800 }}>품번으로 컬러별 재고 바로 확인</h2>
-      </div>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <input
-          value={styleCodeInput}
-          onChange={(e) => setStyleCodeInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && lookup({ styleCode: styleCodeInput })}
-          placeholder="품번 입력 (예: GF1LPT501)"
-          style={{ flex: 1, padding: "14px 16px", borderRadius: 14, border: "1px solid #E2E8F0", fontSize: 15 }}
-        />
-        <button
-          onClick={() => lookup({ styleCode: styleCodeInput })}
-          style={{ padding: "0 22px", borderRadius: 14, border: "none", background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 800 }}
-        >
-          조회
-        </button>
-        {!scanning ? (
-          <button
-            onClick={startScan}
-            style={{ padding: "0 20px", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
-          >
-            📷 바코드
-          </button>
-        ) : (
-          <button
-            onClick={stopScan}
-            style={{ padding: "0 20px", borderRadius: 14, border: "1.5px solid #EF4444", background: "#fff", color: "#EF4444", fontSize: 14, fontWeight: 800 }}
-          >
-            취소
-          </button>
-        )}
-      </div>
-
-      {scanning && <div id="barcode-reader" style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 16, overflow: "hidden" }} />}
-
-      {status && <p style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
-
-      {result && (
-        <div>
-          <p style={{ fontSize: 15, fontWeight: 800 }}>{result.styleCode} · {result.productName}</p>
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
-            {result.colors.map((c: any, i: number) => (
-              <div
-                key={i}
-                style={{
-                  borderRadius: 14,
-                  padding: "14px 16px",
-                  background: c.scanned ? `${ACCENT}12` : "#F8FAFC",
-                  border: c.scanned ? `1.5px solid ${ACCENT}` : "1px solid #EDF0F5",
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{c.colorName || c.colorCode}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: c.stock > 0 ? "#059669" : "#DC2626" }}>{c.stock}개</div>
-                <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
 
             <StockLookupSection storeName={storeName} />
 

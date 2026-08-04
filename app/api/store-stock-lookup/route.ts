@@ -24,9 +24,13 @@ function normalizeDateKey(d: string): string {
 // MARK 6.66: "사이즈"처럼 보이는 값인지 판별합니다. 2026-08-03 이전 데이터는 사이즈 컬럼이
 // 없어서 판매가 숫자가 잘못 들어가 있는 경우가 있어(별도 공유된 이슈), 그런 값은
 // 사이즈로 취급하지 않고 컬러 단위로만 합칩니다.
+// MARK 6.70: "??"는 daily-snapshot.js가 아직 이름을 확정 못한 사이즈 슬롯(SIZE_6 이상)에
+// 붙이는 표시입니다. 컬러 단위로 조용히 합쳐버리면 이런 미확인 사이즈가 있다는 걸
+// 아무도 못 알아채니까, 일부러 사이즈로 인정해서 화면에 "?? N개"로 눈에 띄게 둡니다.
 function looksLikeRealSize(v: string): boolean {
   const s = String(v || "").trim().toUpperCase();
   if (!s) return false;
+  if (s === "??") return true;
   if (/^(XS|S|M|L|XL|XXL|XXXL|FREE|F|ONE)$/.test(s)) return true;
   if (/^\d{2,3}$/.test(s)) {
     const n = Number(s);

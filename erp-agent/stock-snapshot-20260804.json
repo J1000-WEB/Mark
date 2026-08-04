@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T07:42:55.947Z",
+  "generatedAt": "2026-08-04T08:44:50.560Z",
   "comboCount": 3271,
   "rowCount": 12862,
   "data": [
@@ -7009,7 +7009,7 @@
       "colCd": "BK",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF1LKP514",
@@ -9985,7 +9985,7 @@
       "colCd": "IV",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF1LPT509",
@@ -13073,7 +13073,7 @@
       "colCd": "CA",
       "shopCd": "32033",
       "shopNm": "롯데백화점 평촌점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF1LTS501",
@@ -13609,7 +13609,7 @@
       "colCd": "BK",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "GF1LTS505",
@@ -13857,7 +13857,7 @@
       "colCd": "NA",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 22
+      "totQty": 21
     },
     {
       "styCd": "GF1LTS505",
@@ -15881,7 +15881,7 @@
       "colCd": "MI",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 13
+      "totQty": 12
     },
     {
       "styCd": "GF1LTS511",
@@ -16393,7 +16393,7 @@
       "colCd": "PU",
       "shopCd": "46004",
       "shopNm": "롯데아울렛 동부산",
-      "totQty": 22
+      "totQty": 20
     },
     {
       "styCd": "GF1LTS513",
@@ -17177,7 +17177,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF1MHP010",
@@ -17337,7 +17337,7 @@
       "colCd": "PU",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF1MHP010",
@@ -18081,7 +18081,7 @@
       "colCd": "NA",
       "shopCd": "46004",
       "shopNm": "롯데아울렛 동부산",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF1MPT012",
@@ -18225,7 +18225,7 @@
       "colCd": "BE",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 14
+      "totQty": 15
     },
     {
       "styCd": "GF1MPT012",
@@ -19961,7 +19961,7 @@
       "colCd": "BR",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 6
+      "totQty": 5
     },
     {
       "styCd": "GF1MTS006",
@@ -20049,7 +20049,7 @@
       "colCd": "OL",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 6
+      "totQty": 5
     },
     {
       "styCd": "GF1MTS006",
@@ -23697,7 +23697,7 @@
       "colCd": "KH",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF1UTS008",
@@ -24057,7 +24057,7 @@
       "colCd": "BK",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 6
+      "totQty": 5
     },
     {
       "styCd": "GF2LBG508",
@@ -26497,7 +26497,7 @@
       "colCd": "BK",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 35
+      "totQty": 34
     },
     {
       "styCd": "GF2LBL514",
@@ -26761,7 +26761,7 @@
       "colCd": "WH",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 25
+      "totQty": 24
     },
     {
       "styCd": "GF2LBL515",
@@ -26977,7 +26977,7 @@
       "colCd": "CR",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LBL516",
@@ -27065,7 +27065,7 @@
       "colCd": "CR",
       "shopCd": "51024",
       "shopNm": "타임스퀘어 영등포점",
-      "totQty": 28
+      "totQty": 27
     },
     {
       "styCd": "GF2LBL516",
@@ -27289,7 +27289,7 @@
       "colCd": "DN",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 24
+      "totQty": 23
     },
     {
       "styCd": "GF2LBL516",
@@ -27369,7 +27369,7 @@
       "colCd": "DN",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 1
+      "totQty": 0
     },
     {
       "styCd": "GF2LBL516",
@@ -27409,7 +27409,7 @@
       "colCd": "DN",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LBL517",
@@ -28553,7 +28553,7 @@
       "colCd": "WH",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 20
+      "totQty": 19
     },
     {
       "styCd": "GF2LBL529",
@@ -30329,7 +30329,7 @@
       "colCd": "WH",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF2LHP513",
@@ -30633,7 +30633,7 @@
       "colCd": "BK",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LHP515",
@@ -30697,7 +30697,7 @@
       "colCd": "DN",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LHP515",
@@ -30761,7 +30761,7 @@
       "colCd": "DN",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 8
+      "totQty": 7
     },
     {
       "styCd": "GF2LHP515",
@@ -31577,7 +31577,7 @@
       "colCd": "BK",
       "shopCd": "21012",
       "shopNm": "한남 플래그십",
-      "totQty": 1
+      "totQty": 0
     },
     {
       "styCd": "GF2LHP518",
@@ -32529,7 +32529,7 @@
       "colCd": "MG",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LHP526",
@@ -32593,7 +32593,7 @@
       "colCd": "BK",
       "shopCd": "21012",
       "shopNm": "한남 플래그십",
-      "totQty": 9
+      "totQty": 5
     },
     {
       "styCd": "GF2LHP526",
@@ -32713,7 +32713,7 @@
       "colCd": "BK",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LHP526",
@@ -32865,7 +32865,7 @@
       "colCd": "OA",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LHP526",
@@ -32961,7 +32961,7 @@
       "colCd": "NA",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LHP526",
@@ -32985,7 +32985,7 @@
       "colCd": "NA",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF2LHP526",
@@ -34369,7 +34369,7 @@
       "colCd": "IV",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 8
+      "totQty": 7
     },
     {
       "styCd": "GF2LKC536",
@@ -34697,7 +34697,7 @@
       "colCd": "DN",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 2
+      "totQty": 1
     },
     {
       "styCd": "GF2LKC536",
@@ -34833,7 +34833,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LKC539",
@@ -34937,7 +34937,7 @@
       "colCd": "BK",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "GF2LKC539",
@@ -35201,7 +35201,7 @@
       "colCd": "WH",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 23
+      "totQty": 24
     },
     {
       "styCd": "GF2LKC539",
@@ -35617,7 +35617,7 @@
       "colCd": "BK",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 19
+      "totQty": 18
     },
     {
       "styCd": "GF2LKC541",
@@ -35657,7 +35657,7 @@
       "colCd": "BK",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 18
+      "totQty": 19
     },
     {
       "styCd": "GF2LKC541",
@@ -35705,7 +35705,7 @@
       "colCd": "WH",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 23
+      "totQty": 22
     },
     {
       "styCd": "GF2LKC541",
@@ -35793,7 +35793,7 @@
       "colCd": "WH",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 22
+      "totQty": 21
     },
     {
       "styCd": "GF2LKC541",
@@ -35849,7 +35849,7 @@
       "colCd": "WH",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 10
+      "totQty": 11
     },
     {
       "styCd": "GF2LKC541",
@@ -36129,7 +36129,7 @@
       "colCd": "TP",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 19
+      "totQty": 18
     },
     {
       "styCd": "GF2LKC541",
@@ -36945,7 +36945,7 @@
       "colCd": "NA",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 18
+      "totQty": 17
     },
     {
       "styCd": "GF2LKP525",
@@ -37321,7 +37321,7 @@
       "colCd": "IV",
       "shopCd": "51024",
       "shopNm": "타임스퀘어 영등포점",
-      "totQty": 6
+      "totQty": 5
     },
     {
       "styCd": "GF2LKP529",
@@ -38521,7 +38521,7 @@
       "colCd": "CH",
       "shopCd": "21012",
       "shopNm": "한남 플래그십",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LKP531",
@@ -38657,7 +38657,7 @@
       "colCd": "CH",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 17
+      "totQty": 16
     },
     {
       "styCd": "GF2LKP531",
@@ -38881,7 +38881,7 @@
       "colCd": "LB",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 39
+      "totQty": 38
     },
     {
       "styCd": "GF2LKP531",
@@ -39297,7 +39297,7 @@
       "colCd": "BK",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LKP534",
@@ -41393,7 +41393,7 @@
       "colCd": "CH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 1
+      "totQty": 0
     },
     {
       "styCd": "GF2LKP544",
@@ -42225,7 +42225,7 @@
       "colCd": "IV",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 56
+      "totQty": 55
     },
     {
       "styCd": "GF2LKP545",
@@ -43273,7 +43273,7 @@
       "colCd": "BK",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LOP505",
@@ -44849,7 +44849,7 @@
       "colCd": "NA",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LOP513",
@@ -45449,7 +45449,7 @@
       "colCd": "CR",
       "shopCd": "51024",
       "shopNm": "타임스퀘어 영등포점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LOP515",
@@ -45689,7 +45689,7 @@
       "colCd": "NA",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LOP515",
@@ -45865,7 +45865,7 @@
       "colCd": "BK",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LOP516",
@@ -46121,7 +46121,7 @@
       "colCd": "BR",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LOP516",
@@ -46225,7 +46225,7 @@
       "colCd": "CR",
       "shopCd": "46004",
       "shopNm": "롯데아울렛 동부산",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LOP517",
@@ -46473,7 +46473,7 @@
       "colCd": "WH",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF2LOP518",
@@ -46857,7 +46857,7 @@
       "colCd": "GN",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LOP519",
@@ -47129,7 +47129,7 @@
       "colCd": "SB",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF2LOP519",
@@ -48857,7 +48857,7 @@
       "colCd": "LB",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LPT510",
@@ -48969,7 +48969,7 @@
       "colCd": "BL",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "GF2LPT510",
@@ -49225,7 +49225,7 @@
       "colCd": "BK",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 13
+      "totQty": 12
     },
     {
       "styCd": "GF2LPT511",
@@ -51033,7 +51033,7 @@
       "colCd": "WH",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF2LSH518",
@@ -51233,7 +51233,7 @@
       "colCd": "BE",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LSH518",
@@ -52169,7 +52169,7 @@
       "colCd": "WH",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 8
+      "totQty": 7
     },
     {
       "styCd": "GF2LSH521",
@@ -52441,7 +52441,7 @@
       "colCd": "NA",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 38
+      "totQty": 37
     },
     {
       "styCd": "GF2LSH521",
@@ -52457,7 +52457,7 @@
       "colCd": "NA",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LSH521",
@@ -52465,7 +52465,7 @@
       "colCd": "NA",
       "shopCd": "51024",
       "shopNm": "타임스퀘어 영등포점",
-      "totQty": 14
+      "totQty": 13
     },
     {
       "styCd": "GF2LSH521",
@@ -52481,7 +52481,7 @@
       "colCd": "NA",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF2LSH521",
@@ -52497,7 +52497,7 @@
       "colCd": "NA",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LSH521",
@@ -52833,7 +52833,7 @@
       "colCd": "SB",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 20
+      "totQty": 19
     },
     {
       "styCd": "GF2LSH521",
@@ -52881,7 +52881,7 @@
       "colCd": "BK",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 17
+      "totQty": 16
     },
     {
       "styCd": "GF2LSH522",
@@ -53393,7 +53393,7 @@
       "colCd": "BK",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LSH523",
@@ -54825,7 +54825,7 @@
       "colCd": "GR",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LSK510",
@@ -54969,7 +54969,7 @@
       "colCd": "GR",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF2LSK510",
@@ -55425,7 +55425,7 @@
       "colCd": "WH",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 18
+      "totQty": 17
     },
     {
       "styCd": "GF2LSK511",
@@ -55633,7 +55633,7 @@
       "colCd": "BK",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LSK511",
@@ -55745,7 +55745,7 @@
       "colCd": "BK",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF2LSK511",
@@ -56257,7 +56257,7 @@
       "colCd": "BK",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "GF2LSK514",
@@ -59225,7 +59225,7 @@
       "colCd": "WH",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF2LTS509",
@@ -60273,7 +60273,7 @@
       "colCd": "BK",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LTS520",
@@ -60777,7 +60777,7 @@
       "colCd": "BK",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LTS521",
@@ -61201,7 +61201,7 @@
       "colCd": "WH",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 47
+      "totQty": 46
     },
     {
       "styCd": "GF2LTS522",
@@ -61313,7 +61313,7 @@
       "colCd": "NA",
       "shopCd": "32033",
       "shopNm": "롯데백화점 평촌점",
-      "totQty": 16
+      "totQty": 15
     },
     {
       "styCd": "GF2LTS522",
@@ -61489,7 +61489,7 @@
       "colCd": "ER",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": -6
+      "totQty": -7
     },
     {
       "styCd": "GF2LTS522",
@@ -61513,7 +61513,7 @@
       "colCd": "ER",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 17
+      "totQty": 16
     },
     {
       "styCd": "GF2LTS522",
@@ -61569,7 +61569,7 @@
       "colCd": "ER",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 24
+      "totQty": 23
     },
     {
       "styCd": "GF2LTS522",
@@ -62361,7 +62361,7 @@
       "colCd": "KH",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LTS523",
@@ -63001,7 +63001,7 @@
       "colCd": "BK",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LTS525",
@@ -63185,7 +63185,7 @@
       "colCd": "BR",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LTS525",
@@ -63457,7 +63457,7 @@
       "colCd": "LG",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2LTS525",
@@ -63513,7 +63513,7 @@
       "colCd": "LG",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2LTS525",
@@ -64161,7 +64161,7 @@
       "colCd": "CH",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 78
+      "totQty": 76
     },
     {
       "styCd": "GF2LTS527",
@@ -64193,7 +64193,7 @@
       "colCd": "CH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 32
+      "totQty": 31
     },
     {
       "styCd": "GF2LTS527",
@@ -64273,7 +64273,7 @@
       "colCd": "CH",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 22
+      "totQty": 20
     },
     {
       "styCd": "GF2LTS527",
@@ -64281,7 +64281,7 @@
       "colCd": "CH",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 53
+      "totQty": 52
     },
     {
       "styCd": "GF2LTS527",
@@ -64297,7 +64297,7 @@
       "colCd": "WH",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LTS527",
@@ -64313,7 +64313,7 @@
       "colCd": "WH",
       "shopCd": "21034",
       "shopNm": "서울숲 플래그십",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "GF2LTS527",
@@ -64361,7 +64361,7 @@
       "colCd": "WH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 22
+      "totQty": 21
     },
     {
       "styCd": "GF2LTS527",
@@ -64433,7 +64433,7 @@
       "colCd": "WH",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2LTS527",
@@ -64441,7 +64441,7 @@
       "colCd": "WH",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 16
+      "totQty": 15
     },
     {
       "styCd": "GF2LTS527",
@@ -64729,7 +64729,7 @@
       "colCd": "WH",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 21
+      "totQty": 20
     },
     {
       "styCd": "GF2LTS528",
@@ -65873,7 +65873,7 @@
       "colCd": "BR",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LTS530",
@@ -66033,7 +66033,7 @@
       "colCd": "KH",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2LTS530",
@@ -67577,7 +67577,7 @@
       "colCd": "BK",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LTS533",
@@ -67593,7 +67593,7 @@
       "colCd": "BK",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 5
+      "totQty": 4
     },
     {
       "styCd": "GF2LTS533",
@@ -67857,7 +67857,7 @@
       "colCd": "BK",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 8
+      "totQty": 9
     },
     {
       "styCd": "GF2LTS534",
@@ -67977,7 +67977,7 @@
       "colCd": "CH",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 27
+      "totQty": 26
     },
     {
       "styCd": "GF2LTS534",
@@ -68001,7 +68001,7 @@
       "colCd": "CH",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "GF2LTS534",
@@ -68401,7 +68401,7 @@
       "colCd": "OL",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 10
+      "totQty": 11
     },
     {
       "styCd": "GF2LTS535",
@@ -69361,7 +69361,7 @@
       "colCd": "DN",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 14
+      "totQty": 13
     },
     {
       "styCd": "GF2LTS537",
@@ -70073,7 +70073,7 @@
       "colCd": "CH",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 0
+      "totQty": -1
     },
     {
       "styCd": "GF2LTS540",
@@ -70937,7 +70937,7 @@
       "colCd": "SM",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 14
+      "totQty": 13
     },
     {
       "styCd": "GF2LTS541",
@@ -71481,7 +71481,7 @@
       "colCd": "BK",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 17
+      "totQty": 16
     },
     {
       "styCd": "GF2LTS542",
@@ -71697,7 +71697,7 @@
       "colCd": "NA",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF2LTS542",
@@ -72265,7 +72265,7 @@
       "colCd": "BE",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 24
+      "totQty": 23
     },
     {
       "styCd": "GF2MHP016",
@@ -72337,7 +72337,7 @@
       "colCd": "PI",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 12
+      "totQty": 11
     },
     {
       "styCd": "GF2MHP016",
@@ -73593,7 +73593,7 @@
       "colCd": "DN",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2MKP022",
@@ -75305,7 +75305,7 @@
       "colCd": "BK",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "GF2MTS011",
@@ -75385,7 +75385,7 @@
       "colCd": "OL",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 1
+      "totQty": 0
     },
     {
       "styCd": "GF2MTS011",
@@ -76913,7 +76913,7 @@
       "colCd": "ER",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 2
+      "totQty": 1
     },
     {
       "styCd": "GF2UBG106",
@@ -77089,7 +77089,7 @@
       "colCd": "CO",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2UCP103",
@@ -77177,7 +77177,7 @@
       "colCd": "PL",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 1
+      "totQty": 0
     },
     {
       "styCd": "GF2UCP103",
@@ -77657,7 +77657,7 @@
       "colCd": "BK",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 18
+      "totQty": 17
     },
     {
       "styCd": "GF2UKC017",
@@ -78289,7 +78289,7 @@
       "colCd": "NA",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 10
+      "totQty": 9
     },
     {
       "styCd": "GF2UKC018",
@@ -79409,7 +79409,7 @@
       "colCd": "NA",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 8
+      "totQty": 7
     },
     {
       "styCd": "GF2UTS013",
@@ -79969,7 +79969,7 @@
       "colCd": "DR",
       "shopCd": "55001",
       "shopNm": "LF스퀘어 광양점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2UTS014",
@@ -80017,7 +80017,7 @@
       "colCd": "WH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2UTS014",
@@ -80225,7 +80225,7 @@
       "colCd": "SD",
       "shopCd": "52034",
       "shopNm": "스타필드 빌리지 운정점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2UTS014",
@@ -80609,7 +80609,7 @@
       "colCd": "CH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 3
+      "totQty": 2
     },
     {
       "styCd": "GF2UTS016",
@@ -80849,7 +80849,7 @@
       "colCd": "RE",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "GF2UTS016",
@@ -80865,7 +80865,7 @@
       "colCd": "RE",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "GF2UTS016",
@@ -81673,7 +81673,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 24
+      "totQty": 23
     },
     {
       "styCd": "WBD2L43545",
@@ -81841,7 +81841,7 @@
       "colCd": "WH",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 64
+      "totQty": 63
     },
     {
       "styCd": "WBD2L43545",
@@ -82561,7 +82561,7 @@
       "colCd": "CH",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 13
+      "totQty": 12
     },
     {
       "styCd": "WBD3L04501",
@@ -83153,7 +83153,7 @@
       "colCd": "OA",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "WBD3L04501",
@@ -84601,7 +84601,7 @@
       "colCd": "SM",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 16
+      "totQty": 15
     },
     {
       "styCd": "WBD3L04501",
@@ -86553,7 +86553,7 @@
       "colCd": "DN",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 62
+      "totQty": 61
     },
     {
       "styCd": "WBD3L04503",
@@ -87857,7 +87857,7 @@
       "colCd": "RE",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 13
+      "totQty": 12
     },
     {
       "styCd": "WBD3L04505",
@@ -91281,7 +91281,7 @@
       "colCd": "BL",
       "shopCd": "32005",
       "shopNm": "신세계 의정부점",
-      "totQty": 8
+      "totQty": 9
     },
     {
       "styCd": "WBE1L12504",
@@ -91489,7 +91489,7 @@
       "colCd": "DB",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 36
+      "totQty": 35
     },
     {
       "styCd": "WBE1L12504",
@@ -91521,7 +91521,7 @@
       "colCd": "DB",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 14
+      "totQty": 13
     },
     {
       "styCd": "WBE1L12504",
@@ -91545,7 +91545,7 @@
       "colCd": "DB",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 0
+      "totQty": -1
     },
     {
       "styCd": "WBE1L12504",
@@ -92177,7 +92177,7 @@
       "colCd": "WH",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 9
+      "totQty": 8
     },
     {
       "styCd": "WBE2L01517",
@@ -92329,7 +92329,7 @@
       "colCd": "BK",
       "shopCd": "31031",
       "shopNm": "현대백화점 신촌점",
-      "totQty": 21
+      "totQty": 20
     },
     {
       "styCd": "WBE2L01517",
@@ -92345,7 +92345,7 @@
       "colCd": "BK",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 7
+      "totQty": 6
     },
     {
       "styCd": "WBE2L01517",
@@ -92361,7 +92361,7 @@
       "colCd": "BK",
       "shopCd": "46003",
       "shopNm": "롯데아울렛 김해점",
-      "totQty": 8
+      "totQty": 7
     },
     {
       "styCd": "WBE2L01517",
@@ -93769,7 +93769,7 @@
       "colCd": "BK",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 46
+      "totQty": 45
     },
     {
       "styCd": "WBE2L03530",
@@ -93825,7 +93825,7 @@
       "colCd": "BK",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 15
+      "totQty": 14
     },
     {
       "styCd": "WBE2L03530",
@@ -93833,7 +93833,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 25
+      "totQty": 24
     },
     {
       "styCd": "WBE2L03530",
@@ -93905,7 +93905,7 @@
       "colCd": "BK",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 23
+      "totQty": 22
     },
     {
       "styCd": "WBE2L03530",
@@ -94073,7 +94073,7 @@
       "colCd": "IV",
       "shopCd": "42002",
       "shopNm": "현대아울렛 송도점",
-      "totQty": 21
+      "totQty": 20
     },
     {
       "styCd": "WBE2L03531",
@@ -94081,7 +94081,7 @@
       "colCd": "IV",
       "shopCd": "46004",
       "shopNm": "롯데아울렛 동부산",
-      "totQty": 16
+      "totQty": 15
     },
     {
       "styCd": "WBE2L03531",
@@ -94129,7 +94129,7 @@
       "colCd": "IV",
       "shopCd": "51018",
       "shopNm": "아이파크몰 용산점",
-      "totQty": 18
+      "totQty": 17
     },
     {
       "styCd": "WBE2L03531",
@@ -94201,7 +94201,7 @@
       "colCd": "GR",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "WBE2L03531",
@@ -94921,7 +94921,7 @@
       "colCd": "BE",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 17
+      "totQty": 16
     },
     {
       "styCd": "WBE2L03531",
@@ -95129,7 +95129,7 @@
       "colCd": "BK",
       "shopCd": "32033",
       "shopNm": "롯데백화점 평촌점",
-      "totQty": 6
+      "totQty": 5
     },
     {
       "styCd": "WBE2L04534",
@@ -95313,7 +95313,7 @@
       "colCd": "NA",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 19
+      "totQty": 18
     },
     {
       "styCd": "WBE2L04534",
@@ -96433,7 +96433,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 33
+      "totQty": 32
     },
     {
       "styCd": "WBE2L05512",
@@ -96545,7 +96545,7 @@
       "colCd": "WH",
       "shopCd": "21011",
       "shopNm": "신사 플래그십",
-      "totQty": 14
+      "totQty": 13
     },
     {
       "styCd": "WBE2L05512",
@@ -97041,7 +97041,7 @@
       "colCd": "LA",
       "shopCd": "52006",
       "shopNm": "스타필드 고양점",
-      "totQty": 11
+      "totQty": 10
     },
     {
       "styCd": "WBE2L05512",
@@ -97073,7 +97073,7 @@
       "colCd": "LA",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 25
+      "totQty": 24
     },
     {
       "styCd": "WBE2L05513",
@@ -97289,7 +97289,7 @@
       "colCd": "IV",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 56
+      "totQty": 55
     },
     {
       "styCd": "WBE2L05513",
@@ -97409,7 +97409,7 @@
       "colCd": "IV",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 138
+      "totQty": 137
     },
     {
       "styCd": "WBE2L05513",
@@ -97425,7 +97425,7 @@
       "colCd": "IV",
       "shopCd": "42004",
       "shopNm": "현대아울렛 남양주점",
-      "totQty": 23
+      "totQty": 22
     },
     {
       "styCd": "WBE2L05513",
@@ -97561,7 +97561,7 @@
       "colCd": "BK",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 38
+      "totQty": 37
     },
     {
       "styCd": "WBE2L05513",
@@ -97585,7 +97585,7 @@
       "colCd": "BK",
       "shopCd": "41001",
       "shopNm": "롯데아울렛 서울역점",
-      "totQty": 102
+      "totQty": 101
     },
     {
       "styCd": "WBE2L05513",
@@ -97617,7 +97617,7 @@
       "colCd": "BK",
       "shopCd": "54001",
       "shopNm": "현대커넥트 청주점",
-      "totQty": 16
+      "totQty": 15
     },
     {
       "styCd": "WBE2L05513",
@@ -97897,7 +97897,7 @@
       "colCd": "BK",
       "shopCd": "36001",
       "shopNm": "롯데백화점 광복점",
-      "totQty": 42
+      "totQty": 41
     },
     {
       "styCd": "WBE2L05533",
@@ -97921,7 +97921,7 @@
       "colCd": "BK",
       "shopCd": "31001",
       "shopNm": "신세계 센텀시티점",
-      "totQty": 29
+      "totQty": 28
     },
     {
       "styCd": "WBE2L05533",
@@ -101177,7 +101177,7 @@
       "colCd": "BE",
       "shopCd": "21030",
       "shopNm": "성수 플래그십",
-      "totQty": 22
+      "totQty": 21
     },
     {
       "styCd": "WBE3L01503",
@@ -102233,7 +102233,7 @@
       "colCd": "BL",
       "shopCd": "34002",
       "shopNm": "신세계 대전점",
-      "totQty": 4
+      "totQty": 3
     },
     {
       "styCd": "WBE3L11508",

@@ -139,23 +139,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         if (cancelled) return;
 
         const Html5Qrcode = (window as any).Html5Qrcode;
-        const formats = (window as any).Html5QrcodeSupportedFormats;
-        // 1차원 바코드(품번 라벨) 위주로 인식하도록 지원 포맷을 명시합니다.
-        // (기본 설정이 QR코드 위주로 튜닝되어 있어서, 이걸 안 주면 일반 바코드 인식률이 낮음)
-        const formatsToSupport = formats
-          ? [
-              formats.CODE_128,
-              formats.CODE_39,
-              formats.CODE_93,
-              formats.EAN_13,
-              formats.EAN_8,
-              formats.UPC_A,
-              formats.UPC_E,
-              formats.QR_CODE,
-            ]
-          : undefined;
-
-        const scanner = new Html5Qrcode("barcode-reader", formatsToSupport ? { formatsToSupport } : undefined);
+        const scanner = new Html5Qrcode("barcode-reader");
         scannerInstance = scanner;
         (window as any).__markScanner = scanner;
 

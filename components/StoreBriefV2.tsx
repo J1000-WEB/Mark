@@ -153,6 +153,29 @@ function StockLookupSection({ storeName }: { storeName: string }) {
     if (!scanning) return;
     let cancelled = false;
     let scannerInstance: any = null;
+    // MARK 6.69: html5-qrcode는 이미 멈춘(혹은 아직 시작 안 한) 스캐너에 stop()을 또 부르면
+    // "Cannot stop, scanner is not running or paused"를 던지는데, 이게 프라미스 reject가
+    // 아니라 동기(synchronous) throw라서 .catch()로 못 잡고 React effect cleanup 중
+    // 예외로 튀어서 Error Boundary까지 뚫고 올라왔었습니다. stopped 플래그로 중복 호출
+    // 자체를 막고, 혹시 몰라 safeStop도 try/catch + isScanning 체크로 이중 방어합니다.
+    let stopped = false;
+
+    function safeStop(scanner: any) {
+      if (!scanner || stopped) return;
+      stopped = true;
+      try {
+        // getState()가 있으면 실행 중일 때만 stop 시도 (버전에 따라 없을 수도 있어 optional)
+        if (typeof scanner.getState === "function" && typeof (window as any).Html5QrcodeScannerState === "object") {
+          const state = scanner.getState();
+          const SCANNING = (window as any).Html5QrcodeScannerState?.SCANNING;
+          if (SCANNING !== undefined && state !== SCANNING) return;
+        }
+        const p = scanner.stop();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch {
+        // 이미 멈춘 상태에서 동기적으로 던지는 경우 — 무시해도 안전 (원하는 목적은 이미 달성됨)
+      }
+    }
 
     async function init() {
       setStatus("카메라 불러오는 중...");
@@ -178,9 +201,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
           { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.4 },
           async (decodedText: string) => {
             try {
-              try {
-                await scanner.stop();
-              } catch {}
+              safeStop(scanner);
               setScanning(false);
               setStyleCodeInput(decodedText);
               lookup({ barcode: decodedText.toUpperCase() });
@@ -209,7 +230,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
 
     return () => {
       cancelled = true;
-      if (scannerInstance) scannerInstance.stop().catch(() => {});
+      safeStop(scannerInstance);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);

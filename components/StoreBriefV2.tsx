@@ -115,43 +115,82 @@ function StockLookupSection({ storeName }: { storeName: string }) {
     }
   }
 
-  async function startScan() {
-    setScanning(true);
-    setStatus("카메라 불러오는 중...");
-    try {
-      if (!(window as any).Html5Qrcode) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("스캐너 라이브러리 로딩 실패"));
-          document.body.appendChild(script);
-        });
-      }
-      const Html5Qrcode = (window as any).Html5Qrcode;
-      const scanner = new Html5Qrcode("barcode-reader");
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        async (decodedText: string) => {
-          await scanner.stop();
+  // MARK 6.66: "카메라 켜기"를 누르면 일단 scanning=true로 화면에 #barcode-reader div를
+  // 먼저 렌더링시키고, 그 div가 실제로 존재하게 된 다음(useEffect)에 스캐너를 초기화합니다.
+  // 예전엔 버튼 클릭 즉시 스캐너를 만들려고 해서, div가 아직 안 그려진 상태라 안드로이드에서
+  // "element not found" 오류가 났었습니다.
+  useEffect(() => {
+    if (!scanning) return;
+    let cancelled = false;
+    let scannerInstance: any = null;
+
+    async function init() {
+      setStatus("카메라 불러오는 중...");
+      try {
+        if (!(window as any).Html5Qrcode) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("스캐너 라이브러리 로딩 실패"));
+            document.body.appendChild(script);
+          });
+        }
+        if (cancelled) return;
+
+        const Html5Qrcode = (window as any).Html5Qrcode;
+        const formats = (window as any).Html5QrcodeSupportedFormats;
+        // 1차원 바코드(품번 라벨) 위주로 인식하도록 지원 포맷을 명시합니다.
+        // (기본 설정이 QR코드 위주로 튜닝되어 있어서, 이걸 안 주면 일반 바코드 인식률이 낮음)
+        const formatsToSupport = formats
+          ? [
+              formats.CODE_128,
+              formats.CODE_39,
+              formats.CODE_93,
+              formats.EAN_13,
+              formats.EAN_8,
+              formats.UPC_A,
+              formats.UPC_E,
+              formats.QR_CODE,
+            ]
+          : undefined;
+
+        const scanner = new Html5Qrcode("barcode-reader", formatsToSupport ? { formatsToSupport } : undefined);
+        scannerInstance = scanner;
+        (window as any).__markScanner = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.4 },
+          async (decodedText: string) => {
+            try {
+              await scanner.stop();
+            } catch {}
+            setScanning(false);
+            setStyleCodeInput(decodedText);
+            lookup({ barcode: decodedText.toUpperCase() });
+          },
+          () => {}
+        );
+        if (!cancelled) setStatus("");
+      } catch (e: any) {
+        if (!cancelled) {
+          setStatus("카메라를 열 수 없어요: " + (e?.message || e));
           setScanning(false);
-          setStyleCodeInput(decodedText);
-          lookup({ barcode: decodedText.toUpperCase() });
-        },
-        () => {}
-      );
-      (window as any).__markScanner = scanner;
-      setStatus("");
-    } catch (e: any) {
-      setStatus("카메라를 열 수 없어요: " + (e?.message || e));
-      setScanning(false);
+        }
+      }
     }
-  }
+
+    init();
+
+    return () => {
+      cancelled = true;
+      if (scannerInstance) scannerInstance.stop().catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanning]);
 
   function stopScan() {
-    const scanner = (window as any).__markScanner;
-    if (scanner) scanner.stop().catch(() => {});
     setScanning(false);
   }
 
@@ -189,7 +228,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         </button>
         {!scanning ? (
           <button
-            onClick={startScan}
+            onClick={() => setScanning(true)}
             style={{ padding: "0 20px", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
           >
             📷 바코드
@@ -211,7 +250,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
       {result && (
         <div>
           <p style={{ fontSize: 15, fontWeight: 800 }}>{result.styleCode} · {result.productName}</p>
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10 }}>
             {result.colors.map((c: any, i: number) => (
               <div
                 key={i}
@@ -223,8 +262,34 @@ function StockLookupSection({ storeName }: { storeName: string }) {
                 }}
               >
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{c.colorName || c.colorCode}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: c.stock > 0 ? "#059669" : "#DC2626" }}>{c.stock}개</div>
-                <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>
+                {c.stock === -1 ? (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8", marginTop: 4 }}>이 매장 정보 없음</div>
+                ) : (
+                  <div style={{ fontSize: 22, fontWeight: 800, color: c.stock > 0 ? "#059669" : "#DC2626" }}>{c.stock}개</div>
+                )}
+                {c.stock !== -1 && <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>}
+                {c.sizes && c.sizes.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {c.sizes
+                      .slice()
+                      .sort((a: any, b: any) => a.size.localeCompare(b.size))
+                      .map((s: any, si: number) => (
+                        <span
+                          key={si}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "3px 8px",
+                            borderRadius: 999,
+                            background: s.stock > 0 ? "#DCFCE7" : "#FEE2E2",
+                            color: s.stock > 0 ? "#166534" : "#991B1B",
+                          }}
+                        >
+                          {s.size} {s.stock}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

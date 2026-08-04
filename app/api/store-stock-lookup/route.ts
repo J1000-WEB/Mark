@@ -6,6 +6,22 @@ import { normalizeStoreKey } from "@/lib/dataBuilder";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const GI_BOARD_BASE = "https://gi-board.vercel.app/api/archive";
+
+// MARK 6.66: "사이즈"처럼 보이는 값인지 판별합니다. 2026-08-03 이전 데이터는 사이즈 컬럼이
+// 없어서 판매가 숫자가 잘못 들어가 있는 경우가 있어(별도 공유된 이슈), 그런 값은
+// 사이즈로 취급하지 않고 컬러 단위로만 합칩니다.
+function looksLikeRealSize(v: string): boolean {
+  const s = String(v || "").trim().toUpperCase();
+  if (!s) return false;
+  if (/^(XS|S|M|L|XL|XXL|XXXL|FREE|F|ONE)$/.test(s)) return true;
+  if (/^\d{2,3}$/.test(s)) {
+    const n = Number(s);
+    return n >= 20 && n <= 300; // 의류/신발 사이즈로 보이는 범위
+  }
+  return false;
+}
+
 // MARK 6.65: 매장 직원이 품번(또는 바코드로 읽은 품번)을 입력하면, 그 매장의 컬러별
 // 현재 재고를 바로 보여줍니다. Daily_Sales_History의 가장 최근 날짜 값을 사용합니다
 // (ERP 새벽 재고 스냅샷이 매일 반영되면 그 값이 최신 기준이 됩니다).
@@ -53,18 +69,57 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, found: false, colors: [] });
     }
 
-    // 컬러별로 가장 최근 날짜의 재고만 사용 (합산 금지 — 재고는 스냅샷)
-    const latestByColor = new Map<string, { date: string; stock: number; colorName: string }>();
+    // MARK 6.66: 사이즈 컬럼이 진짜 사이즈처럼 보이면 컬러+사이즈 단위로, 아니면(예전 데이터
+    // 등 사이즈가 없거나 이상하면) 컬러 단위로만 묶습니다. 재고는 "가장 최근 날짜" 값만 사용
+    // (합산 금지 — 스냅샷 성격).
+    type Bucket = { date: string; stock: number; colorName: string; size?: string };
+    const latestByKey = new Map<string, Bucket>();
     for (const r of matched) {
-      const existing = latestByColor.get(r.colorCode);
+      const hasSize = looksLikeRealSize(r.size);
+      const key = hasSize ? `${r.colorCode}__${r.size}` : r.colorCode;
+      const existing = latestByKey.get(key);
       if (!existing || r.date > existing.date) {
-        latestByColor.set(r.colorCode, { date: r.date, stock: Number(r.stock || 0), colorName: r.colorName });
+        latestByKey.set(key, { date: r.date, stock: Number(r.stock || 0), colorName: r.colorName, size: hasSize ? r.size : undefined });
       }
     }
 
-    const colors = Array.from(latestByColor.entries())
-      .map(([colorCode, v]) => ({ colorCode, colorName: v.colorName, stock: v.stock, asOfDate: v.date, scanned: colorCode.toUpperCase() === matchedColorCode }))
-      .sort((a, b) => b.stock - a.stock);
+    type ColorGroup = { colorCode: string; colorName: string; stock: number; asOfDate: string; scanned: boolean; sizes: { size: string; stock: number }[] };
+    const byColor = new Map<string, ColorGroup>();
+    for (const [key, v] of latestByKey.entries()) {
+      const colorCode = key.split("__")[0];
+      if (!byColor.has(colorCode)) {
+        byColor.set(colorCode, { colorCode, colorName: v.colorName, stock: 0, asOfDate: v.date, scanned: colorCode.toUpperCase() === matchedColorCode, sizes: [] });
+      }
+      const group = byColor.get(colorCode)!;
+      group.stock += v.stock;
+      if (v.date > group.asOfDate) group.asOfDate = v.date;
+      if (v.size) group.sizes.push({ size: v.size, stock: v.stock });
+    }
+
+    // MARK 6.66: 이 매장 판매이력에 없는 다른 컬러도(전사 상품360 기준) 참고용으로 같이
+    // 보여줍니다 — 재고는 "이 매장 정보 없음"으로 표시(전사 재고가 아니라 이 매장 재고를
+    // 보여주는 화면이라, 숫자를 지어내지 않습니다).
+    const productToken = process.env.PRODUCT360_TOKEN_OBT;
+    if (productToken) {
+      try {
+        const p360Res = await fetch(`${GI_BOARD_BASE}/product360?code=${encodeURIComponent(styleCode)}`, {
+          headers: { "x-archive-token": productToken },
+          cache: "no-store",
+        });
+        if (p360Res.ok) {
+          const p360 = await p360Res.json();
+          for (const c of p360?.colors || []) {
+            const code = String(c.color || "").toUpperCase();
+            if (!code || byColor.has(code)) continue;
+            byColor.set(code, { colorCode: code, colorName: c.colorName || code, stock: -1, asOfDate: "", scanned: false, sizes: [] });
+          }
+        }
+      } catch {
+        // 상품360 조회 실패해도 이 매장 데이터는 그대로 보여줌
+      }
+    }
+
+    const colors = Array.from(byColor.values()).sort((a, b) => b.stock - a.stock);
 
     return NextResponse.json({
       ok: true,

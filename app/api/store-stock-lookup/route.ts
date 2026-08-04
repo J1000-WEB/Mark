@@ -8,6 +8,19 @@ export const revalidate = 0;
 
 const GI_BOARD_BASE = "https://gi-board.vercel.app/api/archive";
 
+// MARK 6.67: Daily_Sales_History 안에 날짜 형식이 "2026-08-03"(하이픈)과 "2026. 7. 5"
+// (점+공백, 예전 데이터) 두 가지가 섞여있어서, 그냥 문자열로 비교하면 "."이 "-"보다
+// 문자코드가 커서 예전 날짜가 최신으로 잘못 판정되는 버그가 있었습니다. 비교 전에
+// 항상 "YYYY-MM-DD" 형식으로 정규화해서 비교합니다.
+function normalizeDateKey(d: string): string {
+  const s = String(d || "").trim();
+  const kr = s.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if (kr) {
+    return `${kr[1]}-${kr[2].padStart(2, "0")}-${kr[3].padStart(2, "0")}`;
+  }
+  return s;
+}
+
 // MARK 6.66: "사이즈"처럼 보이는 값인지 판별합니다. 2026-08-03 이전 데이터는 사이즈 컬럼이
 // 없어서 판매가 숫자가 잘못 들어가 있는 경우가 있어(별도 공유된 이슈), 그런 값은
 // 사이즈로 취급하지 않고 컬러 단위로만 합칩니다.
@@ -78,8 +91,9 @@ export async function GET(req: Request) {
       const hasSize = looksLikeRealSize(r.size);
       const key = hasSize ? `${r.colorCode}__${r.size}` : r.colorCode;
       const existing = latestByKey.get(key);
-      if (!existing || r.date > existing.date) {
-        latestByKey.set(key, { date: r.date, stock: Number(r.stock || 0), colorName: r.colorName, size: hasSize ? r.size : undefined });
+      const normDate = normalizeDateKey(r.date);
+      if (!existing || normDate > normalizeDateKey(existing.date)) {
+        latestByKey.set(key, { date: normDate, stock: Number(r.stock || 0), colorName: r.colorName, size: hasSize ? r.size : undefined });
       }
     }
 
@@ -92,7 +106,7 @@ export async function GET(req: Request) {
       }
       const group = byColor.get(colorCode)!;
       group.stock += v.stock;
-      if (v.date > group.asOfDate) group.asOfDate = v.date;
+      if (v.date > group.asOfDate) group.asOfDate = v.date; // v.date는 이미 위에서 정규화됨
       if (v.size) group.sizes.push({ size: v.size, stock: v.stock });
     }
 

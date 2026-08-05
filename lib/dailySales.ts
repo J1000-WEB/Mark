@@ -349,6 +349,7 @@ type DailyDetailEntry = {
   qty: number;
   amount: number;
   stock: number;
+  stockUpdatedAt?: string; // MARK 6.72: 재고 값이 마지막으로 갱신된 시각(ISO). stock-refresh.js가 채움.
 };
 
 export type FlatDailyHistoryRow = {
@@ -362,6 +363,7 @@ export type FlatDailyHistoryRow = {
   qty: number;
   amount: number;
   stock: number;
+  stockUpdatedAt?: string;
 };
 
 function detailKey(date: string, storeName: string, item: { styleCode: string; colorCode: string; size: string }) {
@@ -412,6 +414,7 @@ export function expandCompactDailyHistoryRows(rows: any[][]): FlatDailyHistoryRo
         qty: num(item?.qty),
         amount: num(item?.amount),
         stock: num(item?.stock),
+        stockUpdatedAt: item?.stockUpdatedAt ? text(item.stockUpdatedAt) : undefined,
       });
     }
   }
@@ -496,6 +499,7 @@ export function buildCompactDailyHistoryRows(flatRows: FlatDailyHistoryRow[]): a
       qty: r.qty,
       amount: r.amount,
       stock: r.stock,
+      stockUpdatedAt: r.stockUpdatedAt,
     });
   }
 

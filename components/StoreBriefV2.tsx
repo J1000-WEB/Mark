@@ -198,13 +198,33 @@ function StockLookupSection({ storeName }: { storeName: string }) {
 
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 280, height: 160 }, aspectRatio: 1.4 },
+          {
+            fps: 10,
+            qrbox: { width: 280, height: 160 },
+            aspectRatio: 1.4,
+            // MARK 6.71: 아이폰(iOS Safari)에서 기본 해상도가 낮게 잡혀서 CODE128 바코드를
+            // 가끔 엉뚱한 특수문자로 오독하는 문제가 있었습니다 (예: F→', L→", 매번 다르게).
+            // 해상도를 명시적으로 높게 요청해서 프레임 화질을 개선합니다.
+            videoConstraints: {
+              facingMode: "environment",
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+          },
           async (decodedText: string) => {
             try {
+              // MARK 6.71: 실제 품번 바코드는 항상 대문자+숫자만 있습니다. 화질 문제로
+              // 오독되면 ', ", ), * 같은 특수문자가 섞여 나오는데, 이걸 그대로 조회해버리면
+              // 엉뚱한 결과가 뜨니까 — 이런 값은 무시하고 스캔을 계속합니다(멈추지 않음).
+              const cleaned = decodedText.toUpperCase().trim();
+              if (!/^[A-Z0-9]+$/.test(cleaned)) {
+                setStatus("바코드를 다시 읽는 중이에요... (인식이 불안정하면 조금 더 가까이/멀리 대보세요)");
+                return; // 스캐너는 멈추지 않고 계속 시도
+              }
               safeStop(scanner);
               setScanning(false);
-              setStyleCodeInput(decodedText);
-              lookup({ barcode: decodedText.toUpperCase() });
+              setStyleCodeInput(cleaned);
+              lookup({ barcode: cleaned });
             } catch (scanErr: any) {
               setStatus("스캔 처리 중 오류: " + (scanErr?.message || scanErr));
               setScanning(false);

@@ -651,41 +651,78 @@ export async function backfillDailySalesForDate(data: any) {
 }
 
 // MARK 6.53: ERP 스크래퍼처럼 이미 "일자/매장/품번/컬러/사이즈/수량/금액" 형태로 만들어진
-// flat row를 직접 받는 버전. 같은 날짜의 기존 행은 통째로 교체합니다(백필과 동일한 원칙).
-// MARK 6.71: append=true면 그날짜 기존 행을 지우지 않고 이어붙입니다 — 청크 업로드용
-// (사이즈별로 쪼개다 보니 한 번에 보내는 행 수가 Vercel 요청 본문 한도를 넘을 수 있어서,
-// 첫 청크만 append:false(교체)로 보내고 나머지는 append:true(이어붙이기)로 보냅니다).
-export async function backfillFlatRows(newFlatRows: FlatDailyHistoryRow[], options?: { append?: boolean }) {
+// flat row를 직접 받는 버전.
+// MARK 6.71: 재고 갱신(stock-refresh, 15분)과 매출 갱신(sales-refresh, 40분)이 같은
+// "오늘" 날짜를 각자 따로 갱신하게 되면서 모드를 3가지로 나눴습니다:
+//   - "replace"(기본): 그 날짜의 기존 행을 통째로 교체. 새벽 배치처럼 완전한 하루치를
+//     한 번에 올릴 때 씀 (daily-snapshot.js).
+//   - "append": 기존 행은 그대로 두고, 없는 키만 추가. 청크 업로드 2번째 청크부터 씀.
+//   - "upsert": 키가 이미 있으면 onlyFields로 지정한 필드만 갱신(나머지 필드는 안 건드림),
+//     없으면 새로 만듦. stock-refresh는 onlyFields:["stock"], sales-refresh는
+//     onlyFields:["qty","amount"]로 보내서 서로의 값을 안 지우게 합니다.
+export async function backfillFlatRows(
+  newFlatRows: FlatDailyHistoryRow[],
+  options?: { mode?: "replace" | "append" | "upsert"; onlyFields?: (keyof FlatDailyHistoryRow)[]; append?: boolean }
+) {
   const spreadsheetId = getHistorySheetId();
   if (!newFlatRows.length) throw new Error("저장할 판매 데이터가 없습니다.");
 
-  const append = !!options?.append;
+  // append(구버전 boolean 옵션)와 mode 둘 다 지원 — append:true면 mode:"append"와 동일
+  const mode = options?.mode || (options?.append ? "append" : "replace");
   const targetDates = new Set(newFlatRows.map((r) => r.date));
 
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
   const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
 
-  let keptRows: FlatDailyHistoryRow[];
-  let rowsToWrite = newFlatRows;
-  if (append) {
+  let mergedFlatRows: FlatDailyHistoryRow[];
+  let newRowsCount = 0;
+  let updatedRowsCount = 0;
+  let replacedRows = 0;
+  let skippedRows = 0;
+
+  if (mode === "upsert") {
+    const onlyFields = options?.onlyFields && options.onlyFields.length ? options.onlyFields : null;
+    const existingByKey = new Map(existingFlatRows.map((r) => [detailKey(r.date, r.storeName, r), r]));
+    for (const incoming of newFlatRows) {
+      const key = detailKey(incoming.date, incoming.storeName, incoming);
+      const existing = existingByKey.get(key);
+      if (existing) {
+        if (onlyFields) {
+          for (const f of onlyFields) (existing as any)[f] = (incoming as any)[f];
+        } else {
+          Object.assign(existing, incoming);
+        }
+        updatedRowsCount++;
+      } else {
+        existingByKey.set(key, { ...incoming });
+        newRowsCount++;
+      }
+    }
+    mergedFlatRows = Array.from(existingByKey.values());
+  } else if (mode === "append") {
     // 이미 들어간(일자+매장+품번+컬러+사이즈) 키는 건너뛰어서, 같은 청크가 재시도로
     // 두 번 들어와도 중복 저장되지 않게 합니다.
     const existingKeys = new Set(existingFlatRows.map((r) => detailKey(r.date, r.storeName, r)));
-    rowsToWrite = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
-    keptRows = existingFlatRows;
+    const rowsToWrite = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
+    newRowsCount = rowsToWrite.length;
+    skippedRows = newFlatRows.length - rowsToWrite.length;
+    mergedFlatRows = [...existingFlatRows, ...rowsToWrite];
   } else {
-    keptRows = existingFlatRows.filter((r) => !targetDates.has(r.date));
+    // replace
+    const keptRows = existingFlatRows.filter((r) => !targetDates.has(r.date));
+    replacedRows = existingFlatRows.length - keptRows.length;
+    newRowsCount = newFlatRows.length;
+    mergedFlatRows = [...keptRows, ...newFlatRows];
   }
-
-  const mergedFlatRows = [...keptRows, ...rowsToWrite];
 
   const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
 
   return {
     targetDates: Array.from(targetDates),
-    replacedRows: append ? 0 : existingFlatRows.length - keptRows.length,
-    newRows: rowsToWrite.length,
-    skippedRows: newFlatRows.length - rowsToWrite.length,
+    replacedRows,
+    newRows: newRowsCount,
+    updatedRows: updatedRowsCount,
+    skippedRows,
     compactRowCount: writeResult.compactRowCount,
     flatRowCount: mergedFlatRows.length,
   };

@@ -89,7 +89,7 @@ export async function GET(req: Request) {
     // MARK 6.66: 사이즈 컬럼이 진짜 사이즈처럼 보이면 컬러+사이즈 단위로, 아니면(예전 데이터
     // 등 사이즈가 없거나 이상하면) 컬러 단위로만 묶습니다. 재고는 "가장 최근 날짜" 값만 사용
     // (합산 금지 — 스냅샷 성격).
-    type Bucket = { date: string; stock: number; colorName: string; size?: string };
+    type Bucket = { date: string; stock: number; colorName: string; size?: string; stockUpdatedAt?: string };
     const latestByKey = new Map<string, Bucket>();
     for (const r of matched) {
       const hasSize = looksLikeRealSize(r.size);
@@ -97,7 +97,13 @@ export async function GET(req: Request) {
       const existing = latestByKey.get(key);
       const normDate = normalizeDateKey(r.date);
       if (!existing || normDate > normalizeDateKey(existing.date)) {
-        latestByKey.set(key, { date: normDate, stock: Number(r.stock || 0), colorName: r.colorName, size: hasSize ? r.size : undefined });
+        latestByKey.set(key, {
+          date: normDate,
+          stock: Number(r.stock || 0),
+          colorName: r.colorName,
+          size: hasSize ? r.size : undefined,
+          stockUpdatedAt: r.stockUpdatedAt,
+        });
       }
     }
 
@@ -139,6 +145,13 @@ export async function GET(req: Request) {
 
     const colors = Array.from(byColor.values()).sort((a, b) => b.stock - a.stock);
 
+    // MARK 6.72: 화면에 "재고 마지막 갱신 시각"을 보여주기 위해, 이 조회에 걸린 항목들 중
+    // 가장 최근 stockUpdatedAt을 뽑습니다 (stock-refresh.js/daily-snapshot.js가 기록해둔 값).
+    let stockUpdatedAt: string | null = null;
+    for (const v of latestByKey.values()) {
+      if (v.stockUpdatedAt && (!stockUpdatedAt || v.stockUpdatedAt > stockUpdatedAt)) stockUpdatedAt = v.stockUpdatedAt;
+    }
+
     return NextResponse.json({
       ok: true,
       found: true,
@@ -146,6 +159,7 @@ export async function GET(req: Request) {
       productName: matched[0].productName,
       storeName: matched[0].storeName,
       colors,
+      stockUpdatedAt,
     });
   } catch (error: any) {
     console.error("store-stock-lookup failed:", error);

@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       qty: Number(r.qty || 0),
       amount: Number(r.amount || 0),
       stock: Number(r.stock || 0),
+      stockUpdatedAt: r.stockUpdatedAt ? String(r.stockUpdatedAt) : undefined,
     })).filter((r: any) => r.storeName && r.styleCode);
 
     const result = await backfillFlatRows(flatRows, { mode, onlyFields });

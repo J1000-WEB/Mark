@@ -36,6 +36,26 @@ class ScanErrorBoundary extends Component<{ children: any }, { error: string | n
   }
 }
 
+// MARK 6.72: 재고 마지막 갱신 시각을 "8/5 15:02" 형태로 표시합니다.
+function formatStockUpdatedAt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("ko-KR", {
+      timeZone: "Asia/Seoul",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+    return `${get("month")}/${get("day")} ${get("hour")}:${get("minute")}`;
+  } catch {
+    return "";
+  }
+}
+
 function man(n: number) {
   return `${(Math.round((n || 0) / 10000 * 10) / 10).toFixed(1)}만원`;
 }
@@ -314,7 +334,14 @@ function StockLookupSection({ storeName }: { storeName: string }) {
 
       {result && (
         <div>
-          <p style={{ fontSize: 15, fontWeight: 800 }}>{result.styleCode} · {result.productName}</p>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{result.styleCode} · {result.productName}</p>
+            {result.stockUpdatedAt && (
+              <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600 }}>
+                재고 갱신: {formatStockUpdatedAt(result.stockUpdatedAt)}
+              </span>
+            )}
+          </div>
           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10 }}>
             {result.colors.map((c: any, i: number) => (
               <div

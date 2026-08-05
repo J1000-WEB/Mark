@@ -5,6 +5,7 @@ import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
 import ProductThumb from "@/components/ProductThumb";
+import { compactStyleChannelRows } from "@/lib/styleChannelCompact";
 
 
 function todayKSTInputValue() {
@@ -1607,11 +1608,16 @@ export default function InventoryDashboard() {
 
       // MARK 6.35: 열이 아주 많은(채널 블록이 많은) 파일은 행 수 기준 청크로도 4.5MB 제한을
       // 넘을 수 있어서, "실제 JSON 용량"을 기준으로 청크를 나눕니다.
+      // MARK 6.73: 이제 청크로 나누기 전에 먼저 압축합니다 — 594열짜리 원본을 그대로 구글시트에
+      // 쌓으면 곧 1,000만 셀 한도에 부딪히기 때문에(2026-08-05 기준 이미 871만 셀), "채널값이
+      // 있는 것만" JSON으로 압축해서 올립니다(약 19배 절감, 데이터 손실 없음 — 검증 완료).
+      const originalRows = rows;
+      const rows2 = compactStyleChannelRows(originalRows);
       const TARGET_CHUNK_BYTES = 2_000_000; // 여유 있게 2MB 목표 (요청 전체 한도는 4.5MB)
       const chunks: any[][][] = [];
       let current: any[][] = [];
       let currentBytes = 2;
-      for (const row of rows) {
+      for (const row of rows2) {
         const rowBytes = JSON.stringify(row).length + 1;
         if (current.length && currentBytes + rowBytes > TARGET_CHUNK_BYTES) {
           chunks.push(current);
@@ -1632,8 +1638,8 @@ export default function InventoryDashboard() {
         body: JSON.stringify({
           mode: "start",
           rows: chunks[0],
-          totalRows: rows.length,
-          totalCols: Math.max(...rows.map((r) => r.length)),
+          totalRows: rows2.length,
+          totalCols: Math.max(...rows2.map((r) => r.length)),
         }),
       });
       const startData = await startRes.json();
@@ -1657,12 +1663,12 @@ export default function InventoryDashboard() {
       const finishRes = await fetch("/api/upload-style-channel-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "finish", expectedTotalRows: rows.length, liveSheetName }),
+        body: JSON.stringify({ mode: "finish", expectedTotalRows: rows2.length, liveSheetName }),
       });
       const finishData = await finishRes.json();
       if (!finishData.ok) throw new Error(finishData.error || "마무리 실패");
 
-      setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요.`);
+      setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요. (${originalRows.length - 3}개 품목, 원본 ${originalRows[0]?.length || 0}열 → 압축 ${rows2[3]?.length || 0}열)`);
     } catch (e: any) {
       setStyleSheetError(e?.message || "업로드 실패");
       setStyleSheetProgress("");

@@ -7,6 +7,20 @@
 
 type AmountRow = { date: string; storeName: string; amount: number };
 
+// MARK 6.74: Daily_Sales_History의 date 필드가 "2026-08-03"(하이픈)과 "2026. 7. 5"
+// (점+공백, 예전 데이터) 두 형식으로 섞여있습니다. 문자열로 그냥 비교(>,<)하면 "."이
+// "-"보다 문자코드가 커서 예전 형식이 최신으로 잘못 판정되는 버그가 있었습니다
+// (store-stock-lookup/route.ts에서 처음 발견, MARK 6.67.1). 날짜를 비교/정렬하는 모든
+// 곳은 이 함수를 거쳐서 "YYYY-MM-DD" 형식으로 정규화한 뒤 비교해야 합니다.
+export function normalizeDateKey(d: any): string {
+  const s = String(d ?? "").trim();
+  const kr = s.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if (kr) {
+    return `${kr[1]}-${kr[2].padStart(2, "0")}-${kr[3].padStart(2, "0")}`;
+  }
+  return s;
+}
+
 export function mergeStoreDailyAmounts(
   primaryRows: AmountRow[],
   fallbackRows: AmountRow[],

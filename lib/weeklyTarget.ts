@@ -138,10 +138,18 @@ async function readLiveWeeklyTargetSnapshot() {
 }
 
 // 스냅샷을 Weekly_Target_History / Monthly_Target_History에 upsert합니다(같은 주차/월+매장이면 최신값으로 교체).
-export async function captureWeeklyTargetSnapshot() {
-  const live = await readLiveWeeklyTargetSnapshot();
-  if (!live) return { ok: false, reason: "일_전일 시트에서 유효한 주간목표를 읽지 못했습니다." };
+// MARK 6.74: 저장 로직 자체를 재사용 가능하게 분리했습니다 — "일_전일" 시트에서 읽어오든(기존),
+// SL1030(ERP 목표대비실적 화면)에서 읽어오든(신규, target-refresh.js) 이 함수 하나로 저장합니다.
+type LiveWeeklyTarget = {
+  weekMonday: string;
+  monthKey: string;
+  refreshedDate: string;
+  baseDate: string;
+  companyTotal: { weekTarget: number; weekActual: number; monthTarget: number } | null;
+  stores: { storeName: string; weekTarget: number; weekActual: number; monthTarget: number }[];
+};
 
+export async function saveWeeklyTargetSnapshot(live: LiveWeeklyTarget) {
   const historyId = getHistorySheetId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
@@ -192,6 +200,12 @@ export async function captureWeeklyTargetSnapshot() {
     hasCompanyTotal: !!live.companyTotal,
     monthlySaved,
   };
+}
+
+export async function captureWeeklyTargetSnapshot() {
+  const live = await readLiveWeeklyTargetSnapshot();
+  if (!live) return { ok: false, reason: "일_전일 시트에서 유효한 주간목표를 읽지 못했습니다." };
+  return saveWeeklyTargetSnapshot(live);
 }
 
 // 특정 주(월요일 기준)의 저장된 목표를 조회합니다. 없으면 null(=화면에서 "-" 처리).

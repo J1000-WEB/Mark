@@ -1538,11 +1538,14 @@ function storeSummaryFromRecords(records: any[], storeRecords: any[], basis: str
 }
 
 /**
- * 주간 대시보드의 상품 TOP은 현재 금주/전주 시트에서만 읽는다.
- * 화면 조회가 Weekly_History를 다시 쓰거나 대용량 점포 상세 시트를 읽지 않도록 분리한다.
+ * 주간 대시보드의 상품 TOP.
+ * MARK 6.74: 예전엔 "금주/전주" 시트에서만 읽었는데(주 1회 갱신이라 최대 6일 지연 가능),
+ * 이제 aggregateWeeklyFromDailyHistory()가 만드는 것과 완전히 같은 형태(SalesAgg map)를
+ * 받도록 바꿔서 Daily_Sales_History(매일 갱신) 기준으로 계산합니다. aggregate 구조가
+ * 우연히 productSummaryFromWeeklyPrice가 기대하던 입력과 호환되어서, 아래 로직 자체는
+ * 거의 그대로 두고 "어디서 aggregate를 받아오는지"만 바꿨습니다.
  */
-function productSummaryFromWeeklyPrice(rows: Row[]) {
-  const aggregate = aggregateWeeklyPriceSheet(rows, "style");
+function productSummaryFromDailyHistory(aggregate: { current: Map<string, SalesAgg>; previous: Map<string, SalesAgg>; productNames: Map<string, string> }) {
   const current = aggregate.current;
   const previous = aggregate.previous;
   const productNames = aggregate.productNames;
@@ -1681,18 +1684,12 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const historyId = getHistorySheetId();
   const requested = explicitWeekInfo(requestedWeek);
 
-  // B2 기준일과 상품 TOP은 금주/전주 시트에서 한 번만 읽는다.
-  // 45초 캐시가 동일 화면의 중복 요청을 막고, 실시간 갱신(refresh) 때만 원본을 강제 재조회한다.
-  const currentWeeklyRaw = await readFirstAvailableSheet(
-    [mainId, dbId, historyId].filter(Boolean),
-    ["금주전주", "금주/전주", "금주 전주"],
-    "A:AZ",
-    { refresh: options.refresh }
-  );
-  const b2Date = parseDate(currentWeeklyRaw.rows?.[1]?.[1]);
-  const b2Basis = b2Date ? isoDate(mondayOfWeek(b2Date)) : "";
+  // MARK 6.74: B2 기준일과 상품 TOP을 예전엔 "금주/전주" 시트에서 읽었는데(주 1회 갱신이라
+  // 최대 6일 지연 가능), 이제 getSalesDataPayload와 같은 방식으로 "오늘(KST) 기준 월요일"을
+  // 기준일로 쓰고, 상품 TOP도 Daily_Sales_History에서 직접 집계합니다(매일 갱신, 지연 없음).
+  const b2Basis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));
 
-  const selected = requested || (b2Basis ? weekInfoFromMonday(parseSelectedMonday(b2Basis) || new Date(b2Basis)) : weekInfoFromMonday(mondayOfWeek(new Date())));
+  const selected = requested || weekInfoFromMonday(parseSelectedMonday(b2Basis) || new Date(b2Basis));
   const dailyStoreRaw = await readFirstAvailableSheet(
     [dbId, mainId, historyId].filter(Boolean),
     ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"],
@@ -1730,12 +1727,10 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
     companyTarget: savedMonthlyTarget?.companyTarget || 0,
   };
 
-  // 금주/전주 시트의 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다.
+  // MARK 6.74: 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다(Daily_Sales_History 직접 집계).
   // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
-  // 단, "실시간 갱신"(options.refresh)을 명시적으로 눌렀을 때는 현재 보고 있는 주차 문자열이
-  // b2Basis와 미묘하게 안 맞더라도(공백/포맷 차이 등) 항상 라이브 데이터를 보여준다.
   const productSummary = !requested || requested.week === b2Basis || options.refresh
-    ? productSummaryFromWeeklyPrice(currentWeeklyRaw.rows || [])
+    ? productSummaryFromDailyHistory(await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd))
     : { companyTopProducts: [] as any[], storeTopProducts: {} as Record<string, any[]> };
   const aggregation = {
     source: "MARK_DB / 일간매출(26년)",
@@ -1787,15 +1782,15 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
     inventory: {},
     sources: {
       primary: "MARK_DB / 일간매출(26년)",
-      currentWeeklySheet: currentWeeklyRaw.sheetName || "선택 주차 직접 조회",
+      currentWeeklySheet: "Daily_Sales_History 직접 집계",
       dailyStoreSalesSheet: dailyStoreRaw.sheetName || "not found",
       storeDashboardSource: "MARK_DB / 일간매출(26년)",
-      basisCell: "금주/전주!B2",
-      basisRule: requested ? "선택한 기준 월요일 우선" : "금주/전주!B2 월요일 고정",
+      basisCell: "오늘(KST) 기준 월요일",
+      basisRule: requested ? "선택한 기준 월요일 우선" : "오늘(KST) 기준 월요일 고정",
       b2Basis,
       effectiveBasis: selected.week,
       latestDailyStoreDate: latestRecordDateFromDailyStoreRows(dailyStoreRows) ? isoDate(latestRecordDateFromDailyStoreRows(dailyStoreRows)!) : "",
-      productTopSource: productSummary.companyTopProducts.length ? "금주/전주 현재 주차" : "과거 주차는 Weekly_Snapshot 저장본 사용",
+      productTopSource: productSummary.companyTopProducts.length ? "Daily_Sales_History 현재 주차" : "과거 주차는 Weekly_Snapshot 저장본 사용",
       aggregation,
     },
   };

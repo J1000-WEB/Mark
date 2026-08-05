@@ -10,6 +10,8 @@ import {
 } from "@/lib/googleSheets";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { loadChannelMaster, isOnlineType, seedUnknownChannels, type ChannelType } from "@/lib/channelMaster";
+import { expandStyleChannelRows } from "@/lib/styleChannelCompact";
+import { normalizeDateKey } from "@/lib/storeDailyAmount";
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -189,8 +191,13 @@ export async function readDailySalesFromMarkDb() {
   const sheetName = pickDailySheetTitle(titles);
   if (!sheetName) throw new Error("MARK_DB에서 스타일별 채널별 입고판매재고현황 시트를 찾지 못했습니다.");
 
-  const rows = await getSheetValuesById(spreadsheetId, sheetName, "A:ZZ");
-  if (rows.length < 4) throw new Error(`${sheetName} 데이터가 부족합니다.`);
+  const rawRows = await getSheetValuesById(spreadsheetId, sheetName, "A:ZZ");
+  if (rawRows.length < 4) throw new Error(`${sheetName} 데이터가 부족합니다.`);
+  // MARK 6.73: InventoryDashboard.tsx가 업로드 전에 compactStyleChannelRows로 압축해서 올리므로,
+  // 여기서 원래(594열) 모양으로 되돌린 뒤에 파싱합니다. 이 expand를 빼먹으면 헤더(1~3행)는
+  // 그대로라 정상으로 보이는데, 데이터 행(4행부터)은 31칸짜리라 채널 값이 전부 0으로 읽힙니다
+  // (실제로 이 버그가 났었고, 일간탭 "일간 판매수량/금액 0"으로 나타났음 — 여기서 고침).
+  const rows = expandStyleChannelRows(rawRows);
 
   return parseDailySalesRows(rows, sheetName);
 }
@@ -404,7 +411,7 @@ export function expandCompactDailyHistoryRows(rows: any[][]): FlatDailyHistoryRo
 
     for (const item of items) {
       out.push({
-        date,
+        date: normalizeDateKey(date),
         storeName,
         styleCode: text(item?.styleCode),
         productName: text(item?.productName),
@@ -438,7 +445,7 @@ function expandLegacyDailyHistoryRows(rows: any[][]): FlatDailyHistoryRow[] {
 
   return rows.slice(1)
     .map((row) => ({
-      date: text(row[dateCol]),
+      date: normalizeDateKey(text(row[dateCol])),
       storeName: text(row[storeCol]),
       styleCode: text(row[styleCol]),
       productName: text(row[productCol]),

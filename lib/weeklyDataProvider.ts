@@ -11,6 +11,7 @@ import {
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { expandStyleChannelRows } from "@/lib/styleChannelCompact";
 
 type SalesType = "style" | "color";
 type Row = any[];
@@ -1384,7 +1385,10 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
   const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
   const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
   const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
-  const productMaps = buildProductMaster(productRaw.rows);
+  // MARK 6.73: 업로드 쪽(InventoryDashboard.tsx)에서 compactStyleChannelRows로 압축해서 올리므로,
+  // 읽을 때 원래(594열) 모양으로 되돌립니다. buildProductMaster는 이 사실을 몰라도 되게(원본과
+  // 완전히 동일한 열 위치로 복원되므로) 그대로 둡니다.
+  const productMaps = buildProductMaster(expandStyleChannelRows(productRaw.rows));
   mergeOnOffStock(stockRaw.rows, productMaps);
   // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
   const styleAgg = await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd);

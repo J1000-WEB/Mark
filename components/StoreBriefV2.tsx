@@ -56,6 +56,20 @@ function formatStockUpdatedAt(iso: string): string {
   }
 }
 
+// MARK 6.74: 사이즈 표시 순서를 S,M,L,XL,F 순으로 정렬합니다. (기존엔 그냥 알파벳순이라
+// F,L,M,S,XL로 뒤죽박죽 나왔음 — daily-snapshot.js의 SIZE_SLOT_MAP은 저장용 슬롯 순서일 뿐,
+// 화면 표시 순서는 따로 정해야 해서 여기서 정렬 규칙을 둡니다.)
+const SIZE_DISPLAY_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL", "F"];
+function sizeSortRank(size: string): number {
+  const s = String(size || "").trim().toUpperCase();
+  const idx = SIZE_DISPLAY_ORDER.indexOf(s);
+  if (idx >= 0) return idx;
+  // 숫자 사이즈(신발 등)는 숫자값 순으로, 목록에 없는 문자 사이즈는 맨 뒤로
+  const n = Number(s);
+  if (Number.isFinite(n) && s !== "") return 1000 + n;
+  return 9999;
+}
+
 function man(n: number) {
   return `${(Math.round((n || 0) / 10000 * 10) / 10).toFixed(1)}만원`;
 }
@@ -364,7 +378,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
                   <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
                     {c.sizes
                       .slice()
-                      .sort((a: any, b: any) => a.size.localeCompare(b.size))
+                      .sort((a: any, b: any) => sizeSortRank(a.size) - sizeSortRank(b.size))
                       .map((s: any, si: number) => (
                         <span
                           key={si}

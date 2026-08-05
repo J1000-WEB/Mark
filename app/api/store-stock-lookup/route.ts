@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
 import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
 import { normalizeStoreKey } from "@/lib/dataBuilder";
+import { normalizeDateKey } from "@/lib/storeDailyAmount";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,14 +13,9 @@ const GI_BOARD_BASE = "https://gi-board.vercel.app/api/archive";
 // (점+공백, 예전 데이터) 두 가지가 섞여있어서, 그냥 문자열로 비교하면 "."이 "-"보다
 // 문자코드가 커서 예전 날짜가 최신으로 잘못 판정되는 버그가 있었습니다. 비교 전에
 // 항상 "YYYY-MM-DD" 형식으로 정규화해서 비교합니다.
-function normalizeDateKey(d: string): string {
-  const s = String(d || "").trim();
-  const kr = s.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
-  if (kr) {
-    return `${kr[1]}-${kr[2].padStart(2, "0")}-${kr[3].padStart(2, "0")}`;
-  }
-  return s;
-}
+// MARK 6.74: 이 정규화 함수는 lib/storeDailyAmount.ts로 옮겨서 공용화했습니다 — 같은 버그가
+// 의심되던 다른 5곳(dailyBriefing.ts, dataBuilder.ts, weeklyDataProvider.ts, vmdCrossCheck.ts,
+// salesDataUpload.ts, specialOfferWeek.ts)도 전부 이 함수를 가져다 쓰도록 통일했습니다.
 
 // MARK 6.66: "사이즈"처럼 보이는 값인지 판별합니다. 2026-08-03 이전 데이터는 사이즈 컬럼이
 // 없어서 판매가 숫자가 잘못 들어가 있는 경우가 있어(별도 공유된 이슈), 그런 값은

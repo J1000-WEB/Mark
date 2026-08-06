@@ -104,6 +104,97 @@ function TrendMini({ trend }: { trend: { date: string; amount: number; companyAm
   );
 }
 
+// MARK 6.79: "판매가이드" — gi-board product360의 selling 블록(셀링포인트/소재/핏/케어)을
+// 보여줍니다. 부진상품 응대할 때 "왜 좋은지" 바로 읽을 수 있게.
+function SellingGuideInline({ styleCode }: { styleCode: string }) {
+  const [data, setData] = useState<any>(null);
+  const [status, setStatus] = useState("불러오는 중...");
+
+  useEffect(() => {
+    setData(null);
+    setStatus("불러오는 중...");
+    fetch(`/api/product360?code=${encodeURIComponent(styleCode)}&include=selling`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) {
+          setStatus(d.error || "불러오기 실패");
+          return;
+        }
+        const selling = d.selling;
+        if (!selling || !selling.found) {
+          setStatus(selling?.reason || "이 품번엔 판매가이드가 없어요 (액세서리/부자재 등은 원래 없을 수 있어요).");
+          return;
+        }
+        setData(selling);
+        setStatus("");
+      })
+      .catch((e) => setStatus(e?.message || "불러오기 실패"));
+  }, [styleCode]);
+
+  return (
+    <div style={{ marginTop: 10, background: "#FFFBEB", border: "1.5px dashed #F59E0B55", borderRadius: 14, padding: 14 }}>
+      {status && <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{status}</p>}
+      {data && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {data.selling?.headline && <p style={{ fontSize: 14, fontWeight: 800, margin: 0, color: "#92400E" }}>{data.selling.headline}</p>}
+          {data.selling?.fabric && <p style={{ fontSize: 12, margin: 0, color: "#78716C" }}>소재: {data.selling.fabric}</p>}
+          {data.selling?.fit && <p style={{ fontSize: 12, margin: 0, color: "#78716C" }}>핏: {data.selling.fit}</p>}
+          {Array.isArray(data.selling?.chips) && data.selling.chips.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {data.selling.chips.map((c: any, i: number) => (
+                <span key={i} style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#FEF3C7", color: "#92400E" }}>
+                  {c.label} {c.value}
+                </span>
+              ))}
+            </div>
+          )}
+          {data.selling?.care && <p style={{ fontSize: 12, margin: 0, color: "#78716C" }}>케어: {data.selling.care}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// MARK 6.79: "대체상품 추천" — gi-board의 검증된 VMD 대체후보 로직을 그대로 씁니다
+// (양쪽 매장 재고 2장↑, 슬롯 어휘 일치 등 검증을 이미 거친 결과).
+function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string; storeName: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [status, setStatus] = useState("불러오는 중...");
+
+  useEffect(() => {
+    fetch(`/api/vmd-directives?store=${encodeURIComponent(storeName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) {
+          setStatus(d.error || "불러오기 실패");
+          return;
+        }
+        const matched = (d.items || []).filter((it: any) => String(it.sku || "").startsWith(styleCode));
+        setItems(matched);
+        setStatus(matched.length ? "" : "이 매장엔 검증된 대체후보가 아직 없어요.");
+      })
+      .catch((e) => setStatus(e?.message || "불러오기 실패"));
+  }, [styleCode, storeName]);
+
+  return (
+    <div>
+      {status && <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{status}</p>}
+      {items.map((it: any, i: number) => (
+        <div key={i} style={{ marginBottom: 8 }}>
+          {(it.candidates || []).map((c: any, ci: number) => (
+            <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+              <ProductThumb styleCode={c.style} size={48} />
+              <div style={{ fontSize: 13 }}>
+                <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CoordinationInline({ styleCode, storeName }: { styleCode: string; storeName: string }) {
   const [items, setItems] = useState<any[]>([]);
   const [status, setStatus] = useState("불러오는 중...");
@@ -178,12 +269,14 @@ function StockLookupSection({ storeName }: { storeName: string }) {
   const [scanning, setScanning] = useState(false);
   const [showAlt, setShowAlt] = useState(false);
   const [showCoord, setShowCoord] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   async function lookup(params: { styleCode?: string; barcode?: string }) {
     setStatus("조회 중...");
     setResult(null);
     setShowAlt(false);
     setShowCoord(false);
+    setShowGuide(false);
     try {
       const qs = new URLSearchParams({ store: storeName, ...(params.styleCode ? { styleCode: params.styleCode } : { barcode: params.barcode || "" }) });
       const res = await fetch(`/api/store-stock-lookup?${qs.toString()}`, { cache: "no-store" });
@@ -332,35 +425,40 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800 }}>품번으로 컬러별 재고 바로 확인</h2>
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <input
           value={styleCodeInput}
           onChange={(e) => setStyleCodeInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && lookup({ styleCode: styleCodeInput })}
           placeholder="품번 입력 (예: GF1LPT501)"
-          style={{ flex: 1, padding: "14px 16px", borderRadius: 14, border: "1px solid #E2E8F0", fontSize: 15 }}
+          style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: "1px solid #E2E8F0", fontSize: 15 }}
         />
-        <button
-          onClick={() => lookup({ styleCode: styleCodeInput })}
-          style={{ padding: "0 22px", borderRadius: 14, border: "none", background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 800 }}
-        >
-          조회
-        </button>
-        {!scanning ? (
+        {/* MARK 6.78: 조회/바코드 버튼이 입력창이랑 한 줄에 있으면 좁은 화면(440px)에서
+            바코드 버튼이 잘려 보이는 문제가 있어서, 버튼들은 아래 줄로 내리고 각각 절반씩
+            차지하게 정리했습니다. */}
+        <div style={{ display: "flex", gap: 8 }}>
           <button
-            onClick={() => setScanning(true)}
-            style={{ padding: "0 20px", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
+            onClick={() => lookup({ styleCode: styleCodeInput })}
+            style={{ flex: 1, padding: "13px 0", borderRadius: 14, border: "none", background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 800 }}
           >
-            📷 바코드
+            조회
           </button>
-        ) : (
-          <button
-            onClick={stopScan}
-            style={{ padding: "0 20px", borderRadius: 14, border: "1.5px solid #EF4444", background: "#fff", color: "#EF4444", fontSize: 14, fontWeight: 800 }}
-          >
-            취소
-          </button>
-        )}
+          {!scanning ? (
+            <button
+              onClick={() => setScanning(true)}
+              style={{ flex: 1, padding: "13px 0", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
+            >
+              📷 바코드
+            </button>
+          ) : (
+            <button
+              onClick={stopScan}
+              style={{ flex: 1, padding: "13px 0", borderRadius: 14, border: "1.5px solid #EF4444", background: "#fff", color: "#EF4444", fontSize: 14, fontWeight: 800 }}
+            >
+              취소
+            </button>
+          )}
+        </div>
       </div>
 
       {scanning && <div id="barcode-reader" style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 16, overflow: "hidden" }} />}
@@ -377,7 +475,9 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               </span>
             )}
           </div>
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10 }}>
+          {/* MARK 6.78: 컬러 카드를 2x2 그리드 대신 한 줄씩 세로로 쭉 쌓아서 보여줍니다
+              (좁은 화면에서 2x2보다 한 줄씩이 더 잘 읽힌다는 피드백 반영). */}
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
             {result.colors.map((c: any, i: number) => (
               <div
                 key={i}
@@ -386,17 +486,23 @@ function StockLookupSection({ storeName }: { storeName: string }) {
                   padding: "14px 16px",
                   background: c.scanned ? `${ACCENT}12` : "#F8FAFC",
                   border: c.scanned ? `1.5px solid ${ACCENT}` : "1px solid #EDF0F5",
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 10,
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{c.colorName || c.colorCode}</div>
+                <div style={{ minWidth: 76 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{c.colorName || c.colorCode}</div>
+                  {c.stock !== -1 && <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>}
+                </div>
                 {c.stock === -1 ? (
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8", marginTop: 4 }}>이 매장 정보 없음</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8" }}>이 매장 정보 없음</div>
                 ) : (
                   <div style={{ fontSize: 22, fontWeight: 800, color: c.stock > 0 ? "#059669" : "#DC2626" }}>{c.stock}개</div>
                 )}
-                {c.stock !== -1 && <div style={{ fontSize: 11, color: "#94A3B8" }}>{c.asOfDate} 기준</div>}
                 {c.sizes && c.sizes.length > 0 && (
-                  <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1, justifyContent: "flex-end" }}>
                     {c.sizes
                       .slice()
                       .sort((a: any, b: any) => sizeSortRank(a.size) - sizeSortRank(b.size))
@@ -421,31 +527,43 @@ function StockLookupSection({ storeName }: { storeName: string }) {
             ))}
           </div>
 
-          {/* MARK 6.76: 재고 카드 아래에 항상 버튼으로(재고 0일 때만이 아니라) 대체상품/코디 추천에
-              접근할 수 있게 합니다. */}
+          {/* MARK 6.79: "대체상품 추천"은 이제 우리가 직접 만든 규칙이 아니라 gi-board의
+              검증된 VMD 대체후보 로직(/api/archive/vmd)을 그대로 씁니다 — 이사님 안내에 따르면
+              양쪽 매장 재고 2장↑, 슬롯 어휘 일치, 방향성 확률 하한 같은 검증을 이미 거친
+              결과라서, 저희가 직접 조립하면(예전엔 "같은 품번 다른 컬러 재고"로 임시 대체)
+              조건 하나 빠뜨려도 몰라요(이사님 쪽 7월 사고 사례 — 590건 오탐). */}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button
-              onClick={() => { setShowAlt((v) => !v); setShowCoord(false); }}
-              style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showAlt ? ACCENT : "#fff", color: showAlt ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
+              onClick={() => { setShowGuide((v: boolean) => !v); setShowAlt(false); setShowCoord(false); }}
+              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showGuide ? ACCENT : "#fff", color: showGuide ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
+            >
+              🏷️ 판매가이드
+            </button>
+            <button
+              onClick={() => { setShowAlt((v: boolean) => !v); setShowGuide(false); setShowCoord(false); }}
+              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showAlt ? ACCENT : "#fff", color: showAlt ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
             >
               🔄 대체상품 추천
             </button>
             <button
-              onClick={() => { setShowCoord((v) => !v); setShowAlt(false); }}
-              style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showCoord ? ACCENT : "#fff", color: showCoord ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
+              onClick={() => { setShowCoord((v: boolean) => !v); setShowGuide(false); setShowAlt(false); }}
+              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showCoord ? ACCENT : "#fff", color: showCoord ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
             >
-              👗 코디네이션 추천
+              👗 코디네이션
             </button>
           </div>
 
+          {showGuide && <SellingGuideInline styleCode={result.styleCode} />}
+
           {showAlt && (
             <div style={{ marginTop: 10, background: "#FAFBFF", border: `1.5px dashed ${ACCENT}55`, borderRadius: 14, padding: 14 }}>
+              <AlternativeProductsInline styleCode={result.styleCode} storeName={storeName} />
               {(() => {
                 const inStock = (result.colors || []).filter((c: any) => Number(c.stock || 0) > 0);
-                if (!inStock.length) return <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>이 매장엔 대체 가능한(재고 있는) 다른 컬러가 없어요.</p>;
+                if (!inStock.length) return null;
                 return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>같은 품번, 재고 있는 다른 컬러예요:</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #E2E8F0" }}>
+                    <p style={{ fontSize: 11, color: "#94A3B8", margin: 0 }}>참고 — 같은 품번, 이 매장에 재고 있는 다른 컬러예요:</p>
                     {inStock.map((c: any, i: number) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <ProductThumb styleCode={result.styleCode} size={40} />

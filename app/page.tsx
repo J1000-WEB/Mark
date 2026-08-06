@@ -1,2 +1,5 @@
-import { redirect } from "next/navigation";
-export default function Home() { redirect("/weekly"); }
+import SalesDataDashboard from "@/components/SalesDataDashboard";
+
+export default function Page() {
+  return <SalesDataDashboard />;
+}

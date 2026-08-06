@@ -16,9 +16,14 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const code = url.searchParams.get("code") || "";
+    // MARK 6.79: 이사님 쪽에서 새 창구를 열어주셨어요 — include=selling,size,stores 로
+    // 셀링포인트(판매가이드)/사이즈 원장/매장별 재고를 한 번에 받아올 수 있습니다.
+    // include는 code(품번 단건) 조회에서만 동작하므로, code 없을 때는 안 붙입니다.
+    const include = url.searchParams.get("include") || "";
 
     const target = new URL(`${GI_BOARD_BASE}/product360`);
     if (code) target.searchParams.set("code", code);
+    if (code && include) target.searchParams.set("include", include);
 
     const res = await fetch(target.toString(), {
       headers: { "x-archive-token": token },

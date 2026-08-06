@@ -2,6 +2,7 @@ import {
   ensureSheetExistsById,
   getDbSheetId,
   getDailySourceSheetId,
+  getDailyStoreSalesSheetId,
   getHistorySheetId,
   getWeeklyHistorySheetId,
   getSheetId,
@@ -1690,8 +1691,10 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const b2Basis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));
 
   const selected = requested || weekInfoFromMonday(parseSelectedMonday(b2Basis) || new Date(b2Basis));
+  // MARK 6.75: "일간매출(26년)"을 이제 전용 스프레드시트(getDailyStoreSalesSheetId)에서 먼저
+  // 찾습니다. 전환 기간이라 기존 MARK_DB 등도 계속 후보로 남겨둡니다(새 소스에 없으면 구 소스로 폴백).
   const dailyStoreRaw = await readFirstAvailableSheet(
-    [dbId, mainId, historyId].filter(Boolean),
+    [getDailyStoreSalesSheetId(), dbId, mainId, historyId].filter(Boolean),
     ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"],
     "A:ZZ",
     { refresh: options.refresh }

@@ -41,6 +41,13 @@ export function getDailySourceSheetId() {
   return process.env.GOOGLE_SHEET_ID_DAILY_SOURCE || getDbSheetId();
 }
 
+// MARK 6.75: "일간매출(26년)" 시트를 이제부터 이 스프레드시트에서 관리합니다(소천님이 여기에
+// 직접 업로드). 전환 기간이라 기존 소스(MARK_DB 등)도 계속 후보로 남겨두고, 이 새 소스를
+// 먼저 확인하도록 readFirstAvailableSheet 후보 목록의 맨 앞에 둡니다.
+export function getDailyStoreSalesSheetId() {
+  return process.env.GOOGLE_SHEET_ID_DAILY_STORE_SALES || "1qYtrQjtk_Oy0TZg0cEjSDVgHY7y_SnE8ps_qPMn7pB0";
+}
+
 export function getHistorySheetId() {
   const id = process.env.GOOGLE_SHEET_ID_HISTORY || process.env.GOOGLE_HISTORY_SHEET_ID;
   if (!id) throw new Error("GOOGLE_SHEET_ID_HISTORY is not set");

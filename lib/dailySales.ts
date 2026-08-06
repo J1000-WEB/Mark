@@ -334,6 +334,78 @@ export async function parseDailySalesRows(rows: any[][], sheetName = "업로드 
 
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 
+// MARK 6.75: "오늘 판매 TOP상품/채널TOP/결품위험" 위젯(GET /api/daily-sales)이 "스타일별
+// 채널별..." 시트의 "일간" 컬럼을 직접 읽고 있었는데, 같은 일간탭 안의 "매장별 일매출 순위"
+// (Daily_Sales_History 기반)랑 숫자가 미묘하게 달라서 혼란스러운 문제가 있었습니다
+// (예: 롯데백화점 광복점 4,223,200원 vs 4,321,400원). "같은 팩트는 하나의 소스"
+// 원칙에 맞춰, 이제 이 위젯도 Daily_Sales_History를 직접 읽어서 같은 숫자를 보여줍니다.
+// (⚠ readDailySalesFromMarkDb()는 "일간 스냅샷 저장" 버튼이 "스타일별 채널별..." 시트를
+// Daily_Sales_History로 백필하는 데 계속 쓰이므로 그대로 둡니다 — 여긴 표시 전용 신규 함수.)
+export async function readDailySalesFromHistory() {
+  const historyId = getHistorySheetId();
+  const raw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
+
+  const today = ymdKST();
+  const todayRows = flatRows.filter((r) => normalizeDateKey(r.date) === today);
+
+  const totalDailySales = todayRows.reduce((sum, r) => sum + num(r.qty), 0);
+  const totalDailyAmount = todayRows.reduce((sum, r) => sum + num(r.amount), 0);
+  const activeChannels = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.storeName)).size;
+  const activeProducts = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.styleCode)).size;
+
+  const topProducts = Array.from(
+    todayRows.reduce((map, r) => {
+      const key = `${r.styleCode}__${r.productName}`;
+      if (!map.has(key)) map.set(key, { styleCode: r.styleCode, productName: r.productName, dailySales: 0, dailyAmount: 0, stock: 0 });
+      const bucket = map.get(key);
+      bucket.dailySales += num(r.qty);
+      bucket.dailyAmount += num(r.amount);
+      bucket.stock += num(r.stock);
+      return map;
+    }, new Map()).values()
+  ).sort((a: any, b: any) => b.dailySales - a.dailySales).slice(0, 30);
+
+  // MARK 6.75: 예전엔 "채널"이 스타일별채널별 시트의 109개 세부 채널(온라인 하위채널 포함)
+  // 이었지만, Daily_Sales_History는 오프라인 매장 단위로만 기록되므로 여기서는
+  // "채널 TOP" = "매장 TOP"이 됩니다 (오프라인 매장만 관리하는 MARK 설계와 일치).
+  const topChannels = Array.from(
+    todayRows.reduce((map, r) => {
+      const key = r.storeName;
+      if (!map.has(key)) map.set(key, { channelName: key, dailySales: 0, dailyAmount: 0, skuCount: new Set() });
+      const bucket = map.get(key);
+      bucket.dailySales += num(r.qty);
+      bucket.dailyAmount += num(r.amount);
+      if (num(r.qty) > 0) bucket.skuCount.add(r.styleCode);
+      return map;
+    }, new Map()).values()
+  ).map((x: any) => ({ ...x, skuCount: x.skuCount.size }))
+   .sort((a: any, b: any) => b.dailySales - a.dailySales)
+   .slice(0, 30);
+
+  const stockoutRisk = topProducts
+    .filter((item: any) => item.dailySales > 0 && item.stock <= item.dailySales * 2)
+    .slice(0, 20);
+
+  return {
+    source: "Daily_Sales_History",
+    sheetName: DAILY_HISTORY_SHEET,
+    sourceDate: today,
+    generatedAt: new Date().toISOString(),
+    itemCount: todayRows.length,
+    allItemCount: todayRows.length,
+    totalDailySales,
+    totalDailyAmount,
+    activeChannels,
+    activeProducts,
+    topProducts,
+    topChannels,
+    stockoutRisk,
+    items: todayRows,
+    allItems: todayRows,
+  };
+}
+
 // MARK 6.6: 데이터 폭증 방지를 위해 "일자+점포"당 한 줄만 쓰고,
 // 품번/칼라/사이즈 상세는 JSON 문자열 하나에 몰아서 저장합니다.
 // 기존 방식(조합마다 한 줄, 하루 약 2만 셀)보다 셀 수가 대폭 줄어듭니다.

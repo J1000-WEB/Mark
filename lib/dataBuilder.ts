@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
@@ -2944,12 +2944,17 @@ function parseDailySalesSheetRows(rows: any[][]) {
 }
 
 export async function loadDailyStoreSalesFromMarkDb() {
-  const dbId = getDailySourceSheetId();
-  const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
-  const sheetName = pickNormalizedTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "일간매출(26년)");
-  if (!sheetName || !titles.includes(sheetName)) return { sheetName: "", rows: [] as any[] };
-  const values = await getSheetValuesById(dbId, sheetName, "A:ZZ").catch(() => []);
-  return { sheetName, rows: parseDailySalesSheetRows(values || []) };
+  // MARK 6.75: "일간매출(26년)"을 이제 전용 스프레드시트(getDailyStoreSalesSheetId)에서 먼저
+  // 찾습니다. 전환 기간이라 기존 소스도 계속 후보로 남겨둡니다.
+  const candidates = [getDailyStoreSalesSheetId(), getDailySourceSheetId()];
+  for (const dbId of candidates) {
+    const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
+    const sheetName = pickNormalizedTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"], "일간매출(26년)");
+    if (!sheetName || !titles.includes(sheetName)) continue;
+    const values = await getSheetValuesById(dbId, sheetName, "A:ZZ").catch(() => []);
+    if (values && values.length) return { sheetName, rows: parseDailySalesSheetRows(values) };
+  }
+  return { sheetName: "", rows: [] as any[] };
 }
 
 function latestStoreSalesDate(rows: any[]) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDbSheetId, getSheetValues, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
+import { getDbSheetId, getDailyStoreSalesSheetId, getSheetValues, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -119,11 +119,20 @@ function parseVmdSchedule(rows: any[][]) {
 }
 
 async function loadStoreListFromDailySales() {
-  const dbId = getDbSheetId();
-  const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
-  const sheetName = pickTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales"], "일간매출(26년)");
-  if (!sheetName) return { sheetName: "", stores: [] as string[] };
-  const rows = await getSheetValuesById(dbId, sheetName, "A:ZZ").catch(() => []);
+  // MARK 6.75: "일간매출(26년)"을 이제 전용 스프레드시트에서 먼저 찾습니다 (전환기간 병행).
+  const candidates = [getDailyStoreSalesSheetId(), getDbSheetId()];
+  for (const dbId of candidates) {
+    const titles = await getSpreadsheetTitlesById(dbId).catch(() => []);
+    const sheetName = pickTitle(titles, ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales"], "일간매출(26년)");
+    if (!sheetName) continue;
+    const rows = await getSheetValuesById(dbId, sheetName, "A:ZZ").catch(() => []);
+    if (!rows || !rows.length) continue;
+    return loadStoreListFromRows(dbId, sheetName, rows);
+  }
+  return { sheetName: "", stores: [] as string[] };
+}
+
+async function loadStoreListFromRows(dbId: string, sheetName: string, rows: any[][]) {
   const metaLimit = Math.min(rows.length, 20);
   let teamRow = -1;
   for (let r = 0; r < metaLimit; r++) {

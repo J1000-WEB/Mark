@@ -70,7 +70,7 @@ async function loadDailyFlatRows() {
   return expandAnyDailyHistoryRows(raw || []);
 }
 
-type FlatRow = { date: string; storeName: string; styleCode: string; productName: string; qty: number; amount: number; stock: number };
+type FlatRow = { date: string; storeName: string; styleCode: string; productName: string; qty: number; amount: number; stock: number; size?: string };
 
 function filterByStore(rows: FlatRow[], storeName?: string) {
   if (!storeName) return rows.filter((r) => isCoreOfflineSalesStore(r.storeName));
@@ -128,6 +128,14 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   const compareAmount = amountForDate(compareDate);
   const changeRate = compareAmount ? ((targetAmount - compareAmount) / compareAmount) * 100 : targetAmount ? 100 : 0;
 
+  // MARK 6.76: "전주 동요일" 비교는 compareDate가 이미 그걸 가리킬 때(금/토/월)만 나왔는데,
+  // 요청대로 요일 상관없이 항상 별도로 계산해서 같이 보여줍니다.
+  const sameWeekdayLastWeek = addDays(targetDate, -7);
+  const sameWeekdayLastWeekAmount = amountForDate(sameWeekdayLastWeek);
+  const sameWeekdayChangeRate = sameWeekdayLastWeekAmount
+    ? ((targetAmount - sameWeekdayLastWeekAmount) / sameWeekdayLastWeekAmount) * 100
+    : targetAmount ? 100 : 0;
+
   const { best, worst } = topProductMovers(scoped, targetDate, compareDate);
 
   const lines: string[] = [];
@@ -135,6 +143,12 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   lines.push(
     `${scopeLabel} ${targetDate} 매출은 ${Math.round(targetAmount).toLocaleString("ko-KR")}원으로, ${compareLabel}(${compareDate}) 대비 ${changeRate >= 0 ? "+" : ""}${changeRate.toFixed(1)}%예요.`
   );
+  // MARK 6.76: 기본 비교대상이 "전주 동요일"이 아닐 때(화~목 등)는 별도로 한 줄 더 보여줍니다.
+  if (compareLabel !== "전주 동요일" && sameWeekdayLastWeekAmount) {
+    lines.push(
+      `전주 동요일(${sameWeekdayLastWeek}) 대비로는 ${sameWeekdayChangeRate >= 0 ? "+" : ""}${sameWeekdayChangeRate.toFixed(1)}%예요.`
+    );
+  }
 
   // MARK 6.26: 연속 추세(모멘텀) — 최근 며칠간 매일 전일 대비 같은 방향(증가/감소)으로 움직였는지 확인.
   {
@@ -222,6 +236,9 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
     targetAmount,
     compareAmount,
     changeRate,
+    sameWeekdayLastWeek,
+    sameWeekdayLastWeekAmount,
+    sameWeekdayChangeRate,
     bestProduct: best || null,
     worstProduct: worst || null,
     weather,
@@ -327,6 +344,10 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     weekTarget = 0;
   }
   const weekProjectedRate = weekTarget ? (weekProjected / weekTarget) * 100 : 0;
+  // MARK 6.76: "목표까지 필요한 하루 평균 매출" — 남은 기간 동안 하루에 얼마씩 팔아야 목표를 채우는지.
+  const weekRemainingDays = futureDates.length;
+  const weekRemainingAmount = Math.max(0, weekTarget - weekCumulative);
+  const weekRequiredDailyAvg = weekRemainingDays > 0 ? weekRemainingAmount / weekRemainingDays : 0;
 
   // ---- STEP2 이번달 누계/예상달성 ----
   const { start: monthStart, end: monthEnd } = getMonthRange(targetDate);
@@ -341,6 +362,9 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   // 월 목표는 별도 저장본이 없어서, 주간목표 × (이번달 일수/7)로 추정합니다(추정치임을 명시).
   const monthTargetEstimate = weekTarget ? weekTarget * (monthTotalDays / 7) : 0;
   const monthProjectedRate = monthTargetEstimate ? (monthProjected / monthTargetEstimate) * 100 : 0;
+  const monthRemainingDays = Math.max(0, monthTotalDays - monthElapsedDays);
+  const monthRemainingAmount = Math.max(0, monthTargetEstimate - monthCumulative);
+  const monthRequiredDailyAvg = monthRemainingDays > 0 ? monthRemainingAmount / monthRemainingDays : 0;
 
   // ---- STEP3 전사 TOP10 vs 점포 TOP10 ----
   function top10ForDate(rows: FlatRow[]) {
@@ -364,6 +388,24 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   for (const r of storeRows) {
     if (r.date === targetDate) storeStockLatest.set(r.styleCode, Number(r.stock || 0));
   }
+
+  // MARK 6.76: TOP10 카드에 "이번 주/전주 판매량"도 같이 보여달라는 요청 — 품번별로 이번 주(월~targetDate
+  // 누계)와 전주(같은 요일수만큼) 판매수량을 미리 집계해둡니다.
+  const thisWeekQtyByStyle = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date >= weekStart && r.date <= targetDate) {
+      thisWeekQtyByStyle.set(r.styleCode, (thisWeekQtyByStyle.get(r.styleCode) || 0) + Number(r.qty || 0));
+    }
+  }
+  const prevWeekStart = addDays(weekStart, -7);
+  const prevWeekSameElapsed = addDays(prevWeekStart, weekElapsedDays > 0 ? weekElapsedDays - 1 : 0);
+  const prevWeekQtyByStyle = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date >= prevWeekStart && r.date <= prevWeekSameElapsed) {
+      prevWeekQtyByStyle.set(r.styleCode, (prevWeekQtyByStyle.get(r.styleCode) || 0) + Number(r.qty || 0));
+    }
+  }
+
   const top10Comparison = companyTop10.map((p, i) => {
     const storeRank = storeRankMap.get(p.styleCode) || null;
     const storeMatch = storeTop10.find((s) => s.styleCode === p.styleCode);
@@ -377,6 +419,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
       storeQty: storeMatch ? storeMatch.qty : 0,
       storeStock: storeStockLatest.get(p.styleCode) ?? null,
       diff: storeRank ? i + 1 - storeRank : null,
+      thisWeekQty: thisWeekQtyByStyle.get(p.styleCode) || 0,
+      prevWeekQty: prevWeekQtyByStyle.get(p.styleCode) || 0,
     };
   });
 
@@ -453,6 +497,11 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
       storeLatestStock.set(r.styleCode, { productName: r.productName, stock: Number(r.stock || 0), date: r.date });
     }
   }
+  // MARK 6.76: "신상품 초기 반응" — 입고 후 지금까지 일평균 판매수량을, 최근 14일 이 매장의
+  // "품번당 평균 일판매수량"(일반적인 상품의 평균 페이스)과 비교해서 좋음/보통/저조를 판단합니다.
+  const activeStyleCount14 = new Set(storeRows.filter((r) => r.date >= trendWindowStart14 && r.date <= targetDate && Number(r.qty || 0) > 0).map((r) => r.styleCode)).size;
+  const baselineDailyQtyPerStyle = activeStyleCount14 > 0 ? storeTotalQty14 / activeStyleCount14 / 14 : 0;
+
   const recentArrivals = Array.from(launchMap.entries())
     .filter(([styleCode, launchDate]) => {
       if (!launchDate) return false;
@@ -461,12 +510,25 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
       const stockInfo = storeLatestStock.get(styleCode);
       return stockInfo && stockInfo.stock > 0; // 이 매장에 재고가 있어야 의미 있음
     })
-    .map(([styleCode, launchDate]) => ({
-      styleCode,
-      productName: storeLatestStock.get(styleCode)?.productName || "",
-      launchDate,
-      storeStock: storeLatestStock.get(styleCode)?.stock || 0,
-    }))
+    .map(([styleCode, launchDate]) => {
+      const daysSinceLaunch = Math.max(1, Math.round((new Date(targetDate).getTime() - new Date(launchDate).getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const qtySinceLaunch = storeRows
+        .filter((r) => r.styleCode === styleCode && r.date >= launchDate && r.date <= targetDate)
+        .reduce((s, r) => s + Number(r.qty || 0), 0);
+      const dailyPace = qtySinceLaunch / daysSinceLaunch;
+      const paceRatio = baselineDailyQtyPerStyle > 0 ? dailyPace / baselineDailyQtyPerStyle : dailyPace > 0 ? 99 : 0;
+      const reaction = paceRatio >= 1.3 ? "좋음" : paceRatio >= 0.6 ? "보통" : "저조";
+      return {
+        styleCode,
+        productName: storeLatestStock.get(styleCode)?.productName || "",
+        launchDate,
+        storeStock: storeLatestStock.get(styleCode)?.stock || 0,
+        qtySinceLaunch,
+        dailyPace: Math.round(dailyPace * 10) / 10,
+        paceRatio: Math.round(paceRatio * 10) / 10,
+        reaction,
+      };
+    })
     .sort((a, b) => (a.launchDate < b.launchDate ? 1 : -1))
     .slice(0, 8);
 
@@ -498,6 +560,57 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     // RT_Result 조회 실패는 카드 전체를 막지 않습니다.
   }
 
+  // ---- STEP5.5 재고 회전율 랭킹 (판매속도 대비 재고가 며칠치 남았는지) ----
+  // MARK 6.76: storeQtyByStyle(최근 14일 판매수량)와 storeStockByStyle(최신 재고)를 재사용해서
+  // "일평균 판매속도"와 "예상 소진일수"를 계산합니다. 판매속도가 0인데 재고가 있으면
+  // "회전 안 됨"(과잉재고 후보)으로 분류합니다.
+  const inventoryTurnover = Array.from(storeQtyByStyle.entries())
+    .map(([styleCode, v]) => {
+      const stock = storeStockByStyle.get(styleCode) ?? storeLatestStock.get(styleCode)?.stock ?? 0;
+      const avgDailyQty = v.qty / 14;
+      const daysRemaining = avgDailyQty > 0 ? stock / avgDailyQty : stock > 0 ? Infinity : 0;
+      return {
+        styleCode,
+        productName: v.productName,
+        stock,
+        avgDailyQty: Math.round(avgDailyQty * 10) / 10,
+        daysRemaining: Number.isFinite(daysRemaining) ? Math.round(daysRemaining) : null, // null = 회전 안 됨(과잉재고 후보)
+      };
+    })
+    .filter((x) => x.stock > 0);
+  const soonToStockout = inventoryTurnover
+    .filter((x) => x.daysRemaining !== null && x.daysRemaining <= 14)
+    .sort((a, b) => (a.daysRemaining || 0) - (b.daysRemaining || 0))
+    .slice(0, 10);
+  const overstockCandidates = inventoryTurnover
+    .filter((x) => x.daysRemaining === null && x.stock >= 5)
+    .sort((a, b) => b.stock - a.stock)
+    .slice(0, 10);
+
+  // ---- STEP5.6 사이즈 결품 패턴 (같은 품번인데 특정 사이즈만 유독 빨리 빠지는 경우) ----
+  // 최신 날짜 기준으로 품번별 사이즈 재고를 모아서, 재고 0인 사이즈가 있고 나머지 사이즈는
+  // 재고가 남아있는 경우를 "그 사이즈만 결품"으로 봅니다.
+  const latestDateInStore = storeRows.reduce((max, r) => (r.date > max ? r.date : max), "");
+  const sizeStockByStyle = new Map<string, Map<string, number>>();
+  for (const r of storeRows) {
+    if (r.date !== latestDateInStore) continue;
+    const size = String((r as any).size || "").trim();
+    if (!size || size === "??") continue;
+    if (!sizeStockByStyle.has(r.styleCode)) sizeStockByStyle.set(r.styleCode, new Map());
+    sizeStockByStyle.get(r.styleCode)!.set(size, (sizeStockByStyle.get(r.styleCode)!.get(size) || 0) + Number(r.stock || 0));
+  }
+  const sizeStockoutPatterns: { styleCode: string; productName: string; outSizes: string[]; remainingSizes: string[] }[] = [];
+  for (const [styleCode, sizeMap] of sizeStockByStyle) {
+    const sizes = Array.from(sizeMap.entries());
+    if (sizes.length < 2) continue; // 사이즈가 1개뿐이면 "특정 사이즈만" 비교가 무의미
+    const outSizes = sizes.filter(([, stock]) => stock === 0).map(([sz]) => sz);
+    const remainingSizes = sizes.filter(([, stock]) => stock > 0).map(([sz]) => sz);
+    if (outSizes.length && remainingSizes.length) {
+      const productName = storeLatestStock.get(styleCode)?.productName || "";
+      sizeStockoutPatterns.push({ styleCode, productName, outSizes, remainingSizes });
+    }
+  }
+
   // ---- STEP6 날씨 ----
   const weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
   const weatherTip = weatherActionTip(weather);
@@ -519,13 +632,39 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     storeName,
     targetDate,
     amountSource: "Daily_Sales_History(실제금액) 우선, 일간매출(26년) 보완",
-    week: { start: weekStart, end: weekEnd, elapsedDays: weekElapsedDays, cumulative: weekCumulative, target: weekTarget, projected: weekProjected, projectedRate: weekProjectedRate },
-    month: { start: monthStart, end: monthEnd, elapsedDays: monthElapsedDays, totalDays: monthTotalDays, cumulative: monthCumulative, targetEstimate: monthTargetEstimate, projected: monthProjected, projectedRate: monthProjectedRate },
+    week: {
+      start: weekStart,
+      end: weekEnd,
+      elapsedDays: weekElapsedDays,
+      cumulative: weekCumulative,
+      target: weekTarget,
+      projected: weekProjected,
+      projectedRate: weekProjectedRate,
+      remainingDays: weekRemainingDays,
+      remainingAmount: weekRemainingAmount,
+      requiredDailyAvg: weekRequiredDailyAvg,
+    },
+    month: {
+      start: monthStart,
+      end: monthEnd,
+      elapsedDays: monthElapsedDays,
+      totalDays: monthTotalDays,
+      cumulative: monthCumulative,
+      targetEstimate: monthTargetEstimate,
+      projected: monthProjected,
+      projectedRate: monthProjectedRate,
+      remainingDays: monthRemainingDays,
+      remainingAmount: monthRemainingAmount,
+      requiredDailyAvg: monthRequiredDailyAvg,
+    },
     top10Comparison,
     stockInsights,
     storeOutperformers,
     recentArrivals,
     inventory: { totalStock, rtIn, rtOut },
+    soonToStockout,
+    overstockCandidates,
+    sizeStockoutPatterns,
     weather,
     weatherTip,
     activeEvents,

@@ -74,16 +74,33 @@ function man(n: number) {
   return `${(Math.round((n || 0) / 10000 * 10) / 10).toFixed(1)}만원`;
 }
 
-function TrendMini({ trend }: { trend: { date: string; amount: number }[] }) {
+function TrendMini({ trend }: { trend: { date: string; amount: number; companyAmount?: number }[] }) {
   if (!trend || !trend.length) return null;
-  const max = Math.max(...trend.map((t) => t.amount), 1);
+  const hasCompany = trend.some((t) => Number(t.companyAmount || 0) > 0);
+  // MARK 6.76: 매장 매출 vs 전사 매출은 규모가 완전히 달라서(전사가 훨씬 큼), 같은 축에 그대로
+  // 그리면 매장 선이 눌려 안 보입니다. 각 라인을 자기 자신의 최댓값 기준으로 0~1 정규화해서
+  // "등락의 모양"을 비교할 수 있게 그립니다(절대 금액 비교가 아니라 추세 비교용).
+  const storeMax = Math.max(...trend.map((t) => t.amount), 1);
+  const companyMax = Math.max(...trend.map((t) => Number(t.companyAmount || 0)), 1);
   const w = 560, h = 90;
   const step = w / Math.max(trend.length - 1, 1);
-  const points = trend.map((t, i) => `${i * step},${h - (t.amount / max) * (h - 10) - 5}`).join(" ");
+  const storePoints = trend.map((t, i) => `${i * step},${h - (t.amount / storeMax) * (h - 10) - 5}`).join(" ");
+  const companyPoints = trend.map((t, i) => `${i * step},${h - (Number(t.companyAmount || 0) / companyMax) * (h - 10) - 5}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: 90, display: "block" }}>
-      <polyline points={points} fill="none" stroke={ACCENT} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: 90, display: "block" }}>
+        {hasCompany && (
+          <polyline points={companyPoints} fill="none" stroke="#CBD5E1" strokeWidth={2.5} strokeDasharray="4 4" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        <polyline points={storePoints} fill="none" stroke={ACCENT} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {hasCompany && (
+        <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 11, color: "#64748B" }}>
+          <span><span style={{ display: "inline-block", width: 10, height: 3, background: ACCENT, marginRight: 4, verticalAlign: "middle" }} />이 매장</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 3, background: "#CBD5E1", marginRight: 4, verticalAlign: "middle" }} />전사(오프라인 전체, 추세 비교용)</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -159,10 +176,14 @@ function StockLookupSection({ storeName }: { storeName: string }) {
   const [result, setResult] = useState<any>(null);
   const [status, setStatus] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [showAlt, setShowAlt] = useState(false);
+  const [showCoord, setShowCoord] = useState(false);
 
   async function lookup(params: { styleCode?: string; barcode?: string }) {
     setStatus("조회 중...");
     setResult(null);
+    setShowAlt(false);
+    setShowCoord(false);
     try {
       const qs = new URLSearchParams({ store: storeName, ...(params.styleCode ? { styleCode: params.styleCode } : { barcode: params.barcode || "" }) });
       const res = await fetch(`/api/store-stock-lookup?${qs.toString()}`, { cache: "no-store" });
@@ -399,6 +420,47 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               </div>
             ))}
           </div>
+
+          {/* MARK 6.76: 재고 카드 아래에 항상 버튼으로(재고 0일 때만이 아니라) 대체상품/코디 추천에
+              접근할 수 있게 합니다. */}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => { setShowAlt((v) => !v); setShowCoord(false); }}
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showAlt ? ACCENT : "#fff", color: showAlt ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
+            >
+              🔄 대체상품 추천
+            </button>
+            <button
+              onClick={() => { setShowCoord((v) => !v); setShowAlt(false); }}
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showCoord ? ACCENT : "#fff", color: showCoord ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
+            >
+              👗 코디네이션 추천
+            </button>
+          </div>
+
+          {showAlt && (
+            <div style={{ marginTop: 10, background: "#FAFBFF", border: `1.5px dashed ${ACCENT}55`, borderRadius: 14, padding: 14 }}>
+              {(() => {
+                const inStock = (result.colors || []).filter((c: any) => Number(c.stock || 0) > 0);
+                if (!inStock.length) return <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>이 매장엔 대체 가능한(재고 있는) 다른 컬러가 없어요.</p>;
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <p style={{ fontSize: 12, color: "#64748B", margin: 0 }}>같은 품번, 재고 있는 다른 컬러예요:</p>
+                    {inStock.map((c: any, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <ProductThumb styleCode={result.styleCode} size={40} />
+                        <div style={{ fontSize: 13 }}>
+                          <strong>{c.colorName || c.colorCode}</strong> <span style={{ color: "#059669", fontWeight: 700 }}>{c.stock}개</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {showCoord && <CoordinationInline styleCode={result.styleCode} storeName={storeName} />}
         </div>
       )}
     </section>
@@ -449,7 +511,20 @@ export default function StoreBriefV2() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ width: "100%", maxWidth: 820, padding: "24px 20px 80px", display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* MARK 6.76: 이 화면은 휴대폰으로 주로 보는데 PC에서 넓게 벌어지면 비율이 깨져 보인다는
+          요청이 있어서, PC에서 봐도 항상 휴대폰 폭(440px)으로 고정하고 가운데 정렬합니다. */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          padding: "24px 20px 80px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+          background: "#F7F8FA",
+          boxShadow: "0 0 0 1px #EDF0F5",
+        }}
+      >
         <NavTabs active="store" />
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".14em", color: ACCENT }}>매장 아침 브리핑 (가안)</div>
@@ -515,6 +590,22 @@ export default function StoreBriefV2() {
                   }}
                 />
               </div>
+              {cards.month?.targetEstimate > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                  <div style={{ flex: "1 1 140px", background: "#F8FAFC", borderRadius: 14, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>이 페이스면 월말 착지예측</div>
+                    <div style={{ fontSize: 16, fontWeight: 800 }}>
+                      {man(cards.month.projected || 0)} <span style={{ fontSize: 12, fontWeight: 700, color: cards.month.projectedRate >= 100 ? "#059669" : "#DC2626" }}>({Math.round(cards.month.projectedRate || 0)}%)</span>
+                    </div>
+                  </div>
+                  {cards.month.requiredDailyAvg > 0 && (
+                    <div style={{ flex: "1 1 140px", background: "#F8FAFC", borderRadius: 14, padding: "10px 12px" }}>
+                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>목표까지 남은 {cards.month.remainingDays}일, 필요 일평균</div>
+                      <div style={{ fontSize: 16, fontWeight: 800 }}>{man(cards.month.requiredDailyAvg)}</div>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* 날씨 팁 */}
@@ -543,6 +634,14 @@ export default function StoreBriefV2() {
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
                       <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
                         판매량 {it.storeQty ?? 0}개 · 재고 {it.storeStock ?? "-"}개
+                      </div>
+                      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1 }}>
+                        이번 주 {it.thisWeekQty ?? 0}개 · 전주 {it.prevWeekQty ?? 0}개
+                        {it.prevWeekQty > 0 && (
+                          <span style={{ color: it.thisWeekQty >= it.prevWeekQty ? "#059669" : "#DC2626", fontWeight: 700, marginLeft: 4 }}>
+                            ({it.thisWeekQty >= it.prevWeekQty ? "+" : ""}{Math.round(((it.thisWeekQty - it.prevWeekQty) / it.prevWeekQty) * 100)}%)
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: it.storeRank ? "#059669" : "#94A3B8" }}>
@@ -576,7 +675,12 @@ export default function StoreBriefV2() {
                   {cards.storeOutperformers.map((it: any, i: number) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#ECFDF5", borderRadius: 14 }}>
                       <ProductThumb styleCode={it.styleCode} size={48} />
-                      <div style={{ flex: 1, fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                          최근 14일 이 매장 {it.storeQty}개 판매 (전사 {it.companyQty}개)
+                        </div>
+                      </div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: "#059669" }}>전사 평균 {it.ratio.toFixed(1)}배</div>
                     </div>
                   ))}
@@ -614,6 +718,65 @@ export default function StoreBriefV2() {
                       <div style={{ padding: "10px 12px" }}>
                         <div style={{ fontSize: 13, fontWeight: 700 }}>{it.productName}</div>
                         <div style={{ fontSize: 11, color: "#64748B" }}>입고 {it.launchDate} · 재고 {it.storeStock}개</div>
+                        {it.reaction && (
+                          <div style={{ fontSize: 11, fontWeight: 800, marginTop: 4, color: it.reaction === "좋음" ? "#059669" : it.reaction === "저조" ? "#DC2626" : "#64748B" }}>
+                            초기 반응 {it.reaction} (일평균 {it.dailyPace}개, 평균 {it.paceRatio}배)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 재고 회전율 — 소진 임박 / 과잉재고 */}
+            {((cards.soonToStockout || []).length > 0 || (cards.overstockCandidates || []).length > 0) && (
+              <section style={cardStyle}>
+                <div>
+                  <div style={labelStyle}>재고 회전율</div>
+                  <h2 style={h2Style}>판매속도 대비 재고 체크</h2>
+                </div>
+                {(cards.soonToStockout || []).length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>소진 임박 (14일 이내 예상)</div>
+                    {cards.soonToStockout.map((it: any, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#FFF7ED", borderRadius: 14 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                          <div style={{ fontSize: 12, color: "#9A3412" }}>재고 {it.stock}개 · 일평균 {it.avgDailyQty}개 판매</div>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#C2410C" }}>약 {it.daysRemaining}일 후 품절</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(cards.overstockCandidates || []).length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>회전 안 됨 (최근 14일 판매 0, 과잉재고 후보)</div>
+                    {cards.overstockCandidates.map((it: any, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F1F5F9", borderRadius: 14 }}>
+                        <div style={{ flex: 1, fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#64748B" }}>재고 {it.stock}개</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* 사이즈 결품 패턴 */}
+            {(cards.sizeStockoutPatterns || []).length > 0 && (
+              <section style={cardStyle}>
+                <div>
+                  <div style={labelStyle}>사이즈 체크</div>
+                  <h2 style={h2Style}>특정 사이즈만 결품</h2>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {cards.sizeStockoutPatterns.map((it: any, i: number) => (
+                    <div key={i} style={{ display: "flex", gap: 10, background: "#FEF2F2", borderRadius: 14, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 13, color: "#991B1B", lineHeight: 1.55 }}>
+                        <strong>{it.productName}</strong> — {it.outSizes.join("/")} 사이즈만 품절 (재고: {it.remainingSizes.join("/")}만 남음). 재발주 검토해보세요.
                       </div>
                     </div>
                   ))}

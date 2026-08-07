@@ -176,21 +176,25 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
       .catch((e) => setStatus(e?.message || "불러오기 실패"));
   }, [styleCode, storeName]);
 
+  // MARK 6.80: 결과가 너무 많이 나온다는 피드백 — 일단 상위 5개로 제한합니다.
+  // (소스 자체가 이 화면에 맞는 게 맞는지는 다음 세션에 재검토 예정 — TODO 참고)
+  const allCandidates = items.flatMap((it: any) => it.candidates || []);
+  const topCandidates = allCandidates.slice(0, 5);
+
   return (
     <div>
       {status && <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{status}</p>}
-      {items.map((it: any, i: number) => (
-        <div key={i} style={{ marginBottom: 8 }}>
-          {(it.candidates || []).map((c: any, ci: number) => (
-            <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-              <ProductThumb styleCode={c.style} size={48} />
-              <div style={{ fontSize: 13 }}>
-                <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
-              </div>
-            </div>
-          ))}
+      {topCandidates.map((c: any, ci: number) => (
+        <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+          <ProductThumb styleCode={c.style} size={48} />
+          <div style={{ fontSize: 13 }}>
+            <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
+          </div>
         </div>
       ))}
+      {allCandidates.length > 5 && (
+        <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>+{allCandidates.length - 5}개 더 있음 (상위 5개만 표시)</p>
+      )}
     </div>
   );
 }
@@ -461,7 +465,34 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         </div>
       </div>
 
-      {scanning && <div id="barcode-reader" style={{ width: "100%", maxWidth: 400, margin: "0 auto", borderRadius: 16, overflow: "hidden" }} />}
+      {scanning && (
+        <div style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto" }}>
+          <div id="barcode-reader" style={{ width: "100%", borderRadius: 16, overflow: "hidden" }} />
+          {/* MARK 6.80: 바코드 조준하기 쉽게 카메라 화면 가운데에 얇은 스캔라인을 얹습니다.
+              (html5-qrcode 스캔 로직 자체는 안 건드림, 순수 시각적 가이드) */}
+          <div
+            style={{
+              position: "absolute",
+              left: "10%",
+              right: "10%",
+              top: "50%",
+              height: 2,
+              transform: "translateY(-50%)",
+              background: "#EF4444",
+              boxShadow: "0 0 8px 2px rgba(239,68,68,0.7)",
+              opacity: 0.9,
+              animation: "mark-scanline-pulse 1.4s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+          <style>{`
+            @keyframes mark-scanline-pulse {
+              0%, 100% { opacity: 0.5; }
+              50% { opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
 
       {status && <p style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
 

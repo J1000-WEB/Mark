@@ -4,10 +4,13 @@ import { readDailySalesFromMarkDb, readDailySalesFromHistory, saveDailySalesToHi
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // MARK 6.83: 기본값은 전일(확정치) — ?live=1 주면 오늘 실시간으로 봅니다.
+    const url = new URL(req.url);
+    const live = url.searchParams.get("live") === "1";
     // MARK 6.75: 화면 표시는 Daily_Sales_History 직접 조회로 통일(매장별 일매출 순위와 같은 소스).
-    const data = await readDailySalesFromHistory();
+    const data = await readDailySalesFromHistory({ live });
     return NextResponse.json({ ok: true, data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error: any) {
     return NextResponse.json(

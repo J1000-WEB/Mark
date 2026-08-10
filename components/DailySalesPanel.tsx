@@ -45,13 +45,22 @@ export default function DailySalesPanel() {
   const [data, setData] = useState<any>(null);
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
+  const [live, setLive] = useState(false);
 
-  async function load() {
+  async function load(liveOverride?: boolean) {
     setStatus("");
-    const res = await fetch("/api/daily-sales", { cache: "no-store" });
+    const isLive = liveOverride ?? live;
+    const res = await fetch(`/api/daily-sales${isLive ? "?live=1" : ""}`, { cache: "no-store" });
     const json = await res.json();
     if (json.ok) setData(json.data);
     else setStatus(json.error || "Daily Sales 데이터를 불러오지 못했습니다.");
+  }
+
+  function toggleLive() {
+    const next = !live;
+    setLive(next);
+    setData(null);
+    load(next).catch(() => setStatus("Daily Sales 데이터를 불러오지 못했습니다."));
   }
 
   async function saveHistory() {
@@ -71,7 +80,8 @@ export default function DailySalesPanel() {
   }
 
   useEffect(() => {
-    load().catch(() => setStatus("Daily Sales 데이터를 불러오지 못했습니다."));
+    load(false).catch(() => setStatus("Daily Sales 데이터를 불러오지 못했습니다."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!data) {
@@ -91,10 +101,23 @@ export default function DailySalesPanel() {
             <h2 className="mt-1 text-2xl font-black">일간 판매 데이터</h2>
             <p className="mt-2 text-sm font-semibold text-slate-300">
               {data.sheetName} · 기준일자 {data.sourceDate}
+              {data.isLive ? (
+                <span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-black text-emerald-300">실시간</span>
+              ) : (
+                <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-xs font-black text-slate-300">전일 확정치</span>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={load} className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white hover:bg-white/20">
+            {/* MARK 6.83: 기본은 전일(확정치)로 보여주고, 이 버튼 눌러야 오늘 실시간으로 전환됩니다. */}
+            <button
+              type="button"
+              onClick={toggleLive}
+              className={`rounded-2xl px-4 py-3 text-sm font-black ${live ? "bg-emerald-500 text-white" : "bg-white/10 text-white hover:bg-white/20"}`}
+            >
+              {live ? "전일 확정치로 보기" : "실시간 확인"}
+            </button>
+            <button type="button" onClick={() => load()} className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white hover:bg-white/20">
               새로고침
             </button>
             <button type="button" onClick={saveHistory} disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 disabled:opacity-50">

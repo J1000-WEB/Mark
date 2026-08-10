@@ -619,18 +619,29 @@ function StockLookupSection({ storeName }: { storeName: string }) {
   );
 }
 
-export default function StoreBriefV2() {
+export default function StoreBriefV2({
+  fixedStoreName,
+  hideStoreSwitcher,
+  hideNavTabs,
+}: {
+  fixedStoreName?: string;
+  hideStoreSwitcher?: boolean;
+  hideNavTabs?: boolean;
+} = {}) {
   const [stores, setStores] = useState<string[]>([]);
-  const [storeName, setStoreName] = useState("");
+  const [storeName, setStoreName] = useState(fixedStoreName || "");
   const [cards, setCards] = useState<any>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
+    // MARK 6.83: 매장별 고정 링크(/store/[code])는 매장 목록 API를 부를 필요가 없습니다
+    // (드롭다운을 안 보여주니까요) — fixedStoreName이 있으면 건너뜁니다.
+    if (fixedStoreName) return;
     fetch("/api/daily-briefing?stores=1", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => d.ok && setStores(d.stores || []))
       .catch(() => {});
-  }, []);
+  }, [fixedStoreName]);
 
   async function loadStore(name: string) {
     setStoreName(name);
@@ -647,6 +658,12 @@ export default function StoreBriefV2() {
       setStatus(e?.message || "불러오기 실패");
     }
   }
+
+  // MARK 6.83: fixedStoreName으로 들어오면 첫 렌더에 바로 그 매장으로 고정해서 불러옵니다.
+  useEffect(() => {
+    if (fixedStoreName) loadStore(fixedStoreName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixedStoreName]);
 
   const cardStyle: React.CSSProperties = {
     background: "#fff",
@@ -677,20 +694,22 @@ export default function StoreBriefV2() {
           boxShadow: "0 0 0 1px #EDF0F5",
         }}
       >
-        <NavTabs active="store" />
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".14em", color: ACCENT }}>매장 아침 브리핑 (가안)</div>
-          <select
-            value={storeName}
-            onChange={(e) => loadStore(e.target.value)}
-            style={{ marginTop: 8, width: "100%", padding: 14, borderRadius: 14, border: "1px solid #E2E8F0", background: "#fff", fontSize: 16 }}
-          >
-            <option value="">매장을 선택해 주세요</option>
-            {stores.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+        {!hideNavTabs && <NavTabs active="store" />}
+        {!hideStoreSwitcher && (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".14em", color: ACCENT }}>매장 아침 브리핑 (가안)</div>
+            <select
+              value={storeName}
+              onChange={(e) => loadStore(e.target.value)}
+              style={{ marginTop: 8, width: "100%", padding: 14, borderRadius: 14, border: "1px solid #E2E8F0", background: "#fff", fontSize: 16 }}
+            >
+              <option value="">매장을 선택해 주세요</option>
+              {stores.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {status && <p style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
 
@@ -798,6 +817,7 @@ export default function StoreBriefV2() {
                       <ProductThumb styleCode={it.styleCode} size={48} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 11, color: "#CBD5E1" }}>{it.styleCode}</div>
                         <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
                           판매량 {it.qty}개
                           {it.prevWeekQty > 0 && (
@@ -820,14 +840,18 @@ export default function StoreBriefV2() {
             <section style={cardStyle}>
               <div>
                 <div style={labelStyle}>어제 우리 매장 베스트</div>
-                <h2 style={h2Style}>TOP5 & 재고 워닝</h2>
+                <h2 style={h2Style}>TOP5</h2>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {(cards.top10Comparison || []).slice(0, 5).map((it: any, i: number) => (
+                {/* MARK 6.82: 예전엔 전사 TOP10 기준(top10Comparison)이라 전사에서 잘 팔린
+                    상품이 이 매장에서 "미판매"로 섞여 보이는 문제가 있었습니다 — 이제 이
+                    매장 자체의 어제 판매 상위 5개(storeTop5)를 씁니다. */}
+                {(cards.storeTop5 || []).map((it: any, i: number) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F8FAFC", borderRadius: 14 }}>
                     <ProductThumb styleCode={it.styleCode} size={48} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                      <div style={{ fontSize: 11, color: "#CBD5E1" }}>{it.styleCode}</div>
                       <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
                         판매량 {it.storeQty ?? 0}개 · 재고 {it.storeStock ?? "-"}개
                       </div>
@@ -841,31 +865,41 @@ export default function StoreBriefV2() {
                       </div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: it.storeRank ? "#059669" : "#94A3B8" }}>
-                        {it.storeRank ? `이 매장 ${it.storeRank}위` : "미판매"}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#059669" }}>이 매장 {it.storeRank}위</div>
+                      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
+                        {it.companyRank ? `전사 ${it.companyRank}위` : "전사 순위밖"}
+                        {it.diff !== null && it.diff !== 0 && (
+                          <span style={{ color: it.diff > 0 ? "#059669" : "#DC2626", fontWeight: 700, marginLeft: 4 }}>
+                            ({it.diff > 0 ? "+" : ""}{it.diff})
+                          </span>
+                        )}
                       </div>
-                      {it.storeRank && it.diff !== null && it.diff !== 0 && (
-                        <div style={{ fontSize: 11, color: it.diff > 0 ? "#059669" : "#DC2626", fontWeight: 700, marginTop: 2 }}>
-                          전사比 {it.diff > 0 ? "+" : ""}{it.diff}
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
-              {(cards.stockInsights || []).length > 0 && (
+            </section>
+
+            {/* 재고 부족 워닝 — MARK 6.82: "TOP5 & 재고워닝"으로 한 카드에 섞여 있어서 헷갈린다는
+                피드백을 반영해 별도 카드로 분리했습니다. (전사에서 잘 팔리는데 이 매장에서
+                유독 안 팔리는 상품 — storeTop5와는 다른 개념) */}
+            {(cards.stockInsights || []).length > 0 && (
+              <section style={cardStyle}>
+                <div>
+                  <div style={labelStyle}>재고 확인</div>
+                  <h2 style={h2Style}>재고 부족 워닝</h2>
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "#334155" }}>재고 부족 워닝</div>
                   {cards.stockInsights.map((s: any, i: number) => (
                     <div key={i} style={{ display: "flex", gap: 10, background: "#FFF1F2", borderRadius: 14, padding: "12px 14px" }}>
                       <div style={{ fontSize: 13, color: "#9F1239", lineHeight: 1.55 }}>
-                        <strong>{s.productName}</strong> — {s.suggestion}
+                        <strong>{s.productName}</strong> <span style={{ color: "#FCA5A5" }}>({s.styleCode})</span> — {s.suggestion}
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
 
             {/* 유독 잘 팔리는 상품 */}
             {(cards.storeOutperformers || []).length > 0 && (
@@ -880,6 +914,7 @@ export default function StoreBriefV2() {
                       <ProductThumb styleCode={it.styleCode} size={48} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 11, color: "#6EE7B7" }}>{it.styleCode}</div>
                         <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
                           최근 14일 이 매장 {it.storeQty}개 판매 (전사 {it.companyQty}개)
                         </div>
@@ -920,6 +955,7 @@ export default function StoreBriefV2() {
                       <ProductThumb styleCode={it.styleCode} size={150} />
                       <div style={{ padding: "10px 12px" }}>
                         <div style={{ fontSize: 13, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 10, color: "#94A3B8" }}>{it.styleCode}</div>
                         <div style={{ fontSize: 11, color: "#64748B" }}>입고 {it.launchDate} · 재고 {it.storeStock}개</div>
                         {it.reaction && (
                           <div style={{ fontSize: 11, fontWeight: 800, marginTop: 4, color: it.reaction === "좋음" ? "#059669" : it.reaction === "저조" ? "#DC2626" : "#64748B" }}>
@@ -947,6 +983,7 @@ export default function StoreBriefV2() {
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#FFF7ED", borderRadius: 14 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                          <div style={{ fontSize: 10, color: "#94A3B8" }}>{it.styleCode}</div>
                           <div style={{ fontSize: 12, color: "#9A3412" }}>재고 {it.stock}개 · 일평균 {it.avgDailyQty}개 판매</div>
                         </div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#C2410C" }}>약 {it.daysRemaining}일 후 품절</div>
@@ -959,7 +996,10 @@ export default function StoreBriefV2() {
                     <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>회전 안 됨 (최근 14일 판매 0, 과잉재고 후보)</div>
                     {cards.overstockCandidates.map((it: any, i: number) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F1F5F9", borderRadius: 14 }}>
-                        <div style={{ flex: 1, fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                          <div style={{ fontSize: 10, color: "#94A3B8" }}>{it.styleCode}</div>
+                        </div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#64748B" }}>재고 {it.stock}개</div>
                       </div>
                     ))}

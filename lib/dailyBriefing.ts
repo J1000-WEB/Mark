@@ -424,6 +424,29 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     };
   });
 
+  // MARK 6.82: "어제 우리 매장 베스트" 카드는 원래 이 매장 자체의 어제 판매 상위 5개를
+  // 보여줘야 하는데, 지금까지 top10Comparison(전사 TOP10 기준으로 우리 매장 순위를 매긴 것)을
+  // 그대로 썼습니다 — 그래서 전사에서 잘 팔린 상품인데 이 매장에서 "미판매"인 경우가
+  // TOP5 안에 섞여 보이는 문제가 있었습니다. storeTop10(이 매장 자체 랭킹)을 기준으로
+  // 별도 계산합니다. companyRank/diff는 "참고 정보"로만 같이 보여줍니다.
+  const companyRankMap = new Map(companyTop10.map((p, i) => [p.styleCode, i + 1]));
+  const storeTop5 = storeTop10.slice(0, 5).map((p, i) => {
+    const storeRank = i + 1;
+    const companyRank = companyRankMap.get(p.styleCode) || null;
+    return {
+      styleCode: p.styleCode,
+      productName: p.productName,
+      storeRank,
+      storeAmount: p.amount,
+      storeQty: p.qty,
+      storeStock: storeStockLatest.get(p.styleCode) ?? null,
+      companyRank,
+      diff: companyRank ? companyRank - storeRank : null,
+      thisWeekQty: thisWeekQtyByStyle.get(p.styleCode) || 0,
+      prevWeekQty: prevWeekQtyByStyle.get(p.styleCode) || 0,
+    };
+  });
+
   // ---- STEP3.5 전주 우리매장 TOP5 (월~일 기준, 전전주 대비 증감률 + 전사 순위차 + 컬러 반응) ----
   const lastWeekStart = addDays(weekStart, -7);
   const lastWeekEnd = addDays(weekStart, -1);
@@ -776,6 +799,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
       requiredDailyAvg: monthRequiredDailyAvg,
     },
     top10Comparison,
+    storeTop5,
     weeklyStoreTop5,
     weeklyAiBriefing,
     lastWeekLabel,

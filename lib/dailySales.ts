@@ -34,6 +34,18 @@ function ymdKST() {
   return `${y}-${m}-${d}`;
 }
 
+// MARK 6.83: "어제(전일, 확정치)"를 기본으로 보여주고 "실시간 확인" 버튼 눌렀을 때만
+// 오늘자 실시간 데이터를 보여주기 위한 헬퍼.
+function yesterdayKST() {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  kst.setDate(kst.getDate() - 1);
+  const y = kst.getFullYear();
+  const m = String(kst.getMonth() + 1).padStart(2, "0");
+  const d = String(kst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function makeDailySnapshotId() {
   const now = new Date();
   const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
@@ -341,12 +353,13 @@ const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 // 원칙에 맞춰, 이제 이 위젯도 Daily_Sales_History를 직접 읽어서 같은 숫자를 보여줍니다.
 // (⚠ readDailySalesFromMarkDb()는 "일간 스냅샷 저장" 버튼이 "스타일별 채널별..." 시트를
 // Daily_Sales_History로 백필하는 데 계속 쓰이므로 그대로 둡니다 — 여긴 표시 전용 신규 함수.)
-export async function readDailySalesFromHistory() {
+export async function readDailySalesFromHistory(options?: { live?: boolean }) {
   const historyId = getHistorySheetId();
   const raw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
   const flatRows = expandAnyDailyHistoryRows(raw || []);
 
-  const today = ymdKST();
+  // MARK 6.83: 기본값은 "전일(확정치)" — live:true를 명시적으로 줬을 때만 오늘 실시간으로 봅니다.
+  const today = options?.live ? ymdKST() : yesterdayKST();
   const todayRows = flatRows.filter((r) => normalizeDateKey(r.date) === today);
 
   const totalDailySales = todayRows.reduce((sum, r) => sum + num(r.qty), 0);
@@ -391,6 +404,7 @@ export async function readDailySalesFromHistory() {
     source: "Daily_Sales_History",
     sheetName: DAILY_HISTORY_SHEET,
     sourceDate: today,
+    isLive: !!options?.live,
     generatedAt: new Date().toISOString(),
     itemCount: todayRows.length,
     allItemCount: todayRows.length,

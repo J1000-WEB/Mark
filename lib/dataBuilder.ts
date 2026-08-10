@@ -1613,6 +1613,21 @@ function buildChannelCodeNameMap(rows: any[][]): Map<string, string> {
   return map;
 }
 
+// MARK 6.83: 매장별 개별 URL(/store/[code]) 배포용 — 코드→매장명 매핑을 독립적으로 가져옵니다.
+// buildChannelCodeNameMap과 같은 "객_전주" 시트를 쓰지만, 이건 그 시트 fetch까지 포함한
+// 완결형 함수라 라우트에서 바로 호출하면 됩니다.
+export async function getStoreCodeNameMap(): Promise<Map<string, string>> {
+  try {
+    const mainId = getSheetId();
+    const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
+    const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
+    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
+    return buildChannelCodeNameMap(channelValues || []);
+  } catch {
+    return buildChannelCodeNameMap([]); // 시트를 못 읽어도 최소 fallback 매핑은 반환됨
+  }
+}
+
 function parseRtResultRows(rows: any[][], codeNameMap = new Map<string, string>(), productNameMap = new Map<string, string>()) {
   const headerRow = findHeaderRow(rows, ["스타일", "수량"]);
   const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];

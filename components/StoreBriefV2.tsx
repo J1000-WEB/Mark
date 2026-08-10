@@ -199,7 +199,7 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
   );
 }
 
-function CoordinationInline({ styleCode, storeName }: { styleCode: string; storeName: string }) {
+function CoordinationInline({ styleCode, storeName, limit = 3 }: { styleCode: string; storeName: string; limit?: number }) {
   const [items, setItems] = useState<any[]>([]);
   const [status, setStatus] = useState("불러오는 중...");
 
@@ -218,21 +218,24 @@ function CoordinationInline({ styleCode, storeName }: { styleCode: string; store
       .catch((e) => setStatus(e?.message || "불러오기 실패"));
   }, [styleCode, storeName]);
 
+  // MARK 6.81: 코디제안이 너무 많이 나온다는 피드백 — 상위 3개(기본값)만 보여줍니다.
+  const allCandidates = items.flatMap((it: any) => it.candidates || []);
+  const topCandidates = allCandidates.slice(0, limit);
+
   return (
     <div style={{ marginTop: 10, background: "#FAFBFF", border: `1.5px dashed ${ACCENT}55`, borderRadius: 14, padding: 14 }}>
       {status && <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{status}</p>}
-      {items.map((it: any, i: number) => (
-        <div key={i} style={{ marginBottom: 8 }}>
-          {(it.candidates || []).map((c: any, ci: number) => (
-            <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-              <ProductThumb styleCode={c.style} size={48} />
-              <div style={{ fontSize: 13 }}>
-                <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
-              </div>
-            </div>
-          ))}
+      {topCandidates.map((c: any, ci: number) => (
+        <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+          <ProductThumb styleCode={c.style} size={48} />
+          <div style={{ fontSize: 13 }}>
+            <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
+          </div>
         </div>
       ))}
+      {allCandidates.length > limit && (
+        <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>+{allCandidates.length - limit}개 더 있음</p>
+      )}
     </div>
   );
 }
@@ -699,6 +702,23 @@ export default function StoreBriefV2() {
                 <div style={labelStyle}>오늘의 브리핑</div>
                 <h2 style={h2Style}>좋은 아침입니다, {storeName} 👋</h2>
               </div>
+
+              {/* MARK 6.81: "맨 위에 오늘 날씨예보 + AI분석(날씨요소/금일매출예측/판매촉진상품)" 요청 —
+                  예전엔 화면 중간에 날씨 카드가 따로 있었는데, 여기 맨 위로 올렸습니다. */}
+              {(cards.todayWeatherTip || (cards.todayAiBriefing || []).length > 0) && (
+                <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 18, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {cards.todayWeatherTip && (
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{ fontSize: 20 }}>{cards.todayWeatherTip.icon}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#92400E" }}>오늘 날씨 예보</div>
+                    </div>
+                  )}
+                  {(cards.todayAiBriefing || []).map((line: string, i: number) => (
+                    <div key={i} style={{ fontSize: 13, color: "#78350F", lineHeight: 1.55 }}>💡 {line}</div>
+                  ))}
+                </div>
+              )}
+
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 <div style={{ flex: "1.3 1 210px", background: ACCENT, borderRadius: 18, padding: "20px 22px", color: "#fff" }}>
                   <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>어제 매출</div>
@@ -757,14 +777,41 @@ export default function StoreBriefV2() {
               )}
             </section>
 
-            {/* 날씨 팁 */}
-            {cards.weatherTip && (
-              <section style={{ ...cardStyle, background: "#FFFBEB", border: "1px solid #FDE68A" }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ fontSize: 20 }}>{cards.weatherTip.icon}</div>
-                  <div style={{ fontSize: 14, color: "#92400E", lineHeight: 1.6 }}>
-                    <strong>오늘 날씨 기반 제안</strong> — {cards.weatherTip.text}
+            {/* B.5 전주 우리매장 TOP5 */}
+            {(cards.weeklyStoreTop5 || []).length > 0 && (
+              <section style={cardStyle}>
+                <div>
+                  <div style={labelStyle}>전주 우리 매장 TOP5 ({cards.lastWeekLabel})</div>
+                  <h2 style={h2Style}>지난주 잘 팔린 상품</h2>
+                </div>
+                {(cards.weeklyAiBriefing || []).length > 0 && (
+                  <div style={{ background: "#EEF2FF", borderRadius: 14, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {cards.weeklyAiBriefing.map((line: string, i: number) => (
+                      <div key={i} style={{ fontSize: 13, color: "#3730A3", lineHeight: 1.5 }}>💡 {line}</div>
+                    ))}
                   </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {cards.weeklyStoreTop5.map((it: any, i: number) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F8FAFC", borderRadius: 14 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: "#94A3B8", width: 20 }}>{i + 1}</div>
+                      <ProductThumb styleCode={it.styleCode} size={48} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
+                        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
+                          판매량 {it.qty}개
+                          {it.prevWeekQty > 0 && (
+                            <span style={{ color: it.changeRate >= 0 ? "#059669" : "#DC2626", fontWeight: 700, marginLeft: 6 }}>
+                              (전전주비 {it.changeRate >= 0 ? "+" : ""}{it.changeRate}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: it.companyRank ? "#334155" : "#94A3B8" }}>
+                        {it.companyRank ? `전사 ${it.companyRank}위` : "전사 순위밖"}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </section>
             )}
@@ -773,7 +820,7 @@ export default function StoreBriefV2() {
             <section style={cardStyle}>
               <div>
                 <div style={labelStyle}>어제 우리 매장 베스트</div>
-                <h2 style={h2Style}>TOP10 & 재고 워닝</h2>
+                <h2 style={h2Style}>TOP5 & 재고 워닝</h2>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {(cards.top10Comparison || []).slice(0, 5).map((it: any, i: number) => (
@@ -793,8 +840,15 @@ export default function StoreBriefV2() {
                         )}
                       </div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: it.storeRank ? "#059669" : "#94A3B8" }}>
-                      {it.storeRank ? `이 매장 ${it.storeRank}위` : "미판매"}
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: it.storeRank ? "#059669" : "#94A3B8" }}>
+                        {it.storeRank ? `이 매장 ${it.storeRank}위` : "미판매"}
+                      </div>
+                      {it.storeRank && it.diff !== null && it.diff !== 0 && (
+                        <div style={{ fontSize: 11, color: it.diff > 0 ? "#059669" : "#DC2626", fontWeight: 700, marginTop: 2 }}>
+                          전사比 {it.diff > 0 ? "+" : ""}{it.diff}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -818,7 +872,7 @@ export default function StoreBriefV2() {
               <section style={cardStyle}>
                 <div>
                   <div style={labelStyle}>우리 매장 특화</div>
-                  <h2 style={h2Style}>우리 매장에서 유독 잘 팔리는 상품</h2>
+                  <h2 style={h2Style}>우리 매장에서 잘 팔리는 상품</h2>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {cards.storeOutperformers.map((it: any, i: number) => (
@@ -842,7 +896,7 @@ export default function StoreBriefV2() {
               <section style={cardStyle}>
                 <div>
                   <div style={labelStyle}>확인이 필요해요</div>
-                  <h2 style={h2Style}>우리 매장에서 유독 안 팔리는 상품</h2>
+                  <h2 style={h2Style}>우리 매장에서 안 팔리는 상품</h2>
                   <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748B" }}>재고 10개 미만인 상품은 전개가 어려워서 제외했어요.</p>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -888,7 +942,7 @@ export default function StoreBriefV2() {
                 </div>
                 {(cards.soonToStockout || []).length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>소진 임박 (14일 이내 예상)</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>소진 임박 (7일 이내 예상)</div>
                     {cards.soonToStockout.map((it: any, i: number) => (
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#FFF7ED", borderRadius: 14 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -914,8 +968,8 @@ export default function StoreBriefV2() {
               </section>
             )}
 
-            {/* 사이즈 결품 패턴 */}
-            {(cards.sizeStockoutPatterns || []).length > 0 && (
+            {/* MARK 6.81: 사이즈 체크 카드는 당분간 비표시 처리(요청) — 데이터/로직은 그대로 두고 렌더만 끔 */}
+            {false && (cards.sizeStockoutPatterns || []).length > 0 && (
               <section style={cardStyle}>
                 <div>
                   <div style={labelStyle}>사이즈 체크</div>

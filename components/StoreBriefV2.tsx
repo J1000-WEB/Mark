@@ -354,9 +354,26 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         await scanner.start(
           { facingMode: "environment" },
           {
-            fps: 10,
-            qrbox: { width: 280, height: 160 },
+            fps: 15,
+            // MARK 6.91: "흰 택+검은 바코드"인데 잘 안 찍힌다는 피드백 — Code128 바코드는
+            // 가로로 긴 형태라 정사각형에 가까운 박스(280x160)보다 가로로 넓은 박스가
+            // 바코드 전체를 담기 더 쉽습니다. 박스를 더 넓고 낮게 바꿨습니다.
+            qrbox: { width: 320, height: 110 },
             aspectRatio: 1.4,
+            // MARK 6.91: 기본 설정은 QR코드 등 여러 포맷을 한꺼번에 시도하느라 느리고
+            // 정확도가 떨어질 수 있어서, 실제로 쓰는 포맷(CODE_128, 필요시 EAN13도)만
+            // 명시해서 인식 속도/정확도를 높입니다.
+            formatsToSupport: (window as any).Html5QrcodeSupportedFormats
+              ? [
+                  (window as any).Html5QrcodeSupportedFormats.CODE_128,
+                  (window as any).Html5QrcodeSupportedFormats.EAN_13,
+                  (window as any).Html5QrcodeSupportedFormats.CODE_39,
+                ]
+              : undefined,
+            // MARK 6.91: 브라우저가 지원하면(최신 크롬/안드로이드) 네이티브 BarcodeDetector API를
+            // 대신 써서 훨씬 빠르고 정확하게 인식합니다 — 안 되는 브라우저는 자동으로 예전
+            // 방식(JS 디코더)으로 그대로 동작해요.
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
             // MARK 6.71: 아이폰(iOS Safari)에서 기본 해상도가 낮게 잡혀서 CODE128 바코드를
             // 가끔 엉뚱한 특수문자로 오독하는 문제가 있었습니다 (예: F→', L→", 매번 다르게).
             // 해상도를 명시적으로 높게 요청해서 프레임 화질을 개선합니다.
@@ -364,6 +381,9 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               facingMode: "environment",
               width: { ideal: 1920 },
               height: { ideal: 1080 },
+              // MARK 6.91: 흰바탕 검은바코드가 잘 안 찍히면 카메라가 자동으로 초점을 못 맞추고
+              // 있을 가능성이 큽니다 — 근접 포커스를 계속 시도하도록 명시(지원 기기에서만 적용됨).
+              advanced: [{ focusMode: "continuous" } as any],
             },
           },
           async (decodedText: string) => {
@@ -767,6 +787,12 @@ export default function StoreBriefV2({
                 <h2 style={h2Style}>
                   월 목표 달성률 {cards.month?.targetEstimate ? Math.round((cards.month.cumulative / cards.month.targetEstimate) * 100) : "-"}%
                 </h2>
+                {/* MARK 6.89: 월 목표 금액 자체도 표시 (달성률만 보면 목표 규모를 알 수 없어서) */}
+                {cards.month?.targetEstimate > 0 && (
+                  <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
+                    월 목표 {man(cards.month.targetEstimate)} · 현재 누계 {man(cards.month.cumulative || 0)}
+                  </div>
+                )}
               </div>
               <div style={{ height: 14, background: `${ACCENT}14`, borderRadius: 999, overflow: "hidden" }}>
                 <div

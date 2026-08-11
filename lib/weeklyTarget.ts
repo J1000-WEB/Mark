@@ -6,6 +6,7 @@ import {
   ensureSheetExistsById,
   getSheetValuesById,
 } from "@/lib/googleSheets";
+import { normalizeDateKey } from "@/lib/storeDailyAmount";
 
 // MARK 6.12: 진짜 "주간목표"는 일_전일 시트의 I열(주실적 목표)에 있습니다.
 // 근데 이 시트는 "기준일: 전일"이라 매번 다른 주를 가리킬 수 있어서(사용자가 새로 갱신할 때마다 바뀜),
@@ -218,9 +219,14 @@ export async function getSavedWeeklyTarget(weekMonday: string) {
     let companyActual = 0;
     let found = false;
     const byStore = new Map<string, number>();
+    // MARK 6.85: 날짜 문자열을 그냥 === 로 비교하면, target-refresh.js가 저장한 형식이랑
+    // dailyBriefing.ts가 계산한 weekMonday 형식이 미묘하게(하이픈/점 등) 다를 때 매치가 안
+    // 되는 문제가 있을 수 있습니다(예전에 Daily_Sales_History에서 겪었던 것과 같은 유형의
+    // 버그) — normalizeDateKey로 정규화해서 비교합니다.
+    const targetKey = normalizeDateKey(weekMonday);
 
     for (const r of rows) {
-      if (text(r?.[0]) !== weekMonday) continue;
+      if (normalizeDateKey(text(r?.[0])) !== targetKey) continue;
       const store = text(r?.[1]);
       const target = num(r?.[2]);
       const actual = num(r?.[3]);

@@ -339,7 +339,19 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   try {
     const { getSavedWeeklyTarget } = await import("@/lib/weeklyTarget");
     const saved = await getSavedWeeklyTarget(weekStart);
+    // MARK 6.85: 정확히 이름이 안 맞으면(공백/표기 차이 등) 0으로 조용히 빠지는 문제가
+    // 있을 수 있어서, 정확히 일치하는 게 없으면 정규화(normalizeStoreKey)해서 한 번 더 찾습니다.
     weekTarget = saved?.byStore?.get(storeName) || 0;
+    if (!weekTarget && saved?.byStore) {
+      const { normalizeStoreKey } = await import("@/lib/dataBuilder");
+      const targetKey = normalizeStoreKey(storeName);
+      for (const [name, amt] of saved.byStore.entries()) {
+        if (normalizeStoreKey(name) === targetKey) {
+          weekTarget = amt;
+          break;
+        }
+      }
+    }
   } catch {
     weekTarget = 0;
   }

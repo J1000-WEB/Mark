@@ -157,46 +157,82 @@ function SellingGuideInline({ styleCode }: { styleCode: string }) {
 
 // MARK 6.79: "대체상품 추천" — gi-board의 검증된 VMD 대체후보 로직을 그대로 씁니다
 // (양쪽 매장 재고 2장↑, 슬롯 어휘 일치 등 검증을 이미 거친 결과).
+// MARK 6.92: "대체상품 추천"을 gi-board의 비주얼 트윈(이미지 유사도 기반, 같은 카테고리 안에서
+// 진짜 비슷한 상품)으로 교체했습니다 — 예전 vmd 기반은 "같이 입을 코디"(다른 카테고리) 데이터라
+// 셔츠 찾는데 바지가 나오는 문제가 있었습니다. 근데 비주얼 트윈 자체엔 "이 매장 재고"가 없어서
+// (전사/온라인 기준 데이터), 후보마다 이 매장 실시간 재고를 따로 조회해서 재고 있는 것만
+// 보여줍니다 — 재고 없는 상품을 추천하면 의미가 없으니까요.
 function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string; storeName: string }) {
-  const [items, setItems] = useState<any[]>([]);
+  const [candidates, setCandidates] = useState<any[] | null>(null);
   const [status, setStatus] = useState("불러오는 중...");
 
   useEffect(() => {
-    fetch(`/api/vmd-directives?store=${encodeURIComponent(storeName)}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d.ok) {
-          setStatus(d.error || "불러오기 실패");
-          return;
-        }
-        const matched = (d.items || []).filter((it: any) => String(it.sku || "").startsWith(styleCode));
-        setItems(matched);
-        setStatus(matched.length ? "" : "이 매장엔 검증된 대체후보가 아직 없어요.");
-      })
-      .catch((e) => setStatus(e?.message || "불러오기 실패"));
-  }, [styleCode, storeName]);
+    let cancelled = false;
+    setCandidates(null);
+    setStatus("불러오는 중...");
 
-  // MARK 6.84: 검토 결과 이 소스(/api/archive/vmd)가 HANDOFF 문서 기준으로 "대체상품 제안"의
-  // 정식 창구가 맞습니다 — product360엔 별도 대체상품 데이터가 없었어요. 결과가 많아 보이던
-  // 건 "코디네이션" 버튼이 같은 데이터를 중복으로 보여주고 있었기 때문(버튼 통합함).
-  // 화면엔 상위 3개만 깔끔하게 보여줍니다.
-  const allCandidates = items.flatMap((it: any) => it.candidates || []);
-  const topCandidates = allCandidates.slice(0, 3);
+    async function run() {
+      // 1) 비주얼 트윈 후보 가져오기
+      const res = await fetch(`/api/product360?code=${encodeURIComponent(styleCode)}&include=visualTwin`, { cache: "no-store" });
+      const d = await res.json();
+      if (cancelled) return;
+      if (!d.ok) {
+        setStatus(d.error || "불러오기 실패");
+        return;
+      }
+      // 응답 형태가 아직 확정 전이라(이사님 쪽에 창구 요청 중) 여러 위치를 다 확인합니다.
+      const twin = d.visualTwin || d.twin || d;
+      const entry = twin?.entry || twin;
+      const neighbors: any[] = entry?.similarNeighbors || entry?.neighbors || [];
+      if (!neighbors.length) {
+        setStatus("비슷한 상품을 찾지 못했어요.");
+        setCandidates([]);
+        return;
+      }
+
+      // 2) 후보마다 "이 매장" 재고를 실시간으로 조회해서, 재고 있는 것만 남깁니다.
+      //    (유사도 순으로 이미 정렬돼 있어서, 상위 후보부터 순서대로 확인)
+      const checked: any[] = [];
+      for (const n of neighbors) {
+        if (checked.length >= 3) break; // 재고 있는 게 3개 채워지면 그만 확인
+        try {
+          const sRes = await fetch(`/api/store-stock-lookup?store=${encodeURIComponent(storeName)}&styleCode=${encodeURIComponent(n.style)}`, { cache: "no-store" });
+          const sData = await sRes.json();
+          if (!sData.ok || !sData.found) continue;
+          const stock = (sData.colors || []).reduce((sum: number, c: any) => sum + Math.max(0, Number(c.stock || 0)), 0);
+          if (stock > 0) checked.push({ ...n, storeStock: stock });
+        } catch {
+          // 재고 조회 실패한 후보는 그냥 건너뜁니다
+        }
+      }
+      if (cancelled) return;
+      setCandidates(checked);
+      setStatus(checked.length ? "" : "비슷한 상품은 있는데, 이 매장엔 재고가 없어요.");
+    }
+
+    run().catch((e) => !cancelled && setStatus(e?.message || "불러오기 실패"));
+    return () => {
+      cancelled = true;
+    };
+  }, [styleCode, storeName]);
 
   return (
     <div>
       {status && <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>{status}</p>}
-      {topCandidates.map((c: any, ci: number) => (
+      {(candidates || []).map((c: any, ci: number) => (
         <div key={ci} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-          <ProductThumb styleCode={c.style} size={48} />
-          <div style={{ fontSize: 13 }}>
-            <strong>{c.style}</strong> · {c.name} <span style={{ color: "#94A3B8" }}>({c.relation} · {c.colorName})</span>
+          {c.heroUrl ? (
+            <img src={c.heroUrl} alt={c.style} style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <ProductThumb styleCode={c.style} size={48} />
+          )}
+          <div style={{ fontSize: 13, flex: 1, minWidth: 0 }}>
+            <strong>{c.style}</strong>{c.color ? ` (${c.color})` : ""}
+            <span style={{ color: "#94A3B8" }}> · 유사도 {Math.round((c.sim || 0) * 100)}%</span>
           </div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#059669", flexShrink: 0 }}>재고 {c.storeStock}개</div>
         </div>
       ))}
-      {allCandidates.length > 3 && (
-        <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>+{allCandidates.length - 3}개 더 있음 (상위 3개만 표시)</p>
-      )}
     </div>
   );
 }
@@ -354,26 +390,17 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         await scanner.start(
           { facingMode: "environment" },
           {
-            fps: 15,
+            fps: 10,
             // MARK 6.91: "흰 택+검은 바코드"인데 잘 안 찍힌다는 피드백 — Code128 바코드는
             // 가로로 긴 형태라 정사각형에 가까운 박스(280x160)보다 가로로 넓은 박스가
             // 바코드 전체를 담기 더 쉽습니다. 박스를 더 넓고 낮게 바꿨습니다.
             qrbox: { width: 320, height: 110 },
             aspectRatio: 1.4,
-            // MARK 6.91: 기본 설정은 QR코드 등 여러 포맷을 한꺼번에 시도하느라 느리고
-            // 정확도가 떨어질 수 있어서, 실제로 쓰는 포맷(CODE_128, 필요시 EAN13도)만
-            // 명시해서 인식 속도/정확도를 높입니다.
-            formatsToSupport: (window as any).Html5QrcodeSupportedFormats
-              ? [
-                  (window as any).Html5QrcodeSupportedFormats.CODE_128,
-                  (window as any).Html5QrcodeSupportedFormats.EAN_13,
-                  (window as any).Html5QrcodeSupportedFormats.CODE_39,
-                ]
-              : undefined,
-            // MARK 6.91: 브라우저가 지원하면(최신 크롬/안드로이드) 네이티브 BarcodeDetector API를
-            // 대신 써서 훨씬 빠르고 정확하게 인식합니다 — 안 되는 브라우저는 자동으로 예전
-            // 방식(JS 디코더)으로 그대로 동작해요.
-            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+            // MARK 6.93: 6.91에서 넣었던 formatsToSupport 제한 / useBarCodeDetectorIfSupported /
+            // advanced focusMode 세 가지가 오히려 "전에는 찍히던 게 안 찍히는" 회귀를 일으킨
+            //것 같아서(기기별로 네이티브 BarcodeDetector 지원이 들쭉날쭉하거나, advanced
+            // 제약이 카메라 화질을 오히려 떨어뜨렸을 가능성) 전부 되돌렸습니다 — qrbox
+            // 크기 조정(박스를 바코드 모양에 맞게 넓힘)만 남기고 나머지는 6.71 방식 그대로.
             // MARK 6.71: 아이폰(iOS Safari)에서 기본 해상도가 낮게 잡혀서 CODE128 바코드를
             // 가끔 엉뚱한 특수문자로 오독하는 문제가 있었습니다 (예: F→', L→", 매번 다르게).
             // 해상도를 명시적으로 높게 요청해서 프레임 화질을 개선합니다.
@@ -381,9 +408,6 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               facingMode: "environment",
               width: { ideal: 1920 },
               height: { ideal: 1080 },
-              // MARK 6.91: 흰바탕 검은바코드가 잘 안 찍히면 카메라가 자동으로 초점을 못 맞추고
-              // 있을 가능성이 큽니다 — 근접 포커스를 계속 시도하도록 명시(지원 기기에서만 적용됨).
-              advanced: [{ focusMode: "continuous" } as any],
             },
           },
           async (decodedText: string) => {

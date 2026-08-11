@@ -435,7 +435,21 @@ function StockLookupSection({ storeName }: { storeName: string }) {
           },
           () => {}
         );
-        if (!cancelled) setStatus("");
+        if (!cancelled) {
+          setStatus("");
+          // MARK 6.94: 처음부터(getUserMedia 요청 시점) advanced 초점 제약을 걸면 기기에 따라
+          // 스트림 시작 자체가 실패/저하되는 회귀가 있었어서, 스트림이 이미 정상적으로 켜진
+          // "다음"에 안전하게 시도합니다 — 지원 안 되면 조용히 무시되고, 지원되면 자동으로
+          // 계속 초점을 맞추려고 시도합니다.
+          try {
+            const caps = typeof scanner.getRunningTrackCapabilities === "function" ? scanner.getRunningTrackCapabilities() : null;
+            if (caps?.focusMode?.includes?.("continuous") && typeof scanner.applyVideoConstraints === "function") {
+              await scanner.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] });
+            }
+          } catch {
+            // 이 기기/브라우저가 초점 제어를 지원 안 하면 그냥 기본 동작으로 둡니다.
+          }
+        }
       } catch (e: any) {
         if (!cancelled) {
           const name = e?.name || "";
@@ -517,7 +531,26 @@ function StockLookupSection({ storeName }: { storeName: string }) {
       </div>
 
       {scanning && (
-        <div style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto" }}>
+        <div
+          style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto", cursor: "pointer" }}
+          onClick={async () => {
+            // MARK 6.94: "터치하면 초점을 다시 잡게" 요청 — 화면 아무 곳이나 탭하면
+            // 카메라한테 다시 초점을 맞추라고 요청합니다(지원 기기에서만 실제로 동작,
+            // 안 되는 기기에서는 그냥 아무 일도 안 일어나요).
+            const s = (window as any).__markScanner;
+            if (!s || typeof s.applyVideoConstraints !== "function") return;
+            try {
+              await s.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] });
+            } catch {
+              try {
+                // continuous가 안 되면 single-shot(그 순간 한 번 초점 맞추기)도 시도해봅니다.
+                await s.applyVideoConstraints({ advanced: [{ focusMode: "single-shot" }] });
+              } catch {
+                // 이 기기는 초점 제어 자체를 지원 안 하는 것으로 보임 — 조용히 무시.
+              }
+            }
+          }}
+        >
           <div id="barcode-reader" style={{ width: "100%", borderRadius: 16, overflow: "hidden" }} />
           {/* MARK 6.80: 바코드 조준하기 쉽게 카메라 화면 가운데에 얇은 스캔라인을 얹습니다.
               (html5-qrcode 스캔 로직 자체는 안 건드림, 순수 시각적 가이드) */}
@@ -536,6 +569,9 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               pointerEvents: "none",
             }}
           />
+          <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, textAlign: "center", fontSize: 11, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,.6)", pointerEvents: "none" }}>
+            화면을 탭하면 초점을 다시 맞춰요
+          </div>
           <style>{`
             @keyframes mark-scanline-pulse {
               0%, 100% { opacity: 0.5; }

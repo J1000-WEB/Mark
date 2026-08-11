@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, useEffect, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 import ProductThumb from "@/components/ProductThumb";
 import NavTabs from "@/components/NavTabs";
 
@@ -312,6 +312,8 @@ function StockLookupSection({ storeName }: { storeName: string }) {
   const [result, setResult] = useState<any>(null);
   const [status, setStatus] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [photoScanning, setPhotoScanning] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [showAlt, setShowAlt] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -333,6 +335,43 @@ function StockLookupSection({ storeName }: { storeName: string }) {
       setStatus("");
     } catch (e: any) {
       setStatus(e?.message || "조회 실패");
+    }
+  }
+
+  // MARK 6.95: 폰 기본 카메라 앱으로 찍은 사진 한 장에서 바코드를 읽어냅니다 — 실시간 영상
+  // 스캔이 기종에 따라 초점을 못 잡는 문제(갤럭시 플립5 등)의 대안입니다. 기본 카메라 앱은
+  // 사진을 찍는 순간 OS 차원에서 확실하게 초점을 맞춰주기 때문에 훨씬 안정적이에요.
+  async function handlePhotoBarcode(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = ""; // 같은 사진 다시 선택해도 onChange가 또 뜨도록
+    if (!file) return;
+
+    setPhotoScanning(true);
+    setStatus("사진에서 바코드 찾는 중...");
+    try {
+      if (!(window as any).Html5Qrcode) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("스캐너 라이브러리 로딩 실패"));
+          document.body.appendChild(script);
+        });
+      }
+      const Html5Qrcode = (window as any).Html5Qrcode;
+      const fileScanner = new Html5Qrcode("barcode-file-reader");
+      const decodedText = await fileScanner.scanFile(file, false);
+      const cleaned = String(decodedText).toUpperCase().trim();
+      if (!/^[A-Z0-9]+$/.test(cleaned) || /^[0-9]+$/.test(cleaned)) {
+        setStatus("바코드를 정확히 읽지 못했어요. 사진을 더 밝고 가깝게 찍어서 다시 시도해주세요.");
+        return;
+      }
+      setStyleCodeInput(cleaned);
+      await lookup({ barcode: cleaned });
+    } catch (err: any) {
+      setStatus("사진에서 바코드를 찾지 못했어요. 바코드가 사진 가운데, 정면으로 나오게 다시 찍어주세요.");
+    } finally {
+      setPhotoScanning(false);
     }
   }
 
@@ -517,7 +556,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               onClick={() => setScanning(true)}
               style={{ flex: 1, padding: "13px 0", borderRadius: 14, border: `1.5px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 14, fontWeight: 800 }}
             >
-              📷 바코드
+              📷 실시간
             </button>
           ) : (
             <button
@@ -528,7 +567,26 @@ function StockLookupSection({ storeName }: { storeName: string }) {
             </button>
           )}
         </div>
+        {/* MARK 6.95: 기종에 따라(갤럭시 플립5 등) 실시간 영상 스캔이 초점을 아예 못 잡는
+            경우가 있어서, 폰 기본 카메라 앱으로 "사진을 찍어서" 그 사진에서 바코드를 읽는
+            방식을 추가했습니다 — 기본 카메라 앱은 브라우저보다 자동초점이 훨씬 안정적이에요. */}
+        <button
+          onClick={() => photoInputRef.current?.click()}
+          disabled={photoScanning}
+          style={{ width: "100%", padding: "11px 0", borderRadius: 14, border: "1.5px dashed #CBD5E1", background: "#F8FAFC", color: "#475569", fontSize: 13, fontWeight: 700 }}
+        >
+          {photoScanning ? "사진에서 바코드 읽는 중..." : "📸 사진 찍어서 인식 (초점 잘 안 맞을 때)"}
+        </button>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={handlePhotoBarcode}
+        />
       </div>
+      <div id="barcode-file-reader" style={{ display: "none" }} />
 
       {scanning && (
         <div

@@ -176,10 +176,12 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
       .catch((e) => setStatus(e?.message || "불러오기 실패"));
   }, [styleCode, storeName]);
 
-  // MARK 6.80: 결과가 너무 많이 나온다는 피드백 — 일단 상위 5개로 제한합니다.
-  // (소스 자체가 이 화면에 맞는 게 맞는지는 다음 세션에 재검토 예정 — TODO 참고)
+  // MARK 6.84: 검토 결과 이 소스(/api/archive/vmd)가 HANDOFF 문서 기준으로 "대체상품 제안"의
+  // 정식 창구가 맞습니다 — product360엔 별도 대체상품 데이터가 없었어요. 결과가 많아 보이던
+  // 건 "코디네이션" 버튼이 같은 데이터를 중복으로 보여주고 있었기 때문(버튼 통합함).
+  // 화면엔 상위 3개만 깔끔하게 보여줍니다.
   const allCandidates = items.flatMap((it: any) => it.candidates || []);
-  const topCandidates = allCandidates.slice(0, 5);
+  const topCandidates = allCandidates.slice(0, 3);
 
   return (
     <div>
@@ -192,8 +194,8 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
           </div>
         </div>
       ))}
-      {allCandidates.length > 5 && (
-        <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>+{allCandidates.length - 5}개 더 있음 (상위 5개만 표시)</p>
+      {allCandidates.length > 3 && (
+        <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>+{allCandidates.length - 3}개 더 있음 (상위 3개만 표시)</p>
       )}
     </div>
   );
@@ -275,14 +277,12 @@ function StockLookupSection({ storeName }: { storeName: string }) {
   const [status, setStatus] = useState("");
   const [scanning, setScanning] = useState(false);
   const [showAlt, setShowAlt] = useState(false);
-  const [showCoord, setShowCoord] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
   async function lookup(params: { styleCode?: string; barcode?: string }) {
     setStatus("조회 중...");
     setResult(null);
     setShowAlt(false);
-    setShowCoord(false);
     setShowGuide(false);
     try {
       const qs = new URLSearchParams({ store: storeName, ...(params.styleCode ? { styleCode: params.styleCode } : { barcode: params.barcode || "" }) });
@@ -371,8 +371,12 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               // MARK 6.71: 실제 품번 바코드는 항상 대문자+숫자만 있습니다. 화질 문제로
               // 오독되면 ', ", ), * 같은 특수문자가 섞여 나오는데, 이걸 그대로 조회해버리면
               // 엉뚱한 결과가 뜨니까 — 이런 값은 무시하고 스캔을 계속합니다(멈추지 않음).
+              // MARK 6.85: "211080244110"처럼 숫자로만 된 값도 문자클래스 검사는 통과해서
+              // 그대로 조회돼버리는 문제가 있었습니다 — 실제 GI 품번 바코드는 항상
+              // "GF3LKP508CHM"처럼 문자로 시작하는 형식이라, 숫자로만 된 스캔 결과는
+              // 오독(다른 바코드를 잘못 읽었거나 노이즈)으로 보고 걸러냅니다.
               const cleaned = decodedText.toUpperCase().trim();
-              if (!/^[A-Z0-9]+$/.test(cleaned)) {
+              if (!/^[A-Z0-9]+$/.test(cleaned) || /^[0-9]+$/.test(cleaned)) {
                 setStatus("바코드를 다시 읽는 중이에요... (인식이 불안정하면 조금 더 가까이/멀리 대보세요)");
                 return; // 스캐너는 멈추지 않고 계속 시도
               }
@@ -565,25 +569,23 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               검증된 VMD 대체후보 로직(/api/archive/vmd)을 그대로 씁니다 — 이사님 안내에 따르면
               양쪽 매장 재고 2장↑, 슬롯 어휘 일치, 방향성 확률 하한 같은 검증을 이미 거친
               결과라서, 저희가 직접 조립하면(예전엔 "같은 품번 다른 컬러 재고"로 임시 대체)
-              조건 하나 빠뜨려도 몰라요(이사님 쪽 7월 사고 사례 — 590건 오탐). */}
+              조건 하나 빠뜨려도 몰라요(이사님 쪽 7월 사고 사례 — 590건 오탐).
+              MARK 6.84: "대체상품 추천"이랑 "코디네이션" 버튼이 사실 완전히 같은 소스
+              (/api/archive/vmd)를 보고 있었어요 — HANDOFF 문서에 별도 "코디" 데이터는
+              언급이 없고, 이 API 자체가 "재고부족 → 대체상품 제안" 용도라고 명시돼 있어서,
+              버튼 두 개가 똑같은 내용을 보여주며 헷갈리는 상황이었습니다. 하나로 합쳤어요. */}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button
-              onClick={() => { setShowGuide((v: boolean) => !v); setShowAlt(false); setShowCoord(false); }}
-              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showGuide ? ACCENT : "#fff", color: showGuide ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
+              onClick={() => { setShowGuide((v: boolean) => !v); setShowAlt(false); }}
+              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showGuide ? ACCENT : "#fff", color: showGuide ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
             >
               🏷️ 판매가이드
             </button>
             <button
-              onClick={() => { setShowAlt((v: boolean) => !v); setShowGuide(false); setShowCoord(false); }}
-              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showAlt ? ACCENT : "#fff", color: showAlt ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
+              onClick={() => { setShowAlt((v: boolean) => !v); setShowGuide(false); }}
+              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showAlt ? ACCENT : "#fff", color: showAlt ? "#fff" : ACCENT, fontSize: 13, fontWeight: 800 }}
             >
               🔄 대체상품 추천
-            </button>
-            <button
-              onClick={() => { setShowCoord((v: boolean) => !v); setShowGuide(false); setShowAlt(false); }}
-              style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `1.5px solid ${ACCENT}`, background: showCoord ? ACCENT : "#fff", color: showCoord ? "#fff" : ACCENT, fontSize: 12, fontWeight: 800 }}
-            >
-              👗 코디네이션
             </button>
           </div>
 
@@ -611,8 +613,6 @@ function StockLookupSection({ storeName }: { storeName: string }) {
               })()}
             </div>
           )}
-
-          {showCoord && <CoordinationInline styleCode={result.styleCode} storeName={storeName} />}
         </div>
       )}
     </section>

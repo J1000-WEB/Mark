@@ -151,56 +151,77 @@ type LiveWeeklyTarget = {
 };
 
 export async function saveWeeklyTargetSnapshot(live: LiveWeeklyTarget) {
+  const results = await saveWeeklyTargetSnapshots([live]);
+  return results[0];
+}
+
+// MARK 6.90: 예전엔 주차마다 시트를 따로 읽고+썼어요(주간+월간 합쳐서 주차당 최대 4번 호출).
+// target-refresh.js가 이제 한 번에 ±2달치(최대 10주차)를 올리다 보니, 10주차 × 4번 =
+// 40번 넘는 호출이 순식간에 몰려서 "Read requests per minute" 할당량을 넘기는 문제가
+// 있었습니다. 여러 주차를 한 번에 받아서, 시트를 딱 한 번만 읽고 딱 한 번만 쓰도록
+// 배치 처리하는 함수로 바꿨습니다 — API 호출 횟수가 몇 주차를 올리든 항상 2번(주간 1번+
+// 월간 1번 읽기) + 최대 2번(쓰기)으로 고정됩니다.
+export async function saveWeeklyTargetSnapshots(lives: LiveWeeklyTarget[]) {
+  if (!lives.length) return [];
   const historyId = getHistorySheetId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+  const { replaceSheetValuesById } = await import("@/lib/googleSheets");
 
-  // ---- 주간목표 저장 ----
+  // ---- 주간목표 저장 (한 번만 읽고, 한 번만 씀) ----
   await ensureSheetExistsById(historyId, TARGET_HISTORY_SHEET, TARGET_HISTORY_HEADER);
   const existingRaw = await getSheetValuesById(historyId, TARGET_HISTORY_SHEET, "A:E").catch(() => []);
   const existingRows = (existingRaw || []).slice(1);
-  const keep = existingRows.filter((r) => text(r?.[0]) !== live.weekMonday);
+  const weekMondays = new Set(lives.map((l) => l.weekMonday));
+  let keep = existingRows.filter((r) => !weekMondays.has(text(r?.[0])));
 
-  const newRows: any[][] = [];
-  if (live.companyTotal) {
-    newRows.push([live.weekMonday, COMPANY_TOTAL_KEY, live.companyTotal.weekTarget, live.companyTotal.weekActual, savedAt]);
+  const allNewWeeklyRows: any[][] = [];
+  for (const live of lives) {
+    if (live.companyTotal) {
+      allNewWeeklyRows.push([live.weekMonday, COMPANY_TOTAL_KEY, live.companyTotal.weekTarget, live.companyTotal.weekActual, savedAt]);
+    }
+    for (const s of live.stores) {
+      allNewWeeklyRows.push([live.weekMonday, s.storeName, s.weekTarget, s.weekActual, savedAt]);
+    }
   }
-  for (const s of live.stores) {
-    newRows.push([live.weekMonday, s.storeName, s.weekTarget, s.weekActual, savedAt]);
-  }
+  await replaceSheetValuesById(historyId, TARGET_HISTORY_SHEET, [TARGET_HISTORY_HEADER, ...keep, ...allNewWeeklyRows]);
 
-  const { replaceSheetValuesById } = await import("@/lib/googleSheets");
-  await replaceSheetValuesById(historyId, TARGET_HISTORY_SHEET, [TARGET_HISTORY_HEADER, ...keep, ...newRows]);
-
-  // ---- 월간목표 저장 ----
-  let monthlySaved = false;
-  if (live.monthKey) {
+  // ---- 월간목표 저장 (한 번만 읽고, 한 번만 씀) ----
+  const monthKeys = new Set(lives.map((l) => l.monthKey).filter(Boolean));
+  const monthlySavedKeys = new Set<string>();
+  if (monthKeys.size) {
     await ensureSheetExistsById(historyId, MONTHLY_TARGET_HISTORY_SHEET, MONTHLY_TARGET_HISTORY_HEADER);
     const existingMonthlyRaw = await getSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, "A:D").catch(() => []);
     const existingMonthlyRows = (existingMonthlyRaw || []).slice(1);
-    const keepMonthly = existingMonthlyRows.filter((r) => text(r?.[0]) !== live.monthKey);
+    let keepMonthly = existingMonthlyRows.filter((r) => !monthKeys.has(text(r?.[0])));
 
-    const newMonthlyRows: any[][] = [];
-    if (live.companyTotal?.monthTarget) {
-      newMonthlyRows.push([live.monthKey, COMPANY_TOTAL_KEY, live.companyTotal.monthTarget, savedAt]);
+    const allNewMonthlyRows: any[][] = [];
+    for (const live of lives) {
+      if (!live.monthKey) continue;
+      if (live.companyTotal?.monthTarget) {
+        allNewMonthlyRows.push([live.monthKey, COMPANY_TOTAL_KEY, live.companyTotal.monthTarget, savedAt]);
+        monthlySavedKeys.add(live.monthKey);
+      }
+      for (const s of live.stores) {
+        if (s.monthTarget) {
+          allNewMonthlyRows.push([live.monthKey, s.storeName, s.monthTarget, savedAt]);
+          monthlySavedKeys.add(live.monthKey);
+        }
+      }
     }
-    for (const s of live.stores) {
-      if (s.monthTarget) newMonthlyRows.push([live.monthKey, s.storeName, s.monthTarget, savedAt]);
-    }
-    if (newMonthlyRows.length) {
-      await replaceSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, [MONTHLY_TARGET_HISTORY_HEADER, ...keepMonthly, ...newMonthlyRows]);
-      monthlySaved = true;
+    if (allNewMonthlyRows.length) {
+      await replaceSheetValuesById(historyId, MONTHLY_TARGET_HISTORY_SHEET, [MONTHLY_TARGET_HISTORY_HEADER, ...keepMonthly, ...allNewMonthlyRows]);
     }
   }
 
-  return {
+  return lives.map((live) => ({
     ok: true,
     weekMonday: live.weekMonday,
     monthKey: live.monthKey,
     refreshedDate: live.refreshedDate,
     storeCount: live.stores.length,
     hasCompanyTotal: !!live.companyTotal,
-    monthlySaved,
-  };
+    monthlySaved: monthlySavedKeys.has(live.monthKey),
+  }));
 }
 
 export async function captureWeeklyTargetSnapshot() {

@@ -371,8 +371,32 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   );
   const monthCumulative = Array.from(monthAmountByDate.values()).reduce((s, v) => s + v, 0);
   const monthProjected = monthElapsedDays > 0 ? (monthCumulative / monthElapsedDays) * monthTotalDays : 0;
-  // 월 목표는 별도 저장본이 없어서, 주간목표 × (이번달 일수/7)로 추정합니다(추정치임을 명시).
-  const monthTargetEstimate = weekTarget ? weekTarget * (monthTotalDays / 7) : 0;
+  // MARK 6.89: 예전엔 저장된 월간목표가 없어서 "주간목표 × (이번달 일수/7)"로 추정만 했는데,
+  // 이제 target-refresh.js가 SL1030에서 진짜 월간목표(Monthly_Target_History)까지 저장하고
+  // 있어서, 그 실제값을 우선 쓰고 없을 때만 예전 추정 방식으로 폴백합니다.
+  let monthTargetEstimate = 0;
+  try {
+    const { getSavedMonthlyTarget } = await import("@/lib/weeklyTarget");
+    const monthKey = monthStart.slice(0, 7);
+    const savedMonth = await getSavedMonthlyTarget(monthKey);
+    monthTargetEstimate = savedMonth?.byStore?.get(storeName) || 0;
+    if (!monthTargetEstimate && savedMonth?.byStore) {
+      const { normalizeStoreKey } = await import("@/lib/dataBuilder");
+      const targetKey = normalizeStoreKey(storeName);
+      for (const [name, amt] of savedMonth.byStore.entries()) {
+        if (normalizeStoreKey(name) === targetKey) {
+          monthTargetEstimate = amt;
+          break;
+        }
+      }
+    }
+  } catch {
+    monthTargetEstimate = 0;
+  }
+  if (!monthTargetEstimate) {
+    // 폴백: 저장된 월간목표가 아직 없으면(과거 데이터 등) 주간목표 기반 추정치 사용
+    monthTargetEstimate = weekTarget ? weekTarget * (monthTotalDays / 7) : 0;
+  }
   const monthProjectedRate = monthTargetEstimate ? (monthProjected / monthTargetEstimate) * 100 : 0;
   const monthRemainingDays = Math.max(0, monthTotalDays - monthElapsedDays);
   const monthRemainingAmount = Math.max(0, monthTargetEstimate - monthCumulative);

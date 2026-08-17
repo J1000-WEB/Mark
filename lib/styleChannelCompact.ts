@@ -28,12 +28,23 @@ function isEmpty(v: any): boolean {
 }
 
 // 원본 행들(헤더 3행 + 데이터 N행, 594열)을 압축합니다.
-// 헤더는 그대로 두고(채널 개수/이름을 나중에 알아내려면 필요), 데이터 행만 압축합니다.
+// MARK 6.96: 예전엔 데이터 행만 압축하고 헤더 3행은 594열 그대로 뒀는데, 구글시트 그리드를
+// 미리 만들 때 "행수×열수"로 사전할당하다 보니(createSheetWithValuesById의 gridSize),
+// 데이터가 아무리 압축돼도 "이 시트의 열 개수"가 헤더 때문에 594로 잡혀서 그리드 자체가
+// 여전히 (전체행수)×594칸으로 크게 잡히는 문제가 있었습니다(압축 효과가 그리드 크기에는
+// 반영이 안 됨). 그래서 헤더 3행도 같은 방식(마스터는 그대로, 채널 부분은 JSON 하나로)으로
+// 압축해서, 그리드 폭이 항상 31~32열 정도로 작게 유지되게 했습니다.
 export function compactStyleChannelRows(rows: Row[]): Row[] {
   if (!rows || rows.length <= HEADER_ROWS) return rows || [];
 
   const headerRows = rows.slice(0, HEADER_ROWS);
   const dataRows = rows.slice(HEADER_ROWS);
+
+  const compactHeaders = headerRows.map((r) => {
+    const master = r.slice(0, STYLE_CHANNEL_MASTER_END);
+    const channelPart = r.slice(STYLE_CHANNEL_MASTER_END);
+    return [...master, channelPart.length, JSON.stringify(channelPart)];
+  });
 
   const compactData = dataRows.map((r) => {
     const master = r.slice(0, STYLE_CHANNEL_MASTER_END);
@@ -55,15 +66,31 @@ export function compactStyleChannelRows(rows: Row[]): Row[] {
     return [...master, totalCols, JSON.stringify(detail)];
   });
 
-  return [...headerRows, ...compactData];
+  return [...compactHeaders, ...compactData];
 }
 
 // 압축된 행들을 원본과 동일한 열 개수/위치로 복원합니다.
 export function expandStyleChannelRows(rows: Row[]): Row[] {
   if (!rows || rows.length <= HEADER_ROWS) return rows || [];
 
-  const headerRows = rows.slice(0, HEADER_ROWS);
+  const compactHeaders = rows.slice(0, HEADER_ROWS);
   const compactData = rows.slice(HEADER_ROWS);
+
+  // MARK 6.96: 헤더도 압축되므로(데이터 행과 같은 구조: [master, totalCols, JSON]) 복원합니다.
+  // 예전(6.73~6.95) 압축본은 헤더가 그대로 594열이었을 수 있어서, 그 경우엔 이미 원본
+  // 그대로이므로 압축 해제 없이 그대로 통과시킵니다(하위호환).
+  const headerRows = compactHeaders.map((r) => {
+    const looksCompact = r.length === STYLE_CHANNEL_MASTER_END + 2 && typeof r[STYLE_CHANNEL_MASTER_END + 1] === "string";
+    if (!looksCompact) return r; // 이미 원본 폭(594열) — 예전 압축본과의 하위호환
+    const master = r.slice(0, STYLE_CHANNEL_MASTER_END);
+    let channelPart: any[] = [];
+    try {
+      channelPart = JSON.parse(r[STYLE_CHANNEL_MASTER_END + 1] || "[]");
+    } catch {
+      channelPart = [];
+    }
+    return [...master, ...channelPart];
+  });
 
   const expandedData = compactData.map((r) => {
     // 압축 행 구조: [master(29개), totalCols, 상세JSON]

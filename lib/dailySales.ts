@@ -1,12 +1,10 @@
 import {
-  createSheetWithValuesById,
-  deleteSheetByTitleIfExistsById,
+  ensureSheetExistsById,
   getDailySourceSheetId,
   getHistorySheetId,
-  getSheetPropsById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
-  renameSheetById,
+  replaceSheetValuesById,
 } from "@/lib/googleSheets";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { loadChannelMaster, isOnlineType, seedUnknownChannels, type ChannelType } from "@/lib/channelMaster";
@@ -656,24 +654,14 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
   const expectedQty = flatRows.reduce((s, r) => s + num(r.qty), 0);
   const expectedAmount = flatRows.reduce((s, r) => s + num(r.amount), 0);
 
-  // 검증 통과: 이제 이름만 바꿔서 교체합니다 (셀 내용을 지우거나 다시 쓰지 않습니다).
-  // MARK 6.101: 예전엔 "이전 백업"을 안 지우고 계속 남겨뒀는데, 그러면 스왑하는 순간
-  // [현재 시트] + [지난 백업] + [방금 만든 임시 시트] 세 개가 동시에 존재하게 돼서
-  // 워크북 전체 셀 수가 실제 필요한 것보다 최대 3배까지 부풀었습니다. Daily_Sales_History가
-  // 계속 커지면서 결국 addSheet 자체가 "1000만 셀 초과"로 실패하기 시작했고(2026-08-15부터),
-  // 그 이후로 sales-refresh.js가 40분마다 계속 실패해서 매출이 며칠째 안 쌓이고 있었습니다.
-  // → 이전 백업을 "임시 시트 만들기 전에" 먼저 지워서 최대 2배로 줄이고, 스왑 성공 직후에도
-  // 바로 지워서 평상시엔 항상 1배만 유지되게 했습니다.
-  const backupTitle = `${DAILY_HISTORY_SHEET}_backup`;
-  await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
-
-  const stagingTitle = `${DAILY_HISTORY_SHEET}__staging_${Date.now()}`;
-  await deleteSheetByTitleIfExistsById(spreadsheetId, stagingTitle).catch(() => {});
-  await createSheetWithValuesById(spreadsheetId, stagingTitle, [DAILY_HISTORY_HEADER, ...compactRows]);
-
-  // 방금 새로 쓴 시트를 다시 읽어서 원본과 수량/금액/건수가 일치하는지 확인합니다.
-  const verifyRaw = await getSheetValuesById(spreadsheetId, stagingTitle, "A:ZZ").catch(() => []);
-  const verifyFlat = expandCompactDailyHistoryRows(verifyRaw);
+  // MARK 6.104: 예전엔 "임시 시트를 새로 만들어서 써보고, 다시 읽어서 검증하고, 이름을
+  // 바꿔서 교체"하는 방식이었습니다. 안전하긴 한데, 그 순간엔 [기존 시트]+[새 임시 시트]가
+  // 동시에 존재해서 워크북 전체 셀 수가 일시적으로 거의 2배가 됩니다. Daily_Sales_History가
+  // 계속 커지면서 이 "2배"조차 1000만 셀을 넘기기 시작해서(2026-08-17), 백업 정리(6.101)만으론
+  // 더 이상 부족해졌습니다. 그래서 구글시트를 한 번도 새로 만들지 않고, 지금 갖고 있는
+  // compactRows를 바로 다시 펼쳐서(네트워크 왕복 없이 메모리 안에서) 검증한 뒤, 기존 시트
+  // "제자리에" 덮어씁니다 — 새 시트가 안 생기니 셀 수가 순간적으로도 부풀지 않습니다.
+  const verifyFlat = expandCompactDailyHistoryRows([DAILY_HISTORY_HEADER, ...compactRows]);
   const verifyQty = verifyFlat.reduce((s, r) => s + num(r.qty), 0);
   const verifyAmount = verifyFlat.reduce((s, r) => s + num(r.amount), 0);
   const countOk = verifyFlat.length === expectedRecordCount;
@@ -681,8 +669,7 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
   const amountOk = Math.abs(verifyAmount - expectedAmount) < 1;
 
   if (!countOk || !qtyOk || !amountOk) {
-    // 검증 실패: 원본은 절대 건드리지 않고, 방금 만든 임시 시트만 지우고 에러를 던집니다.
-    await deleteSheetByTitleIfExistsById(spreadsheetId, stagingTitle).catch(() => {});
+    // 검증 실패: 아직 구글시트를 전혀 안 건드렸으므로(메모리 안에서만 확인) 원본은 그대로입니다.
     throw new Error(
       `Daily_Sales_History 저장 검증 실패로 중단했습니다(원본은 그대로 보존됨). ` +
       `기대값: 건수 ${expectedRecordCount}/수량 ${expectedQty}/금액 ${expectedAmount}, ` +
@@ -690,19 +677,8 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
     );
   }
 
-  const props = await getSheetPropsById(spreadsheetId);
-  const liveExists = props.some((p) => p.title === DAILY_HISTORY_SHEET);
-
-  if (liveExists) {
-    await renameSheetById(spreadsheetId, DAILY_HISTORY_SHEET, backupTitle);
-  }
-  await renameSheetById(spreadsheetId, stagingTitle, DAILY_HISTORY_SHEET);
-
-  // 스왑이 확실히 끝났으니 백업은 바로 지웁니다 — 안전을 위해 아주 잠깐만 남겨두는 용도라서,
-  // 여기까지 왔다는 건 이미 안전하게 교체가 끝났다는 뜻입니다.
-  if (liveExists) {
-    await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
-  }
+  await ensureSheetExistsById(spreadsheetId, DAILY_HISTORY_SHEET, DAILY_HISTORY_HEADER);
+  await replaceSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, [DAILY_HISTORY_HEADER, ...compactRows]);
 
   return {
     recordCount: expectedRecordCount,

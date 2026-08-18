@@ -187,10 +187,17 @@ export async function safeReplaceSheetValuesById(spreadsheetId: string, sheetNam
 
   // 2) 여기까지 왔으면 쓰기는 성공한 것 — 새 데이터보다 더 길게 남아있던 예전 데이터(꼬리)만
   //    지웁니다. 이 단계가 실패해도(드묾) 꼬리에 예전 데이터 일부가 남는 정도라 안전합니다.
+  // MARK 6.108: 예전엔 sheets.spreadsheets.get()으로 워크북 전체(지금 60개+ 시트)의 메타정보를
+  // 통째로 받아왔는데, 시트가 많을수록 이 호출 자체가 느려집니다. fields로 딱 이 시트의
+  // 그리드 크기만 요청하도록 좁혀서 훨씬 가볍게 만들었습니다.
   try {
     const newRowCount = values.length;
     const newColCount = Math.max(...values.map((r) => r.length), 1);
-    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const meta = await sheets.spreadsheets.get({
+      spreadsheetId,
+      ranges: [`'${escaped}'!A1`],
+      fields: "sheets.properties(title,sheetId,gridProperties)",
+    });
     const sheetProps = (meta.data.sheets || []).find((s) => s.properties?.title === sheetName)?.properties;
     const gridRows = sheetProps?.gridProperties?.rowCount || 0;
     const gridCols = sheetProps?.gridProperties?.columnCount || 0;
@@ -306,7 +313,9 @@ export async function createSheetWithValuesById(spreadsheetId: string, title: st
 
 export async function ensureSheetExistsById(spreadsheetId: string, title: string, header?: any[]) {
   const sheets = await getSheetsClient();
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  // MARK 6.108: 존재 여부만 확인하면 되는데 워크북 전체(그리드 크기 등 포함) 메타정보를
+  // 통째로 받아오고 있었습니다 — 시트 제목만 가볍게 받아오도록 좁혔습니다.
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
   const exists = (meta.data.sheets || []).some((s) => s.properties?.title === title);
   if (!exists) {
     await sheets.spreadsheets.batchUpdate({

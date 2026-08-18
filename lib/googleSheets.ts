@@ -166,6 +166,66 @@ export async function replaceSheetValuesById(spreadsheetId: string, sheetName: s
   });
 }
 
+// MARK 6.107: replaceSheetValuesById는 "먼저 지우고, 그다음에 쓰는" 2단계라서, 지우기는
+// 성공했는데 쓰기가 실패하면(예: 그 순간 워크북이 셀 한도에 가까워서) 시트가 완전히
+// 빈 채로 남는 사고가 났었습니다(2026-08-18, Daily_Sales_History). 순서를 뒤집어서
+// "먼저 새 데이터를 쓰고, 성공한 뒤에만 남는 부분을 지우는" 방식으로 안전하게 만들었습니다 —
+// 쓰기가 도중에 실패해도 최악의 경우 예전 데이터 일부가 남는 정도지, 통째로 사라지진 않습니다.
+export async function safeReplaceSheetValuesById(spreadsheetId: string, sheetName: string, values: any[][]) {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  if (!values.length) return null;
+
+  // 1) 새 데이터를 먼저 씁니다(기존 걸 지우지 않고 덮어쓰기만) — 이게 실패하면 예전 데이터가
+  //    그대로 남아있으니 안전합니다.
+  const updateResult = await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${escaped}'!A1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values },
+  });
+
+  // 2) 여기까지 왔으면 쓰기는 성공한 것 — 새 데이터보다 더 길게 남아있던 예전 데이터(꼬리)만
+  //    지웁니다. 이 단계가 실패해도(드묾) 꼬리에 예전 데이터 일부가 남는 정도라 안전합니다.
+  try {
+    const newRowCount = values.length;
+    const newColCount = Math.max(...values.map((r) => r.length), 1);
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetProps = (meta.data.sheets || []).find((s) => s.properties?.title === sheetName)?.properties;
+    const gridRows = sheetProps?.gridProperties?.rowCount || 0;
+    const gridCols = sheetProps?.gridProperties?.columnCount || 0;
+
+    if (gridRows > newRowCount) {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId,
+        range: `'${escaped}'!A${newRowCount + 1}:ZZ${gridRows}`,
+      });
+    }
+    if (gridCols > newColCount) {
+      const startColLetter = columnIndexToLetterLocal(newColCount);
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId,
+        range: `'${escaped}'!${startColLetter}1:ZZ${Math.max(newRowCount, gridRows)}`,
+      });
+    }
+  } catch {
+    // 꼬리 정리 실패는 무시 — 다음 실행 때 어차피 새 데이터로 다시 덮어써지므로 무해합니다.
+  }
+
+  return updateResult;
+}
+
+function columnIndexToLetterLocal(zeroBasedNextCol: number) {
+  let n = zeroBasedNextCol + 1;
+  let letters = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rem) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letters || "A";
+}
+
 export async function getSheetPropsById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

@@ -4,7 +4,7 @@ import {
   getHistorySheetId,
   getSheetValuesById,
   getSpreadsheetTitlesById,
-  replaceSheetValuesById,
+  safeReplaceSheetValuesById,
 } from "@/lib/googleSheets";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { loadChannelMaster, isOnlineType, seedUnknownChannels, type ChannelType } from "@/lib/channelMaster";
@@ -678,7 +678,7 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
   }
 
   await ensureSheetExistsById(spreadsheetId, DAILY_HISTORY_SHEET, DAILY_HISTORY_HEADER);
-  await replaceSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, [DAILY_HISTORY_HEADER, ...compactRows]);
+  await safeReplaceSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, [DAILY_HISTORY_HEADER, ...compactRows]);
 
   return {
     recordCount: expectedRecordCount,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { saveWeeklyTargetSnapshots } from "@/lib/weeklyTarget";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const revalidate = 0;
 
 // MARK 6.74: target-refresh.js(erp-agent)가 SL1030(ERP 목표대비실적 화면)에서 직접 긁어온

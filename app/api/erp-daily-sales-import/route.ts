@@ -3,6 +3,10 @@ import { backfillFlatRows } from "@/lib/dailySales";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+// MARK 6.103: Daily_Sales_History가 커지면서 저장(임시시트 생성→검증→교체) 시간이 길어져,
+// 기본 실행시간 제한에 걸려 중간에 끊기는 문제가 있었습니다(2026-08-17 백필 500 에러).
+// 최대한 늘려둡니다 — Vercel 플랜에 따라 실제 상한이 다를 수 있어요(Hobby 최대 60초).
+export const maxDuration = 60;
 
 // MARK 6.53: 로컬 ERP 스크래퍼(erp-agent)가 긁어온 "채널별 매출현황"(스타일/컬러/사이즈별)을
 // Daily_Sales_History에 바로 반영합니다.

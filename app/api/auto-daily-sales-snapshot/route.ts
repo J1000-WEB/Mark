@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readDailySalesFromMarkDb, saveDailySalesToHistory } from "@/lib/dailySales";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const revalidate = 0;
 
 // 자동/수동 일간 스냅샷은 모두 lib/dailySales.ts의 동일 저장 로직을 사용합니다.

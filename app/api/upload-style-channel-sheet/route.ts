@@ -10,6 +10,7 @@ import {
 import { sendEmailAlert } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 export const revalidate = 0;
 
 const LIVE_SHEET_DEFAULT = "스타일별 채널별 입고/판매/재고현황(금액)";

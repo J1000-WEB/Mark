@@ -656,6 +656,17 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
   const expectedQty = flatRows.reduce((s, r) => s + num(r.qty), 0);
   const expectedAmount = flatRows.reduce((s, r) => s + num(r.amount), 0);
 
+  // 검증 통과: 이제 이름만 바꿔서 교체합니다 (셀 내용을 지우거나 다시 쓰지 않습니다).
+  // MARK 6.101: 예전엔 "이전 백업"을 안 지우고 계속 남겨뒀는데, 그러면 스왑하는 순간
+  // [현재 시트] + [지난 백업] + [방금 만든 임시 시트] 세 개가 동시에 존재하게 돼서
+  // 워크북 전체 셀 수가 실제 필요한 것보다 최대 3배까지 부풀었습니다. Daily_Sales_History가
+  // 계속 커지면서 결국 addSheet 자체가 "1000만 셀 초과"로 실패하기 시작했고(2026-08-15부터),
+  // 그 이후로 sales-refresh.js가 40분마다 계속 실패해서 매출이 며칠째 안 쌓이고 있었습니다.
+  // → 이전 백업을 "임시 시트 만들기 전에" 먼저 지워서 최대 2배로 줄이고, 스왑 성공 직후에도
+  // 바로 지워서 평상시엔 항상 1배만 유지되게 했습니다.
+  const backupTitle = `${DAILY_HISTORY_SHEET}_backup`;
+  await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
+
   const stagingTitle = `${DAILY_HISTORY_SHEET}__staging_${Date.now()}`;
   await deleteSheetByTitleIfExistsById(spreadsheetId, stagingTitle).catch(() => {});
   await createSheetWithValuesById(spreadsheetId, stagingTitle, [DAILY_HISTORY_HEADER, ...compactRows]);
@@ -679,23 +690,26 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
     );
   }
 
-  // 검증 통과: 이제 이름만 바꿔서 교체합니다 (셀 내용을 지우거나 다시 쓰지 않습니다).
-  const backupTitle = `${DAILY_HISTORY_SHEET}_backup`;
   const props = await getSheetPropsById(spreadsheetId);
   const liveExists = props.some((p) => p.title === DAILY_HISTORY_SHEET);
 
   if (liveExists) {
-    await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
     await renameSheetById(spreadsheetId, DAILY_HISTORY_SHEET, backupTitle);
   }
   await renameSheetById(spreadsheetId, stagingTitle, DAILY_HISTORY_SHEET);
+
+  // 스왑이 확실히 끝났으니 백업은 바로 지웁니다 — 안전을 위해 아주 잠깐만 남겨두는 용도라서,
+  // 여기까지 왔다는 건 이미 안전하게 교체가 끝났다는 뜻입니다.
+  if (liveExists) {
+    await deleteSheetByTitleIfExistsById(spreadsheetId, backupTitle).catch(() => {});
+  }
 
   return {
     recordCount: expectedRecordCount,
     compactRowCount: compactRows.length,
     totalQty: expectedQty,
     totalAmount: expectedAmount,
-    backupSheetName: liveExists ? backupTitle : "",
+    backupSheetName: "",
   };
 }
 

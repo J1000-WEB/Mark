@@ -2,6 +2,24 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
+  "functions": {
+    "app/api/erp-daily-sales-import/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/auto-daily-sales-snapshot/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/weekly-target-import/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/upload-style-channel-sheet/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/auto-daily-sales-snapshot",

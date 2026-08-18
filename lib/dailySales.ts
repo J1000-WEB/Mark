@@ -754,12 +754,25 @@ export async function backfillFlatRows(
   const spreadsheetId = getHistorySheetId();
   if (!newFlatRows.length) throw new Error("저장할 판매 데이터가 없습니다.");
 
+  // MARK 6.111: 525건 upsert 같은 작은 요청에서도 OOM(메모리 부족)이 나서, 정확히 어느
+  // 단계에서 메모리가 튀는지 눈으로 보려고 체크포인트마다 메모리 사용량을 찍습니다.
+  // (문제 해결되면 이 로그들은 다시 지울 예정)
+  function memLog(label: string) {
+    const m = process.memoryUsage();
+    console.log(
+      `[MEM:${label}] rss=${(m.rss / 1024 / 1024).toFixed(1)}MB heapUsed=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB heapTotal=${(m.heapTotal / 1024 / 1024).toFixed(1)}MB external=${(m.external / 1024 / 1024).toFixed(1)}MB`
+    );
+  }
+  memLog("start");
+
   // append(구버전 boolean 옵션)와 mode 둘 다 지원 — append:true면 mode:"append"와 동일
   const mode = options?.mode || (options?.append ? "append" : "replace");
   const targetDates = new Set(newFlatRows.map((r) => r.date));
 
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
+  memLog(`after-read-raw(rows=${existingRaw.length})`);
   const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
+  memLog(`after-expand(flatRows=${existingFlatRows.length})`);
 
   let mergedFlatRows: FlatDailyHistoryRow[];
   let newRowsCount = 0;
@@ -801,8 +814,10 @@ export async function backfillFlatRows(
     newRowsCount = newFlatRows.length;
     mergedFlatRows = [...keptRows, ...newFlatRows];
   }
+  memLog(`after-merge(mergedFlatRows=${mergedFlatRows.length})`);
 
   const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
+  memLog("after-write");
 
   return {
     targetDates: Array.from(targetDates),

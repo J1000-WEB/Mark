@@ -131,6 +131,16 @@ export async function updateValuesById(spreadsheetId: string, range: string, val
   });
 }
 
+// MARK 6.112: 특정 시트의 특정 범위만 비웁니다(값만 지움, 그리드 크기는 안 건드림).
+export async function clearRangeById(spreadsheetId: string, sheetName: string, range: string) {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  return sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `'${escaped}'!${range}`,
+  });
+}
+
 // 여러 개의 (서로 떨어진) 셀/범위를 한 번의 API 호출로 업데이트합니다.
 // 예: 세부일정 시트의 특정 행들의 R열(실적)만 골라서 갱신할 때 사용.
 export async function batchUpdateValuesById(spreadsheetId: string, updates: { range: string; values: any[][] }[]) {

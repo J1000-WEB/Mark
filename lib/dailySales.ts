@@ -1,4 +1,7 @@
 import {
+  appendValuesById,
+  batchUpdateValuesById,
+  clearRangeById,
   ensureSheetExistsById,
   getDailySourceSheetId,
   getHistorySheetId,
@@ -691,26 +694,33 @@ export async function safeWriteCompactDailyHistory(spreadsheetId: string, flatRo
 
 export async function saveDailySalesToHistory(data?: any, source = "manual") {
   const daily = data || await readDailySalesFromMarkDb();
-  const spreadsheetId = getHistorySheetId();
-
   const saveId = makeDailySnapshotId();
   const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
   const snapshotDate = ymdKST();
   const newFlatRows = buildDailyHistoryRows(daily);
 
-  // 기존에 쌓여있던 데이터(구형이든 압축형이든, 아예 없어도 됨)를 전부 평면 구조로 불러옵니다.
-  const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
-  const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
+  // MARK 6.112: 예전엔 여기서 직접 전체 히스토리를 읽어서 합치고 있었는데(이게 항상 "오늘"
+  // 하루치만 다루는 append 작업이라), backfillFlatRows(mode:"append")로 넘기면 그 함수가
+  // 자동으로 "오늘 날짜 행만 콕 집어서" 처리하는 가벼운 경로를 타게 됩니다 — 로직은 완전히
+  // 동일(같은 일자/점포/스타일/칼라/사이즈는 중복 저장 안 함)하고, 전체 역사를 안 읽어서 훨씬 가볍습니다.
+  if (!newFlatRows.length) {
+    return {
+      saveId,
+      savedAt,
+      snapshotDate,
+      source,
+      mode: "sales-only-color-size-compact-json",
+      parsedRows: 0,
+      rows: 0,
+      skippedRows: 0,
+      totalDailySales: daily.totalDailySales || 0,
+      totalDailyAmount: daily.totalDailyAmount || 0,
+      compactRowCount: 0,
+      flatRowCount: 0,
+    };
+  }
 
-  // 중복 방지: 같은 일자/점포/스타일/칼라/사이즈는 다시 저장하지 않습니다(기존 값 유지).
-  const existingKeys = new Set(existingFlatRows.map((r) => detailKey(r.date, r.storeName, r)));
-  const rowsToAdd = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
-
-  const mergedFlatRows = [...existingFlatRows, ...rowsToAdd];
-
-  // MARK 6.6.1: clear+update 대신 새 시트에 쓰고 검증한 뒤 이름만 바꿔서 교체합니다.
-  // 검증에 실패하면 원본(Daily_Sales_History)은 전혀 손대지 않고 에러를 던집니다.
-  const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
+  const writeResult = await backfillFlatRows(newFlatRows, { mode: "append" });
 
   return {
     saveId,
@@ -719,12 +729,12 @@ export async function saveDailySalesToHistory(data?: any, source = "manual") {
     source,
     mode: "sales-only-color-size-compact-json",
     parsedRows: newFlatRows.length,
-    rows: rowsToAdd.length,
-    skippedRows: newFlatRows.length - rowsToAdd.length,
+    rows: writeResult.newRows,
+    skippedRows: writeResult.skippedRows,
     totalDailySales: daily.totalDailySales || 0,
     totalDailyAmount: daily.totalDailyAmount || 0,
     compactRowCount: writeResult.compactRowCount,
-    flatRowCount: mergedFlatRows.length,
+    flatRowCount: writeResult.flatRowCount,
   };
 }
 
@@ -754,25 +764,24 @@ export async function backfillFlatRows(
   const spreadsheetId = getHistorySheetId();
   if (!newFlatRows.length) throw new Error("저장할 판매 데이터가 없습니다.");
 
-  // MARK 6.111: 525건 upsert 같은 작은 요청에서도 OOM(메모리 부족)이 나서, 정확히 어느
-  // 단계에서 메모리가 튀는지 눈으로 보려고 체크포인트마다 메모리 사용량을 찍습니다.
-  // (문제 해결되면 이 로그들은 다시 지울 예정)
-  function memLog(label: string) {
-    const m = process.memoryUsage();
-    console.log(
-      `[MEM:${label}] rss=${(m.rss / 1024 / 1024).toFixed(1)}MB heapUsed=${(m.heapUsed / 1024 / 1024).toFixed(1)}MB heapTotal=${(m.heapTotal / 1024 / 1024).toFixed(1)}MB external=${(m.external / 1024 / 1024).toFixed(1)}MB`
-    );
-  }
-  memLog("start");
-
-  // append(구버전 boolean 옵션)와 mode 둘 다 지원 — append:true면 mode:"append"와 동일
   const mode = options?.mode || (options?.append ? "append" : "replace");
   const targetDates = new Set(newFlatRows.map((r) => r.date));
 
+  // MARK 6.112: 실제 원인을 찾았습니다 — Daily_Sales_History가 압축행 4047개 안에 총
+  // 630,520건(!)의 개별 판매기록을 담고 있어서, "오늘 것 525건만" 갱신하려 해도 예전 코드는
+  // 매번 이 63만 건 전체를 메모리에 펼쳤다가 다시 합치고 있었습니다. 그래서 데이터가 쌓일수록
+  // (특히 8월 들어 계속) 점점 무거워지다가 결국 OOM으로 죽기 시작한 것입니다.
+  // upsert/replace/append 전부 실제로는 "하루치"만 건드리는 호출이 대부분이라(sales-refresh.js/
+  // stock-refresh.js/daily-snapshot.js/backfill-sales-date.js 전부 한 번에 한 날짜), 그 경우엔
+  // 전체 역사를 안 읽고 그 날짜에 해당하는 행만 콕 집어서 처리하는 새 경로로 보냅니다.
+  // (여러 날짜를 한 번에 다루는 아주 드문 호출만 예전의 전체 읽기 경로로 남겨둡니다.)
+  if (targetDates.size === 1) {
+    const onlyFields = options?.onlyFields && options.onlyFields.length ? options.onlyFields : null;
+    return upsertFlatRowsForSingleDate(spreadsheetId, [...targetDates][0], newFlatRows, mode, onlyFields);
+  }
+
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
-  memLog(`after-read-raw(rows=${existingRaw.length})`);
   const existingFlatRows = expandAnyDailyHistoryRows(existingRaw || []);
-  memLog(`after-expand(flatRows=${existingFlatRows.length})`);
 
   let mergedFlatRows: FlatDailyHistoryRow[];
   let newRowsCount = 0;
@@ -814,10 +823,8 @@ export async function backfillFlatRows(
     newRowsCount = newFlatRows.length;
     mergedFlatRows = [...keptRows, ...newFlatRows];
   }
-  memLog(`after-merge(mergedFlatRows=${mergedFlatRows.length})`);
 
   const writeResult = await safeWriteCompactDailyHistory(spreadsheetId, mergedFlatRows);
-  memLog("after-write");
 
   return {
     targetDates: Array.from(targetDates),
@@ -828,4 +835,119 @@ export async function backfillFlatRows(
     compactRowCount: writeResult.compactRowCount,
     flatRowCount: mergedFlatRows.length,
   };
+}
+
+// MARK 6.112: "오늘 하루"만 건드리는 targeted upsert — 전체 시트를 안 읽습니다.
+// 1) 날짜 열(A열)만 가볍게 읽어서 그 날짜에 해당하는 시트 행 번호를 찾고
+// 2) 그 행들만 targeted로 읽어서(보통 매장 수만큼, 20~30줄) 펼치고
+// 3) 새 데이터랑 합쳐서 그 행들만 다시 압축해 그 자리에 쓰고(모자라면 끝에 추가, 남으면 비움)
+// 나머지 수십만 건의 과거 데이터는 아예 메모리에 올리지 않습니다.
+async function upsertFlatRowsForSingleDate(
+  spreadsheetId: string,
+  targetDate: string,
+  newFlatRows: FlatDailyHistoryRow[],
+  mode: "replace" | "append" | "upsert",
+  onlyFields: (keyof FlatDailyHistoryRow)[] | null
+) {
+  await ensureSheetExistsById(spreadsheetId, DAILY_HISTORY_SHEET, DAILY_HISTORY_HEADER);
+
+  // 1) 날짜 열만 가볍게 읽습니다 (JSON 상세는 안 읽음 — 여기가 원래 무거웠던 부분).
+  const dateColRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:A").catch(() => []);
+  const matchingRowNumbers: number[] = []; // 1-based 시트 행번호(헤더 포함)
+  for (let i = 1; i < dateColRaw.length; i++) {
+    const raw = String(dateColRaw[i]?.[0] ?? "").trim();
+    if (!raw) continue;
+    if (normalizeDateKey(raw) === targetDate) matchingRowNumbers.push(i + 1);
+  }
+
+  let existingFlatRows: FlatDailyHistoryRow[] = [];
+  if (matchingRowNumbers.length && mode !== "replace") {
+    // replace는 그날 기존 내용을 어차피 다 버리므로 안 읽어도 됩니다(더 가벼움).
+    const ranges = toContiguousRanges(matchingRowNumbers);
+    const fetched: any[][] = [];
+    for (const [start, end] of ranges) {
+      const chunk = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, `A${start}:G${end}`).catch(() => []);
+      fetched.push(...chunk);
+    }
+    existingFlatRows = expandCompactDailyHistoryRows([DAILY_HISTORY_HEADER, ...fetched]);
+  }
+
+  // 2) 모드별로 그날 하루치 안에서만 합칩니다 (많아야 수천 건).
+  let mergedForDate: FlatDailyHistoryRow[];
+  let newRowsCount = 0;
+  let updatedRowsCount = 0;
+  let skippedRows = 0;
+
+  if (mode === "upsert") {
+    const existingByKey = new Map(existingFlatRows.map((r) => [detailKey(r.date, r.storeName, r), r]));
+    for (const incoming of newFlatRows) {
+      const key = detailKey(incoming.date, incoming.storeName, incoming);
+      const existing = existingByKey.get(key);
+      if (existing) {
+        if (onlyFields) {
+          for (const f of onlyFields) (existing as any)[f] = (incoming as any)[f];
+        } else {
+          Object.assign(existing, incoming);
+        }
+        updatedRowsCount++;
+      } else {
+        existingByKey.set(key, { ...incoming });
+        newRowsCount++;
+      }
+    }
+    mergedForDate = Array.from(existingByKey.values());
+  } else if (mode === "append") {
+    const existingKeys = new Set(existingFlatRows.map((r) => detailKey(r.date, r.storeName, r)));
+    const rowsToWrite = newFlatRows.filter((r) => !existingKeys.has(detailKey(r.date, r.storeName, r)));
+    newRowsCount = rowsToWrite.length;
+    skippedRows = newFlatRows.length - rowsToWrite.length;
+    mergedForDate = [...existingFlatRows, ...rowsToWrite];
+  } else {
+    // replace: 그날 기존 내용은 통째로 버리고 새 데이터로만 채웁니다.
+    newRowsCount = newFlatRows.length;
+    mergedForDate = newFlatRows;
+  }
+
+  const newCompactRows = buildCompactDailyHistoryRows(mergedForDate);
+
+  // 3) 씁니다 — 기존 행 자리부터 채우고, 모자라면 끝에 추가, 남으면 지웁니다.
+  const writeCount = Math.min(newCompactRows.length, matchingRowNumbers.length);
+  const updates: { range: string; values: any[][] }[] = [];
+  for (let i = 0; i < writeCount; i++) {
+    updates.push({ range: `'${DAILY_HISTORY_SHEET}'!A${matchingRowNumbers[i]}:G${matchingRowNumbers[i]}`, values: [newCompactRows[i]] });
+  }
+  if (updates.length) await batchUpdateValuesById(spreadsheetId, updates);
+
+  if (newCompactRows.length > matchingRowNumbers.length) {
+    const extra = newCompactRows.slice(matchingRowNumbers.length);
+    await appendValuesById(spreadsheetId, `'${DAILY_HISTORY_SHEET}'!A:G`, extra);
+  } else if (matchingRowNumbers.length > newCompactRows.length) {
+    // 압축 청크 수가 줄어든 경우(드묾) — 남는 옛 행들은 비웁니다.
+    const leftover = matchingRowNumbers.slice(newCompactRows.length);
+    for (const [start, end] of toContiguousRanges(leftover)) {
+      await clearRangeById(spreadsheetId, DAILY_HISTORY_SHEET, `A${start}:G${end}`).catch(() => {});
+    }
+  }
+
+  return {
+    targetDates: [targetDate],
+    replacedRows: mode === "replace" ? matchingRowNumbers.length : 0,
+    newRows: newRowsCount,
+    updatedRows: updatedRowsCount,
+    skippedRows,
+    compactRowCount: newCompactRows.length,
+    flatRowCount: mergedForDate.length,
+  };
+}
+
+// 연속된 숫자들을 [시작,끝] 구간들로 묶습니다. 예: [3,4,5,9,10] → [[3,5],[9,10]]
+function toContiguousRanges(sortedNumbers: number[]): [number, number][] {
+  const nums = [...sortedNumbers].sort((a, b) => a - b);
+  const ranges: [number, number][] = [];
+  for (const n of nums) {
+    const last = ranges[ranges.length - 1];
+    if (last && n === last[1] + 1) last[1] = n;
+    else ranges.push([n, n]);
+  }
+  return ranges;
 }

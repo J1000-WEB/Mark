@@ -21,7 +21,7 @@
     },
     {
       "path": "/api/auto-special-offer-actuals",
-      "schedule": "5 3 * * *"
+      "schedule": "0 20 * * *"
     },
     {
       "path": "/api/auto-weekly-target-capture",

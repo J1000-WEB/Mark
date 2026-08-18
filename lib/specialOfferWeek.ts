@@ -152,6 +152,9 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
   const colLetter = columnIndexToLetter(resultCol);
 
   const updates: { range: string; values: any[][] }[] = [];
+  // MARK 6.99: "금액이 안 맞는 것 같다"는 문의가 있어서, 이벤트마다 날짜별로 실제 몇 건이
+  // 매칭됐는지/매칭 안 된 날짜가 있는지 진단할 수 있게 breakdown을 같이 남깁니다.
+  const eventBreakdown: any[] = [];
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const row = rows[i];
@@ -163,7 +166,33 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
     if (!storeName || !startDate) continue;
     if (startDate < AUTO_ACTUALS_START_DATE) continue; // 과거는 절대 건드리지 않음
 
-    const salesAmount = computeStoreSalesForPeriod(dailyFlatRows, storeName, startDate, endDate);
+    const storeKey = normalizeStoreKey(storeName);
+    const matched = dailyFlatRows.filter(
+      (r) => r.date >= startDate && r.date <= endDate && normalizeStoreKey(r.storeName) === storeKey
+    );
+    const salesAmount = matched.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    // 이 기간에 있어야 할 날짜 중 실제로 매칭된 날짜가 며칠인지 확인(누락일 확인용)
+    const matchedDates = new Set(matched.map((r) => r.date));
+    const allDatesInRange: string[] = [];
+    for (let d = new Date(`${startDate}T00:00:00`); d <= new Date(`${endDate}T00:00:00`); d.setDate(d.getDate() + 1)) {
+      allDatesInRange.push(d.toISOString().slice(0, 10));
+    }
+    const missingDates = allDatesInRange.filter((d) => !matchedDates.has(d));
+
+    eventBreakdown.push({
+      row: i + 1,
+      storeName,
+      storeKey,
+      startDate,
+      endDate,
+      salesAmount: Math.round(salesAmount),
+      matchedDayCount: matchedDates.size,
+      totalDaysInRange: allDatesInRange.length,
+      missingDates, // 이 기간 안인데 매출 데이터가 아예 없던 날짜들
+      dailyBreakdown: matched.map((r) => ({ date: r.date, amount: Math.round(r.amount) })),
+    });
+
     const sheetRowNumber = i + 1; // rows는 0-based, 실제 시트 행은 1-based
     updates.push({ range: `'${escapedSheet}'!${colLetter}${sheetRowNumber}`, values: [[Math.round(salesAmount)]] });
   }
@@ -173,6 +202,12 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
   }
 
   debug.updatedCount = updates.length;
+  debug.eventBreakdown = eventBreakdown;
+  // MARK 6.99: 매출 데이터 쪽에 실제로 어떤 매장명들이 있는지도 같이 보여줍니다 —
+  // "타임스퀘어 영등포점"처럼 세부일정 시트의 표기랑 Daily_Sales_History 쪽 표기가
+  // 미묘하게 다르면(예: "타임스퀘어점") normalizeStoreKey를 거쳐도 다른 매장으로 인식돼서
+  // 매출이 통째로 안 잡힐 수 있어서, 실제 존재하는 매장명 목록을 눈으로 대조할 수 있게.
+  debug.distinctStoreNamesInDailySales = Array.from(new Set(dailyFlatRows.map((r) => r.storeName))).sort();
   return { updated: updates.length, debug };
 }
 

@@ -70,8 +70,9 @@ function sizeSortRank(size: string): number {
   return 9999;
 }
 
+// MARK: 소수점 없이 반올림한 만원 단위로 표시합니다 (예: 804.5만원 → 805만원).
 function man(n: number) {
-  return `${(Math.round((n || 0) / 10000 * 10) / 10).toFixed(1)}만원`;
+  return `${Math.round((n || 0) / 10000)}만원`;
 }
 
 function TrendMini({ trend }: { trend: { date: string; amount: number; companyAmount?: number }[] }) {
@@ -338,6 +339,71 @@ function StockLookupSection({ storeName }: { storeName: string }) {
     }
   }
 
+  // MARK: 사진을 여러 구역으로 잘라서(겹치게) 각각 다시 스캔 시도합니다. 사진 전체에서
+  // 바코드가 차지하는 비중이 작으면(특히 가운데가 아니라 구석에 있을 때) 인식이 잘 안 되는
+  // 문제가 있었는데, 구역을 잘라서 보면 그 구역 안에서는 바코드가 훨씬 크게 보여서 인식이
+  // 잘 됩니다. 전체 사진으로 먼저 시도(빠름) → 실패하면 구역별로 순서대로 시도합니다.
+  function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function scanImageWithTiling(file: File, Html5Qrcode: any): Promise<string | null> {
+    // 1) 전체 사진으로 먼저 시도 (바코드가 이미 잘 나온 경우 제일 빠름)
+    try {
+      const fullScanner = new Html5Qrcode("barcode-file-reader");
+      return await fullScanner.scanFile(file, false);
+    } catch {
+      // 실패하면 아래에서 구역을 나눠 재시도
+    }
+
+    let img: HTMLImageElement;
+    try {
+      img = await loadImageFromFile(file);
+    } catch {
+      return null;
+    }
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h) return null;
+
+    // 겹치게 잡은 구역들: 좌상/우상/좌하/우하/중앙 + 상하절반/좌우절반 — 바코드가 사진
+    // 어느 구석에 있어도 이 중 하나엔 크게 걸리도록 넉넉히 겹칩니다.
+    const regions: [number, number, number, number][] = [
+      [0, 0, 0.6, 0.6], [0.4, 0, 0.6, 0.6], [0, 0.4, 0.6, 0.6], [0.4, 0.4, 0.6, 0.6],
+      [0.2, 0.2, 0.6, 0.6],
+      [0, 0, 1, 0.5], [0, 0.5, 1, 0.5], [0, 0, 0.5, 1], [0.5, 0, 0.5, 1],
+    ];
+
+    for (const [xr, yr, wr, hr] of regions) {
+      const cw = Math.max(1, Math.floor(wr * w));
+      const ch = Math.max(1, Math.floor(hr * h));
+      const cx = Math.floor(xr * w);
+      const cy = Math.floor(yr * h);
+      const canvas = document.createElement("canvas");
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+      ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92));
+      if (!blob) continue;
+      const cropFile = new File([blob], "crop.jpg", { type: "image/jpeg" });
+      try {
+        const cropScanner = new Html5Qrcode("barcode-file-reader");
+        const decoded = await cropScanner.scanFile(cropFile, false);
+        if (decoded) return decoded;
+      } catch {
+        continue; // 이 구역에서 실패하면 다음 구역 시도
+      }
+    }
+    return null;
+  }
+
   // MARK 6.95: 폰 기본 카메라 앱으로 찍은 사진 한 장에서 바코드를 읽어냅니다 — 실시간 영상
   // 스캔이 기종에 따라 초점을 못 잡는 문제(갤럭시 플립5 등)의 대안입니다. 기본 카메라 앱은
   // 사진을 찍는 순간 OS 차원에서 확실하게 초점을 맞춰주기 때문에 훨씬 안정적이에요.
@@ -359,8 +425,11 @@ function StockLookupSection({ storeName }: { storeName: string }) {
         });
       }
       const Html5Qrcode = (window as any).Html5Qrcode;
-      const fileScanner = new Html5Qrcode("barcode-file-reader");
-      const decodedText = await fileScanner.scanFile(file, false);
+      const decodedText = await scanImageWithTiling(file, Html5Qrcode);
+      if (!decodedText) {
+        setStatus("바코드를 정확히 읽지 못했어요. 사진을 더 밝고 가깝게 찍어서 다시 시도해주세요.");
+        return;
+      }
       const cleaned = String(decodedText).toUpperCase().trim();
       if (!/^[A-Z0-9]+$/.test(cleaned) || /^[0-9]+$/.test(cleaned)) {
         setStatus("바코드를 정확히 읽지 못했어요. 사진을 더 밝고 가깝게 찍어서 다시 시도해주세요.");
@@ -369,7 +438,7 @@ function StockLookupSection({ storeName }: { storeName: string }) {
       setStyleCodeInput(cleaned);
       await lookup({ barcode: cleaned });
     } catch (err: any) {
-      setStatus("사진에서 바코드를 찾지 못했어요. 바코드가 사진 가운데, 정면으로 나오게 다시 찍어주세요.");
+      setStatus("사진에서 바코드를 찾지 못했어요. 다시 찍어주세요.");
     } finally {
       setPhotoScanning(false);
     }
@@ -430,10 +499,9 @@ function StockLookupSection({ storeName }: { storeName: string }) {
           { facingMode: "environment" },
           {
             fps: 10,
-            // MARK 6.91: "흰 택+검은 바코드"인데 잘 안 찍힌다는 피드백 — Code128 바코드는
-            // 가로로 긴 형태라 정사각형에 가까운 박스(280x160)보다 가로로 넓은 박스가
-            // 바코드 전체를 담기 더 쉽습니다. 박스를 더 넓고 낮게 바꿨습니다.
-            qrbox: { width: 320, height: 110 },
+            // MARK: qrbox(화면 가운데 좁은 박스 안에서만 인식하는 제한)를 없앴습니다 —
+            // 바코드가 화면 가운데가 아니라 어디에 있어도 인식되도록 카메라 전체 화면을
+            // 스캔 범위로 씁니다 (요청: "가운데가 아니면 인식이 잘 안되는" 문제 해결).
             aspectRatio: 1.4,
             // MARK 6.93: 6.91에서 넣었던 formatsToSupport 제한 / useBarCodeDetectorIfSupported /
             // advanced focusMode 세 가지가 오히려 "전에는 찍히던 게 안 찍히는" 회귀를 일으킨
@@ -938,6 +1006,43 @@ export default function StoreBriefV2({
                   )}
                 </div>
               )}
+              {/* MARK: 목표 달성을 위해 "남은 평일은 하루 얼마, 주말은 하루 얼마"를 따로 보여주는 카드.
+                  주말이 보통 평일보다 매출이 잘 나오는 걸 감안해서, 남은 평일수/주말수로 필요금액을
+                  가중치(주말=평일의 1.3배) 비례배분합니다. 정확한 실측 평일/주말 매출비가 따로
+                  있으면 WEEKEND_WEIGHT 값을 그걸로 바꾸면 더 정확해집니다. */}
+              {cards.month?.targetEstimate > 0 && (() => {
+                const remaining = Math.max(0, (cards.month.targetEstimate || 0) - (cards.month.cumulative || 0));
+                const now = new Date();
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                let weekdayCount = 0;
+                let weekendCount = 0;
+                for (let d = now.getDate(); d <= endOfMonth.getDate(); d++) {
+                  const day = new Date(now.getFullYear(), now.getMonth(), d).getDay();
+                  if (day === 0 || day === 6) weekendCount++;
+                  else weekdayCount++;
+                }
+                const WEEKEND_WEIGHT = 1.3; // 주말 하루가 평일 하루의 몇 배 매출인지(실측치 있으면 교체)
+                const totalWeight = weekdayCount * 1 + weekendCount * WEEKEND_WEIGHT;
+                const weekdayDailyNeed = totalWeight > 0 ? remaining / totalWeight : 0;
+                const weekendDailyNeed = weekdayDailyNeed * WEEKEND_WEIGHT;
+                if (remaining <= 0 || (weekdayCount === 0 && weekendCount === 0)) return null;
+                return (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                    {weekdayCount > 0 && (
+                      <div style={{ flex: "1 1 140px", background: "#EEF2FF", borderRadius: 14, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: "#4338CA", fontWeight: 600 }}>남은 평일 {weekdayCount}일, 하루 필요 매출</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#3730A3" }}>{man(weekdayDailyNeed)}</div>
+                      </div>
+                    )}
+                    {weekendCount > 0 && (
+                      <div style={{ flex: "1 1 140px", background: "#FDF2F8", borderRadius: 14, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: "#BE185D", fontWeight: 600 }}>남은 주말 {weekendCount}일, 하루 필요 매출</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#9D174D" }}>{man(weekendDailyNeed)}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </section>
 
             {/* B.5 전주 우리매장 TOP5 */}
@@ -1024,26 +1129,7 @@ export default function StoreBriefV2({
               </div>
             </section>
 
-            {/* 재고 부족 워닝 — MARK 6.82: "TOP5 & 재고워닝"으로 한 카드에 섞여 있어서 헷갈린다는
-                피드백을 반영해 별도 카드로 분리했습니다. (전사에서 잘 팔리는데 이 매장에서
-                유독 안 팔리는 상품 — storeTop5와는 다른 개념) */}
-            {(cards.stockInsights || []).length > 0 && (
-              <section style={cardStyle}>
-                <div>
-                  <div style={labelStyle}>재고 확인</div>
-                  <h2 style={h2Style}>재고 부족 워닝</h2>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {cards.stockInsights.map((s: any, i: number) => (
-                    <div key={i} style={{ display: "flex", gap: 10, background: "#FFF1F2", borderRadius: 14, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 13, color: "#9F1239", lineHeight: 1.55 }}>
-                        <strong>{s.productName}</strong> <span style={{ color: "#FCA5A5" }}>({s.styleCode})</span> — {s.suggestion}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* MARK: "재고 확인"(재고 부족 워닝) 카드는 요청에 따라 삭제했습니다. */}
 
             {/* 유독 잘 팔리는 상품 */}
             {(cards.storeOutperformers || []).length > 0 && (
@@ -1113,44 +1199,7 @@ export default function StoreBriefV2({
               </section>
             )}
 
-            {/* 재고 회전율 — 소진 임박 / 과잉재고 */}
-            {((cards.soonToStockout || []).length > 0 || (cards.overstockCandidates || []).length > 0) && (
-              <section style={cardStyle}>
-                <div>
-                  <div style={labelStyle}>재고 회전율</div>
-                  <h2 style={h2Style}>판매속도 대비 재고 체크</h2>
-                </div>
-                {(cards.soonToStockout || []).length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>소진 임박 (7일 이내 예상)</div>
-                    {cards.soonToStockout.map((it: any, i: number) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#FFF7ED", borderRadius: 14 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
-                          <div style={{ fontSize: 10, color: "#94A3B8" }}>{it.styleCode}</div>
-                          <div style={{ fontSize: 12, color: "#9A3412" }}>재고 {it.stock}개 · 일평균 {it.avgDailyQty}개 판매</div>
-                        </div>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: "#C2410C" }}>약 {it.daysRemaining}일 후 품절</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(cards.overstockCandidates || []).length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>회전 안 됨 (최근 14일 판매 0, 과잉재고 후보)</div>
-                    {cards.overstockCandidates.map((it: any, i: number) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#F1F5F9", borderRadius: 14 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700 }}>{it.productName}</div>
-                          <div style={{ fontSize: 10, color: "#94A3B8" }}>{it.styleCode}</div>
-                        </div>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: "#64748B" }}>재고 {it.stock}개</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
+            {/* MARK: "재고 회전율"(소진임박/과잉재고) 카드는 요청에 따라 삭제했습니다. */}
 
             {/* MARK 6.81: 사이즈 체크 카드는 당분간 비표시 처리(요청) — 데이터/로직은 그대로 두고 렌더만 끔 */}
             {false && (cards.sizeStockoutPatterns || []).length > 0 && (

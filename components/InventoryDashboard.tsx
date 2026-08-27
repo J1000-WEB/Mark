@@ -17,6 +17,57 @@ function todayKSTInputValue() {
   return `${y}-${m}-${d}`;
 }
 
+// MARK: "재고가 100장 이상 입고되면 점포 투입하라고 알림" 요청 — /api/stock-inbound-alerts를
+// 불러서, 2일 전 대비 재고가 100장 이상 늘어난 스타일+컬러를 보여줍니다.
+function StockInboundAlertCard() {
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [meta, setMeta] = useState<{ latestDate?: string; compareDate?: string }>({});
+
+  useEffect(() => {
+    fetch("/api/stock-inbound-alerts")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) {
+          setAlerts(data.alerts || []);
+          setMeta({ latestDate: data.latestDate, compareDate: data.compareDate });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading || !alerts.length) return null;
+
+  return (
+    <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <p className="text-xs font-bold text-amber-700">📦 재고 대량입고 알림 (2일 전 대비 100장 이상 증가)</p>
+      {meta.latestDate && meta.compareDate && (
+        <p className="mt-1 text-[11px] font-semibold text-amber-500">
+          {meta.compareDate} → {meta.latestDate} 비교
+        </p>
+      )}
+      <div className="mt-3 flex flex-col gap-2">
+        {alerts.slice(0, 10).map((a: any, i: number) => (
+          <div key={i} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2">
+            <ProductThumb styleCode={a.styleCode} size={40} />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-slate-900">
+                {a.styleCode} <span className="text-slate-400 font-semibold">{a.colorCode}</span>
+              </div>
+              <div className="text-xs text-slate-500">
+                재고 {a.oldStock}개 → {a.latestStock}개
+              </div>
+            </div>
+            <div className="text-sm font-black text-amber-600">+{a.increase}개</div>
+          </div>
+        ))}
+      </div>
+      {alerts.length > 10 && <p className="mt-2 text-[11px] font-semibold text-amber-500">외 {alerts.length - 10}건 더 있어요.</p>}
+    </div>
+  );
+}
+
 function stockWeekText(value: any) {
   const n = Number(value || 0);
   if (n >= 999) return "판매없음";
@@ -1669,6 +1720,28 @@ export default function InventoryDashboard() {
       if (!finishData.ok) throw new Error(finishData.error || "마무리 실패");
 
       setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요. (${originalRows.length - 3}개 품목, 원본 ${originalRows[0]?.length || 0}열 → 압축 ${rows2[3]?.length || 0}열)`);
+
+      // MARK: "재고 100장 이상 입고되면 매장 투입 알림" 기능을 위해, 스타일+컬러별 재고(Y열,
+      // 원본 기준 25번째 = index 24)만 가볍게 뽑아서 이력에 쌓습니다. 실패해도 메인 업로드
+      // 자체는 이미 끝난 뒤라 조용히 무시합니다(부가 기능이라 메인 업로드를 막으면 안 됨).
+      try {
+        const STYLE_COL = 13; // "스타일" 컬럼
+        const COLOR_COL = 15; // "칼라" 컬럼
+        const STOCK_COL = 24; // "재고"(물류) 컬럼 — Y열
+        const stockHistoryRows = originalRows
+          .slice(3) // 헤더 3줄 제외
+          .map((r) => [r[STYLE_COL], r[COLOR_COL], r[STOCK_COL]])
+          .filter((r) => r[0]); // 스타일코드 있는 것만
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        await fetch("/api/upload-stock-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: todayStr, rows: stockHistoryRows }),
+        });
+      } catch {
+        // 이력 저장은 부가 기능이라 실패해도 메인 업로드 결과에 영향 안 줌
+      }
     } catch (e: any) {
       setStyleSheetError(e?.message || "업로드 실패");
       setStyleSheetProgress("");
@@ -1770,6 +1843,8 @@ export default function InventoryDashboard() {
           {styleSheetProgress && <p className="mt-2 text-xs font-bold text-blue-600">{styleSheetProgress}</p>}
           {styleSheetError && <p className="mt-2 text-xs font-black text-red-600">⚠ {styleSheetError}</p>}
         </div>
+
+        <StockInboundAlertCard />
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-5 shadow-sm">
           <div>

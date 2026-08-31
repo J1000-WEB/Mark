@@ -22,16 +22,12 @@ function todayKSTInputValue() {
 function StockInboundAlertCard() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [meta, setMeta] = useState<{ latestDate?: string; compareDate?: string }>({});
 
   useEffect(() => {
     fetch("/api/stock-inbound-alerts")
       .then((res) => res.json())
       .then((data) => {
-        if (data.ok) {
-          setAlerts(data.alerts || []);
-          setMeta({ latestDate: data.latestDate, compareDate: data.compareDate });
-        }
+        if (data.ok) setAlerts(data.alerts || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -41,12 +37,8 @@ function StockInboundAlertCard() {
 
   return (
     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-      <p className="text-xs font-bold text-amber-700">📦 재고 대량입고 알림 (2일 전 대비 100장 이상 증가)</p>
-      {meta.latestDate && meta.compareDate && (
-        <p className="mt-1 text-[11px] font-semibold text-amber-500">
-          {meta.compareDate} → {meta.latestDate} 비교
-        </p>
-      )}
+      <p className="text-xs font-bold text-amber-700">📦 재고 대량입고 알림 (100장 이상 입고 후 아직 매장 투입 안 된 것으로 보임)</p>
+      <p className="mt-1 text-[11px] font-semibold text-amber-500">한번 뜨면 실제로 재고가 줄어들 때까지(매장 투입 등) 계속 표시됩니다.</p>
       <div className="mt-3 flex flex-col gap-2">
         {alerts.slice(0, 10).map((a: any, i: number) => (
           <div key={i} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2">
@@ -56,7 +48,7 @@ function StockInboundAlertCard() {
                 {a.styleCode} <span className="text-slate-400 font-semibold">{a.colorCode}</span>
               </div>
               <div className="text-xs text-slate-500">
-                재고 {a.oldStock}개 → {a.latestStock}개
+                {a.firstAlertedDate}에 처음 감지 · 재고 {a.baselineStock}개 → {a.peakStock}개
               </div>
             </div>
             <div className="text-sm font-black text-amber-600">+{a.increase}개</div>

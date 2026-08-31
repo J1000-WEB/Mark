@@ -5,60 +5,34 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 export const revalidate = 0;
 
-const HISTORY_SHEET = "재고입고이력";
-const COMPARE_DAYS_AGO = 2; // 요청: "2일전 대비"
-const INCREASE_THRESHOLD = 100; // 요청: "100장 이상 입고되면"
+const ACTIVE_ALERTS_SHEET = "재고입고알림_활성";
 
-// 재고입고이력 시트를 읽어서, 최신 날짜 vs (그보다 COMPARE_DAYS_AGO일 전에 가장 가까운
-// 실제 데이터가 있는 날짜)를 비교해서, 스타일+컬러별로 100장 이상 늘어난 것을 찾습니다.
+// MARK: 실제 스파이크 감지+해제 판단은 /api/upload-stock-history(업로드할 때마다)에서
+// 이미 다 처리해서 "재고입고알림_활성" 시트에 저장해두기 때문에, 여기서는 그 목록을
+// 그대로 읽어서 보여주기만 합니다 — 그래서 "한번 뜬 알림이 확인 전에 사라지는" 문제가
+// 없고, 실제로 재고가 줄어들 때까지(투입될 때까지) 계속 남아있습니다.
 export async function GET() {
   try {
     const spreadsheetId = getDbSheetId();
-    const rows = await getSheetValuesById(spreadsheetId, HISTORY_SHEET, "A:D").catch(() => []);
-    const data = rows.slice(1).filter((r) => r?.[0]); // 헤더 제외, 빈 행 제외
+    const rows = await getSheetValuesById(spreadsheetId, ACTIVE_ALERTS_SHEET, "A:E").catch(() => []);
+    const data = rows.slice(1).filter((r) => r?.[0]);
 
-    if (!data.length) {
-      return NextResponse.json({ ok: true, alerts: [], latestDate: null, compareDate: null });
-    }
-
-    const dates = Array.from(new Set(data.map((r) => String(r[0])))).sort();
-    const latestDate = dates[dates.length - 1];
-
-    const target = new Date(latestDate);
-    target.setDate(target.getDate() - COMPARE_DAYS_AGO);
-    const targetStr = target.toISOString().slice(0, 10);
-    // 정확히 2일 전 데이터가 없을 수도 있어서(주말 등), 그보다 이전 중 가장 가까운 날짜를 씁니다.
-    const compareDate = [...dates].filter((d) => d <= targetStr).pop() || dates[0];
-
-    function stockMapAt(dateKey: string) {
-      const map = new Map<string, { productName: string; stock: number }>();
-      for (const r of data) {
-        if (String(r[0]) !== dateKey) continue;
-        const styleCode = String(r[1] || "");
-        const colorCode = String(r[2] || "");
-        const stock = Number(r[3] || 0);
-        if (!styleCode) continue;
-        const key = `${styleCode}_${colorCode}`;
-        map.set(key, { productName: styleCode, stock });
-      }
-      return map;
-    }
-
-    const latestMap = stockMapAt(latestDate);
-    const oldMap = stockMapAt(compareDate);
-
-    const alerts = Array.from(latestMap.entries())
-      .map(([key, latest]) => {
-        const old = oldMap.get(key);
-        const oldStock = old?.stock || 0;
-        const increase = latest.stock - oldStock;
-        const [styleCode, colorCode] = key.split("_");
-        return { styleCode, colorCode, oldStock, latestStock: latest.stock, increase };
+    const alerts = data
+      .map((r) => {
+        const baselineStock = Number(r[3] || 0);
+        const peakStock = Number(r[4] || 0);
+        return {
+          styleCode: String(r[0]),
+          colorCode: String(r[1]),
+          firstAlertedDate: String(r[2]),
+          baselineStock,
+          peakStock,
+          increase: peakStock - baselineStock,
+        };
       })
-      .filter((x) => x.increase >= INCREASE_THRESHOLD)
       .sort((a, b) => b.increase - a.increase);
 
-    return NextResponse.json({ ok: true, alerts, latestDate, compareDate });
+    return NextResponse.json({ ok: true, alerts });
   } catch (error: any) {
     console.error("stock-inbound-alerts failed:", error);
     return NextResponse.json({ ok: false, error: error?.message || "조회 실패" }, { status: 500 });

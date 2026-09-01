@@ -1713,17 +1713,30 @@ export default function InventoryDashboard() {
 
       setStyleSheetProgress(`완료! 총 ${finishData.totalRows}행 반영됐어요. (${originalRows.length - 3}개 품목, 원본 ${originalRows[0]?.length || 0}열 → 압축 ${rows2[3]?.length || 0}열)`);
 
-      // MARK: "재고 100장 이상 입고되면 매장 투입 알림" 기능을 위해, 스타일+컬러별 재고(Y열,
-      // 원본 기준 25번째 = index 24)만 가볍게 뽑아서 이력에 쌓습니다. 실패해도 메인 업로드
-      // 자체는 이미 끝난 뒤라 조용히 무시합니다(부가 기능이라 메인 업로드를 막으면 안 됨).
+      // MARK: "재고 100장 이상 입고되면 매장 투입 알림" 기능을 위해, 스타일+컬러별 재고를
+      // 가볍게 뽑아서 이력에 쌓습니다. 실패해도 메인 업로드 자체는 이미 끝난 뒤라 조용히 무시합니다.
+      // MARK 2026-09: 파일에 "사이즈" 컬럼이 새로 생기면서(점포 늘어난 것 등으로 열 구조가
+      // 바뀜) 재고 컬럼 위치가 24→25로 밀렸고, 같은 스타일+컬러도 사이즈별로 여러 줄로
+      // 나뉘게 됐습니다. 컬럼 위치를 고치고, 사이즈별 재고를 스타일+컬러 단위로 합산합니다
+      // (안 그러면 마지막 사이즈 값만 남고 나머지 사이즈 재고가 사라지는 버그가 있었어요).
       try {
         const STYLE_COL = 13; // "스타일" 컬럼
         const COLOR_COL = 15; // "칼라" 컬럼
-        const STOCK_COL = 24; // "재고"(물류) 컬럼 — Y열
-        const stockHistoryRows = originalRows
-          .slice(3) // 헤더 3줄 제외
-          .map((r) => [r[STYLE_COL], r[COLOR_COL], r[STOCK_COL]])
-          .filter((r) => r[0]); // 스타일코드 있는 것만
+        const STOCK_COL = 25; // "재고"(물류) 컬럼 — 사이즈 컬럼이 생기면서 24→25로 밀림
+
+        const stockByStyleColor = new Map<string, number>();
+        for (const r of originalRows.slice(3)) {
+          const styleCode = r[STYLE_COL];
+          if (!styleCode) continue;
+          const colorCode = r[COLOR_COL];
+          const key = `${styleCode}\u0000${colorCode}`;
+          const stock = Number(r[STOCK_COL] || 0);
+          stockByStyleColor.set(key, (stockByStyleColor.get(key) || 0) + stock);
+        }
+        const stockHistoryRows = Array.from(stockByStyleColor.entries()).map(([key, stock]) => {
+          const [styleCode, colorCode] = key.split("\u0000");
+          return [styleCode, colorCode, stock];
+        });
 
         const todayStr = new Date().toISOString().slice(0, 10);
         await fetch("/api/upload-stock-history", {

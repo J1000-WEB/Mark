@@ -124,7 +124,7 @@ export default function SalesDataDashboard() {
   return (
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-6xl px-4 pt-6">
-        <NavTabs />
+        <NavTabs active="sales-data" />
 
         <div className="mt-6 flex items-center justify-between">
           <div>

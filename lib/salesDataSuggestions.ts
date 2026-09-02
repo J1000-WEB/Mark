@@ -3,6 +3,12 @@
 // 브라우저(클라이언트)에서 파일을 읽자마자 바로 계산해서 미리보기를 보여줄 수 있도록,
 // googleapis 등 서버 전용 라이브러리는 쓰지 않습니다(서버 저장은 API 라우트가 담당).
 
+// MARK 2026-09: "이월소진" 판별을 품번 파싱 기반으로 고침. 원래는 "판매율 낮고 재고
+// 많음"이라는 판매 패턴만으로 "이월"이라고 부르고 있었는데, 이러면 그냥 안 팔리는
+// 당해시즌 신상품까지 이월로 잘못 분류됨. "이월" = 오늘 날짜 기준으로 원래 시즌/연도가
+// 지난 상품(품번체계.md 참고) 이라는 정의를 품번 파싱(lib/productCode.ts)으로 적용함.
+import { parseStyleCode, isCarryover, isSeasonAppropriateNow, SEASON_LABEL } from "./productCode";
+
 // ---- "품번" 시트 컬럼 위치 (2026-08-31 파일 기준으로 실측 확인) ----
 // 0=순위, 1=년도,2=시즌,3=품목,4=복종,5=아이템,6=재런칭, 7=품번, 8=품명, 9=STY, 10=COL,
 // 11=원가, 12=TAG가, 13=판매가, 14=OFF가, 15=프로모션가, 16=할인율,
@@ -11,7 +17,14 @@
 // 28=금액판매(주간), 29=금액판매(2주전), 30=비중,
 // 31~34=수량판매(주간,2주전,3주전,4주전 — 이 파일의 원래 표기를 그대로 따름),
 // 35=총재고, 36=물류, 37=물류(온), 38=물류(오프), 39=점포
+//
+// 1(년도)/2(시즌) 컬럼은 원본 파일에 있지만 정확한 표기 형식(예: "26" vs "2026" vs
+// "FW" 등)을 실측 검증 못 해서 파싱에 쓰지 않고 원본 텍스트 그대로만 참고용으로 들고
+// 있습니다(yearRaw/seasonRaw). 실제 이월 판정은 품번(STYLE_CODE) 파싱 기반
+// (lib/productCode.ts)으로 합니다 — 이쪽은 품번체계.md 문서로 검증된 규칙이라 더 신뢰 가능.
 const COL = {
+  YEAR_RAW: 1,
+  SEASON_RAW: 2,
   STYLE_CODE: 7,
   PRODUCT_NAME: 8,
   COST: 11,
@@ -31,6 +44,8 @@ const COL = {
 export interface WeeklyStyleRow {
   styleCode: string;
   productName: string;
+  yearRaw: string; // 원본 파일의 "년도" 컬럼 원문(참고용, 파싱 안 함)
+  seasonRaw: string; // 원본 파일의 "시즌" 컬럼 원문(참고용, 파싱 안 함)
   cost: number;
   salePrice: number;
   offPrice: number;
@@ -81,6 +96,8 @@ export function parseWeeklyStyleRows(rows: any[][]): WeeklyStyleRow[] {
     result.push({
       styleCode,
       productName: String(r[COL.PRODUCT_NAME] ?? "").trim(),
+      yearRaw: String(r[COL.YEAR_RAW] ?? "").trim(),
+      seasonRaw: String(r[COL.SEASON_RAW] ?? "").trim(),
       cost: num(r[COL.COST]),
       salePrice: num(r[COL.SALE_PRICE]),
       offPrice: num(r[COL.OFF_PRICE]),
@@ -225,15 +242,43 @@ export function buildSuggestions(styles: WeeklyStyleRow[]): Suggestion[] {
       });
     }
 
-    // 5) 재고 많고 판매 거의 없는 이월상품 → 투입+소진 검토(가격제안은 별도 함수에서)
-    if (s.sellThroughPct <= THRESHOLDS.carryoverMaxSellThrough && s.stockTotal >= THRESHOLDS.carryoverMinStock) {
-      suggestions.push({
-        type: "이월소진",
-        styleCode: s.styleCode,
-        productName: s.productName,
-        reason: `판매율이 ${(s.sellThroughPct * 100).toFixed(0)}%로 거의 안 팔리는데 재고가 ${s.stockTotal}개나 남아있어요. 투입 및 가격 조정을 검토해보세요.`,
-        detail: { sellThroughPct: s.sellThroughPct, stockTotal: s.stockTotal },
-      });
+    // 5) 재고 많고 판매 거의 없는 "이월"(과거 시즌) 상품 → 투입+소진 검토(가격제안은 별도 함수에서)
+    // "이월" = 오늘 날짜 기준으로 품번의 연도/시즌이 이미 지난 상품(품번체계.md 참고).
+    // 판매율+재고만 보면 그냥 안 팔리는 "당해시즌 신상품"까지 이월로 잘못 분류되기 때문에,
+    // 품번을 파싱해서 실제로 지난 시즌 상품인지 확인한 뒤에만 "이월소진"으로 표시함.
+    const slowMoving = s.sellThroughPct <= THRESHOLDS.carryoverMaxSellThrough && s.stockTotal >= THRESHOLDS.carryoverMinStock;
+    if (slowMoving) {
+      const parsed = parseStyleCode(s.styleCode);
+      // 품번을 못 읽는 경우(형식이 다르거나 손상됨)엔 시즌 판정이 불가능하므로, 예전처럼
+      // 판매율+재고만으로 후보에 넣되 detail에 확실히 "판정불가"로 표시해서 구분되게 함.
+      const carryover = parsed ? isCarryover(parsed) : null;
+      if (carryover !== false) {
+        const seasonAppropriate = parsed ? isSeasonAppropriateNow(parsed.season) : null;
+        const seasonText = parsed
+          ? `${parsed.year}년 ${SEASON_LABEL[parsed.season]} 상품(품번상 ${parsed.isRunning ? "러닝코드" : "정상출시"})`
+          : "품번에서 시즌 정보를 못 읽었어요(형식 확인 필요)";
+        const fitNote =
+          parsed && seasonAppropriate === false
+            ? " 다만 지금 계절과는 안 맞는 이월이라, 지금 당장 파는 것보다는 다음 적합 시즌까지 보관하거나 우선순위를 낮추는 게 나을 수 있어요."
+            : "";
+        suggestions.push({
+          type: "이월소진",
+          styleCode: s.styleCode,
+          productName: s.productName,
+          reason: `${seasonText}. 판매율이 ${(s.sellThroughPct * 100).toFixed(0)}%로 거의 안 팔리는데 재고가 ${s.stockTotal}개나 남아있어요.${fitNote} 투입 및 가격 조정을 검토해보세요.`,
+          detail: {
+            sellThroughPct: s.sellThroughPct,
+            stockTotal: s.stockTotal,
+            productYear: parsed?.year ?? null,
+            productSeason: parsed ? SEASON_LABEL[parsed.season] : null,
+            isRunningCode: parsed?.isRunning ?? null,
+            isCarryover: carryover, // null이면 품번 파싱 실패로 판정불가
+            isSeasonAppropriateNow: seasonAppropriate,
+            category: parsed?.categoryName ?? null,
+            gender: parsed?.gender ?? null,
+          },
+        });
+      }
     }
   }
 
@@ -244,20 +289,30 @@ export function buildSuggestions(styles: WeeklyStyleRow[]): Suggestion[] {
 // PIP 파일(사이즈별 재고)이 있으면 사이즈 완성도를 반영해서 할인폭을 다르게 합니다:
 // 사이즈가 골고루 남아있으면(완성도 높음) 할인을 덜, 많이 빠졌으면(완성도 낮음) 할인을 더.
 export function buildPriceSuggestions(styles: WeeklyStyleRow[], sizeCoverageMap: Map<string, SizeCoverage> | null): PriceSuggestion[] {
-  const carryovers = styles.filter(
-    (s) => s.sellThroughPct <= THRESHOLDS.carryoverMaxSellThrough && s.stockTotal >= THRESHOLDS.carryoverMinStock
-  );
+  // buildSuggestions()의 "이월소진" 후보 조건과 동일하게 맞춤(품번 파싱 기반 이월 판정 포함).
+  const carryovers = styles.filter((s) => {
+    const slowMoving = s.sellThroughPct <= THRESHOLDS.carryoverMaxSellThrough && s.stockTotal >= THRESHOLDS.carryoverMinStock;
+    if (!slowMoving) return false;
+    const parsed = parseStyleCode(s.styleCode);
+    // 품번을 못 읽으면(판정불가) 예전처럼 포함, 읽었는데 당해시즌 신상이면 제외.
+    return !parsed || isCarryover(parsed);
+  });
 
   return carryovers.map((s) => {
     const currentPrice = s.promoPrice > 0 ? s.promoPrice : s.offPrice > 0 ? s.offPrice : s.salePrice;
     const costRatio = currentPrice > 0 ? s.cost / currentPrice : 0;
     const coverage = sizeCoverageMap?.get(s.styleCode) || null;
+    const parsed = parseStyleCode(s.styleCode);
+    const seasonAppropriate = parsed ? isSeasonAppropriateNow(parsed.season) : null;
 
     // 기본 할인폭: 판매율이 낮을수록, 재고가 많을수록 더 깊게. 사이즈 완성도가 낮으면(결품 많으면)
     // 더 적극적으로 할인해서 빨리 소진, 완성도가 높으면(사이즈 다 있으면) 할인을 덜 함.
     let baseDiscount = 0.3; // 기본 30%
     if (s.stockTotal >= 1000) baseDiscount += 0.1;
     if (s.sellThroughPct <= 0.05) baseDiscount += 0.1;
+    // 지금 계절과 안 맞는 이월(예: 가을에 여름 이월)은 시즌이 더 지나기 전에 더 빨리 털어야 하므로
+    // 할인폭을 좀 더 키움(간절기 대칭 규칙, 품번체계.md §2 참고).
+    if (seasonAppropriate === false) baseDiscount += 0.1;
 
     if (coverage) {
       // 완성도 1(사이즈 다 있음)이면 -10%p, 완성도 0(다 빠짐)이면 +10%p
@@ -267,6 +322,7 @@ export function buildPriceSuggestions(styles: WeeklyStyleRow[], sizeCoverageMap:
     const suggestedPrice = Math.round((currentPrice * (1 - suggestedDiscountRate)) / 100) * 100;
 
     const coverageText = coverage ? `사이즈 ${coverage.sizesInStock}/${coverage.totalSizes}종 보유(완성도 ${(coverage.coverageRatio * 100).toFixed(0)}%)` : "사이즈 데이터 없음";
+    const seasonText = parsed ? `${parsed.year}년 ${SEASON_LABEL[parsed.season]}${seasonAppropriate === false ? " · 비시즌 이월" : ""}` : "시즌 판정불가";
 
     return {
       styleCode: s.styleCode,
@@ -277,7 +333,7 @@ export function buildPriceSuggestions(styles: WeeklyStyleRow[], sizeCoverageMap:
       suggestedDiscountRate,
       suggestedPrice,
       sizeCoverageRatio: coverage ? coverage.coverageRatio : null,
-      reason: `${coverageText} — 현재가 대비 ${(suggestedDiscountRate * 100).toFixed(0)}% 할인 제안 (원가율 ${(costRatio * 100).toFixed(0)}%)`,
+      reason: `${seasonText} · ${coverageText} — 현재가 대비 ${(suggestedDiscountRate * 100).toFixed(0)}% 할인 제안 (원가율 ${(costRatio * 100).toFixed(0)}%)`,
     };
   });
 }

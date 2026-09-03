@@ -688,6 +688,81 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     .sort((a, b) => Math.abs(b.paceRatio - 1) - Math.abs(a.paceRatio - 1))
     .slice(0, 5);
 
+  // ---- STEP4.7 판매 급증 상품 (최근 3일 평균 vs 그 이전 14일 평균 비교) ----
+  // storeOutperformers(다른 매장/전사 대비 비교)와는 다른 개념 — "이 매장 자체에서
+  // 최근 갑자기 잘 팔리기 시작한 상품"을 시간축으로 비교해서 찾습니다.
+  const spikeRecentStart = addDays(targetDate, -2); // 최근 3일(오늘 포함 targetDate 기준)
+  const spikeBaselineStart = addDays(targetDate, -16); // 그 이전 14일
+  const spikeBaselineEnd = addDays(targetDate, -3);
+  const spikeRecentQty = new Map<string, { productName: string; qty: number }>();
+  const spikeBaselineQty = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date >= spikeRecentStart && r.date <= targetDate) {
+      if (!spikeRecentQty.has(r.styleCode)) spikeRecentQty.set(r.styleCode, { productName: r.productName, qty: 0 });
+      spikeRecentQty.get(r.styleCode)!.qty += Number(r.qty || 0);
+    }
+    if (r.date >= spikeBaselineStart && r.date <= spikeBaselineEnd) {
+      spikeBaselineQty.set(r.styleCode, (spikeBaselineQty.get(r.styleCode) || 0) + Number(r.qty || 0));
+    }
+  }
+  const salesSpikes = Array.from(spikeRecentQty.entries())
+    .filter(([, v]) => v.qty >= 3) // 노이즈 방지: 최근 3일 3개 이상 팔린 것만 후보
+    .map(([styleCode, v]) => {
+      const recentDailyAvg = v.qty / 3;
+      const baselineTotal = spikeBaselineQty.get(styleCode) || 0;
+      const baselineDailyAvg = baselineTotal / 14;
+      const spikeRatio = baselineDailyAvg > 0 ? recentDailyAvg / baselineDailyAvg : recentDailyAvg > 0 ? 99 : 0;
+      return {
+        styleCode,
+        productName: v.productName,
+        recentQty: v.qty,
+        baselineDailyAvg: Math.round(baselineDailyAvg * 10) / 10,
+        spikeRatio: Math.round(spikeRatio * 10) / 10,
+      };
+    })
+    .filter((x) => x.spikeRatio >= 2) // 평소보다 2배 이상 늘어난 것만 "급증"으로 인정
+    .sort((a, b) => b.spikeRatio - a.spikeRatio)
+    .slice(0, 5);
+
+  // ---- STEP4.8 최근 재고가 많이 투입된 상품 (판매 어필용) ----
+  // "N일 전 재고" vs "지금 재고"를 비교해서 늘어난 만큼을 대략적인 입고량으로 봅니다.
+  // (그 사이 판매된 만큼은 재고가 자연히 줄어드니, 판매량을 다시 더해서 보정합니다:
+  //  추정입고량 ≈ (지금재고 - N일전재고) + 그 기간 판매량)
+  const stockCompareStart = addDays(targetDate, -13); // 14일 전 재고와 비교
+  const stockAtCompareDate = new Map<string, number>();
+  const soldSinceCompare = new Map<string, number>();
+  for (const r of storeRows) {
+    if (r.date === stockCompareStart) {
+      stockAtCompareDate.set(r.styleCode, (stockAtCompareDate.get(r.styleCode) || 0) + Number(r.stock || 0));
+    }
+    if (r.date > stockCompareStart && r.date <= targetDate) {
+      soldSinceCompare.set(r.styleCode, (soldSinceCompare.get(r.styleCode) || 0) + Number(r.qty || 0));
+    }
+  }
+  const restockedHighlights = Array.from(storeLatestStock.entries())
+    .map(([styleCode, info]) => {
+      const prevStock = stockAtCompareDate.get(styleCode) || 0;
+      const sold = soldSinceCompare.get(styleCode) || 0;
+      const estimatedInbound = info.stock - prevStock + sold;
+      const recentSaleQty = spikeRecentQty.get(styleCode)?.qty || 0;
+      return {
+        styleCode,
+        productName: info.productName,
+        currentStock: info.stock,
+        estimatedInbound,
+        recentSaleQty, // 최근 3일 판매량 — "입고는 많이 됐는데 안 팔리고 있다" 판단용
+      };
+    })
+    // 최근 14일 안에 눈에 띄게(10개 이상) 입고된 것만, 재고도 어느 정도(5개 이상) 남아있는 것만
+    .filter((x) => x.estimatedInbound >= 10 && x.currentStock >= 5)
+    .sort((a, b) => b.estimatedInbound - a.estimatedInbound)
+    .slice(0, 5)
+    .map((x) => ({
+      ...x,
+      // 최근 3일 판매가 거의 없으면(입고량 대비 판매가 저조하면) 판매 독려 멘트를 붙입니다.
+      needsPush: x.recentSaleQty < x.estimatedInbound * 0.1,
+    }));
+
   // ---- STEP5 재고/RT 현황 ----
   const totalStock = Array.from(
     storeRows.filter((r) => r.date === targetDate).reduce((map, r) => {
@@ -787,6 +862,22 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     const pick = storeOutperformers[0];
     todayAiBriefing.push(`오늘은 "${pick.productName}"(전사 평균 ${pick.ratio.toFixed(1)}배 판매)를 눈에 띄게 진열해서 밀어보세요.`);
   }
+  // MARK: "판매 급증 상품에 대한 리뷰" 요청 — salesSpikes(최근 3일이 평소보다 2배 이상 늘어난 것)
+  // 1위를 오늘의 브리핑 멘트에도 한 줄 추가합니다.
+  if (salesSpikes.length) {
+    const top = salesSpikes[0];
+    todayAiBriefing.push(
+      `"${top.productName}"이(가) 최근 3일 평소보다 ${top.spikeRatio}배 더 팔리고 있어요(하루 평균 ${top.baselineDailyAvg}개 → 최근 ${(top.recentQty / 3).toFixed(1)}개). 재고 확보를 확인해보세요!`
+    );
+  }
+  // MARK: "재고가 많이 투입된 상품 판매 어필" 요청 — 입고는 많이 됐는데 최근 판매가 저조한
+  // 상품이 있으면 판매 독려 멘트를 추가합니다.
+  const needsPushItem = restockedHighlights.find((x) => x.needsPush);
+  if (needsPushItem) {
+    todayAiBriefing.push(
+      `"${needsPushItem.productName}"이(가) 최근 재고가 약 ${needsPushItem.estimatedInbound}개 들어왔는데 아직 판매가 저조해요(최근 3일 ${needsPushItem.recentSaleQty}개). 눈에 띄는 자리로 옮겨서 판매를 밀어보세요!`
+    );
+  }
 
   // (기존) targetDate(=어제) 기준 날씨 — 다른 곳에서 참고용으로 계속 씀
   const weather = await getWeatherForStoreOnDate(storeName, targetDate).catch(() => null);
@@ -844,6 +935,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
     stockInsights,
     storeOutperformers,
     recentArrivals,
+    salesSpikes,
+    restockedHighlights,
     inventory: { totalStock, rtIn, rtOut },
     soonToStockout,
     overstockCandidates,

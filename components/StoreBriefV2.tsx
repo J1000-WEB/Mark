@@ -181,17 +181,19 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
         setStatus(d.error || "불러오기 실패");
         return;
       }
-      // 응답 형태가 아직 확정 전이라(이사님 쪽에 창구 요청 중) 여러 위치를 다 확인합니다.
-      const twin = d.visualTwin || d.twin || d;
-      const entry = twin?.entry || twin;
-      const neighbors: any[] = entry?.similarNeighbors || entry?.neighbors || [];
-      if (!neighbors.length) {
-        setStatus("비슷한 상품을 찾지 못했어요.");
+      // MARK 2026-09: 응답 형태 확정됨(app/api/product360/route.ts에서 정리해서 내려줌) —
+      // d.visualTwin.similarNeighbors 하나로 고정. gi-board가 넣어주는 재고 관련 값은
+      // 안 내려오므로(의도적으로 뺌) 신경 안 써도 되고, 아래에서 우리 재고로만 판단합니다.
+      const neighbors: any[] = d.visualTwin?.similarNeighbors || [];
+      if (!d.visualTwin?.found || !neighbors.length) {
+        setStatus(d.visualTwin?.reason || "비슷한 상품을 찾지 못했어요.");
         setCandidates([]);
         return;
       }
 
-      // 2) 후보마다 "이 매장" 재고를 실시간으로 조회해서, 재고 있는 것만 남깁니다.
+      // 2) 후보마다 "이 매장" 재고를 우리 쪽 재고 조회(/api/store-stock-lookup)로 실시간
+      //    확인해서, 재고 있는 것만 남깁니다. gi-board 쪽 재고 값은 쓰지 않습니다 — 매장
+      //    재고는 우리 쪽이 더 정확하고 최신이기 때문입니다.
       //    (유사도 순으로 이미 정렬돼 있어서, 상위 후보부터 순서대로 확인)
       const checked: any[] = [];
       for (const n of neighbors) {
@@ -208,7 +210,7 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
       }
       if (cancelled) return;
       setCandidates(checked);
-      setStatus(checked.length ? "" : "비슷한 상품은 있는데, 이 매장엔 재고가 없어요.");
+      setStatus(checked.length ? "" : `비슷한 상품 ${neighbors.length}개는 있는데, 이 매장엔 재고가 없어요.`);
     }
 
     run().catch((e) => !cancelled && setStatus(e?.message || "불러오기 실패"));
@@ -229,7 +231,7 @@ function AlternativeProductsInline({ styleCode, storeName }: { styleCode: string
           )}
           <div style={{ fontSize: 13, flex: 1, minWidth: 0 }}>
             <strong>{c.style}</strong>{c.color ? ` (${c.color})` : ""}
-            <span style={{ color: "#94A3B8" }}> · 유사도 {Math.round((c.sim || 0) * 100)}%</span>
+            <span style={{ color: "#94A3B8" }}> · 유사도 {Math.round((c.toneSim || 0) * 100)}%</span>
           </div>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#059669", flexShrink: 0 }}>재고 {c.storeStock}개</div>
         </div>

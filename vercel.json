@@ -20,11 +20,15 @@
       "maxDuration": 60
     },
     "app/api/weekly-history/route.ts": {
-      "memory": 1024,
+      "memory": 3009,
       "maxDuration": 60
     },
     "app/api/sales-data/route.ts": {
-      "memory": 1024,
+      "memory": 3009,
+      "maxDuration": 60
+    },
+    "app/api/data/route.ts": {
+      "memory": 3009,
       "maxDuration": 60
     }
   },

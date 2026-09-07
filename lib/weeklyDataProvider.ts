@@ -1426,30 +1426,54 @@ function historyRecordsToMaps(records: any[], basis: string, type: SalesType, st
   return { current, prev1, prev2, prev3, productMap, stores: [...stores].sort((a, b) => a.localeCompare(b, "ko")), rowCount: selectedRows.length };
 }
 
+// MARK 2026-09: "스냅샷 저장" 버튼(createWeeklySnapshot)과 월요일 자동 크론(auto-weekly-snapshot)
+// 둘 다, 같은 주차에 대해 이 무거운 함수(스타일-채널 시트 펼치기 + Daily_Sales_History 집계 2번 +
+// Weekly_history 쓰기)를 짧은 시간 안에 연달아 두 번 부를 수 있는 흐름을 갖고 있습니다(각각
+// refresh=1 요청을 2번씩 보냄). 매번 새로 계산하면 CPU를 두 배로 쓰는 셈이라, 같은
+// (주차+시트ID) 조합이면 짧은 시간(90초) 안에는 계산을 재사용합니다 — in-flight 공유(동시
+// 호출)와 결과 캐시(연속 호출) 둘 다 처리합니다.
+const weeklySnapshotBuildCache = new Map<string, { expiresAt: number; value: Promise<{ appended: any; productRaw: SheetReadResult; stockRaw: SheetReadResult }> }>();
+const WEEKLY_SNAPSHOT_BUILD_TTL_MS = 90_000;
+
 async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; historyId: string; dbId: string; mainId: string }) {
   const { selected, historyId, dbId, mainId } = args;
-  const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
-  const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
-  const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
-  const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
-  // MARK 6.73: 업로드 쪽(InventoryDashboard.tsx)에서 compactStyleChannelRows로 압축해서 올리므로,
-  // 읽을 때 원래(594열) 모양으로 되돌립니다. buildProductMaster는 이 사실을 몰라도 되게(원본과
-  // 완전히 동일한 열 위치로 복원되므로) 그대로 둡니다.
-  const productMaps = buildProductMaster(expandStyleChannelRows(productRaw.rows));
-  mergeOnOffStock(stockRaw.rows, productMaps);
-  // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
-  const styleAgg = await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd);
-  const colorAgg = await aggregateWeeklyFromDailyHistory("color", selected.analysisStart, selected.analysisEnd);
-  const appended = await upsertWeeklyHistorySnapshot({
-    historyId,
-    selected,
-    styleCurrent: styleAgg.current,
-    stylePrev: styleAgg.previous,
-    colorCurrent: colorAgg.current,
-    colorPrev: colorAgg.previous,
-    productMaps,
-  });
-  return { appended, productRaw, stockRaw };
+  const cacheKey = `${selected.week}::${historyId}::${dbId}::${mainId}`;
+  const now = Date.now();
+  const cached = weeklySnapshotBuildCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const build = (async () => {
+    const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
+    const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
+    const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
+    const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
+    // MARK 6.73: 업로드 쪽(InventoryDashboard.tsx)에서 compactStyleChannelRows로 압축해서 올리므로,
+    // 읽을 때 원래(594열) 모양으로 되돌립니다. buildProductMaster는 이 사실을 몰라도 되게(원본과
+    // 완전히 동일한 열 위치로 복원되므로) 그대로 둡니다.
+    const productMaps = buildProductMaster(expandStyleChannelRows(productRaw.rows));
+    mergeOnOffStock(stockRaw.rows, productMaps);
+    // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
+    const styleAgg = await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd);
+    const colorAgg = await aggregateWeeklyFromDailyHistory("color", selected.analysisStart, selected.analysisEnd);
+    const appended = await upsertWeeklyHistorySnapshot({
+      historyId,
+      selected,
+      styleCurrent: styleAgg.current,
+      stylePrev: styleAgg.previous,
+      colorCurrent: colorAgg.current,
+      colorPrev: colorAgg.previous,
+      productMaps,
+    });
+    return { appended, productRaw, stockRaw };
+  })();
+
+  weeklySnapshotBuildCache.set(cacheKey, { expiresAt: now + WEEKLY_SNAPSHOT_BUILD_TTL_MS, value: build });
+  try {
+    return await build;
+  } catch (err) {
+    weeklySnapshotBuildCache.delete(cacheKey); // 실패한 계산은 캐시해두지 않는다 — 다음 호출이 다시 시도할 수 있게
+    throw err;
+  }
 }
 
 export async function getSalesDataPayload(type: SalesType, requestedWeek = "", options: { refresh?: boolean } = {}): Promise<WeeklyProviderPayload> {
@@ -1458,7 +1482,14 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   const dbId = getDbSheetId();
   const mainId = getSheetId();
 
-  const salesRows = await getSheetValuesById(legacyHistoryId, "Daily_Sales_History", "A:J").catch(() => [] as Row[]);
+  // MARK 2026-09: 이 읽기는 makeWeeksFromBases()의 폴백(makeWeeks)에서만 쓰이고,
+  // makeWeeks()도 r[0](날짜, A열)만 봅니다 — G열(상세JSON, 최대 4만자짜리 셀)까지 포함해서
+  // "A:J"로 전체 시트를 읽을 이유가 전혀 없었습니다. 게다가 currentBasis는 항상 값이 있어서
+  // (오늘 날짜 기준 월요일을 항상 계산) 이 폴백은 사실상 절대 안 타는 죽은 코드였는데도,
+  // getSalesDataPayload가 호출될 때마다(새로고침 여부와 무관하게, 즉 평소 대시보드
+  // 로딩마다) 이 무거운 전체 읽기가 매번 실행되고 있었습니다. A열만 읽도록 좁혀서
+  // 상세JSON을 아예 안 읽게 합니다(동작은 완전히 동일, 필요한 값만 그대로 사용).
+  const salesRows = await getSheetValuesById(legacyHistoryId, "Daily_Sales_History", "A:A").catch(() => [] as Row[]);
   // MARK 6.50: "이번주가 언제인지"도 이제 "금주/전주" B2 셀 대신 오늘(KST) 기준 월요일로 계산합니다.
   // (금주/전주는 주 1회만 갱신되어 최대 6일까지 최신 주차 판단이 늦어질 수 있었음)
   const currentBasis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));

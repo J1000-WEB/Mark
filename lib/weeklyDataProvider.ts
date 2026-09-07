@@ -11,7 +11,7 @@ import {
   updateValuesById,
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "@/lib/dailySales";
 import { expandStyleChannelRows } from "@/lib/styleChannelCompact";
 
 type SalesType = "style" | "color";
@@ -587,6 +587,35 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
   return { current, previous, stores, productNames, columns: { curQtyCol, curAmountCol, prevQtyCol, prevAmountCol } };
 }
 
+// MARK 2026-09: Daily_Sales_History는 매일 계속 쌓이기만 하는 시트라(압축 형식이어도
+// 반년 넘게 쌓이면 수천~수만 행 + 행마다 최대 4만자 JSON), "A:ZZ"로 매번 전체를 읽어서
+// 펼치면 서버가 감당 못 하고 그대로 죽어버리는 사고가 있었음(try/catch도 못 잡는 OOM
+// 추정 크래시 — /api/weekly-history가 통째로 500 HTML을 뱉던 원인). 이 함수는 최근
+// 2~3주치만 있으면 되므로, A열(날짜)만 먼저 가볍게 읽어서 필요한 구간이 시작되는 행을
+// 찾은 다음 그 아래(최근 데이터)만 읽습니다. 쓰기 쪽(dailySales.ts의
+// buildCompactDailyHistoryRows)이 항상 날짜 오름차순으로 정렬해서 저장하므로 안전합니다
+// — 혹시 못 찾으면(형식이 예상과 다르면) 안전하게 전체를 읽는 이전 방식으로 폴백합니다.
+async function findDailyHistoryStartRow(historyId: string, sinceDateKey: string): Promise<number | null> {
+  try {
+    const dateCol = await getSheetValuesById(historyId, "Daily_Sales_History", "A:A");
+    if (!dateCol.length) return null;
+    let startRow = 1; // 0-based index into dateCol; 헤더(0번) 다음부터
+    let found = false;
+    for (let i = 1; i < dateCol.length; i++) {
+      const d = normalizeDateKey(dateCol[i]?.[0]);
+      if (d && d >= sinceDateKey) {
+        startRow = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return null; // 최근 데이터를 못 찾으면(형식이 다르거나 비어있으면) 전체 읽기로 폴백
+    return startRow + 1; // 1-based 시트 행 번호
+  } catch {
+    return null;
+  }
+}
+
 // MARK 6.50: "이번주"(아직 스냅샷 없는 현재 주차)는 "금주/전주" 대신 Daily_Sales_History를
 // 직접 집계합니다. 과거 주차는 이미 저장된 스냅샷(Weekly_History)을 그대로 쓰므로 안 건드립니다.
 // 재고(byStoreStock)는 합산하면 안 되므로(스냅샷 성격) 그 기간 중 가장 최근 날짜의 값만 씁니다.
@@ -595,10 +624,6 @@ async function aggregateWeeklyFromDailyHistory(type: SalesType, weekStart: strin
   const previous = new Map<string, SalesAgg>();
   const stores = new Set<string>();
   const productNames = new Map<string, string>();
-
-  const historyId = getHistorySheetId();
-  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
-  const flatRows = expandAnyDailyHistoryRows(raw || []);
 
   const prevWeekEnd = (() => {
     const d = new Date(`${weekStart}T00:00:00`);
@@ -610,6 +635,27 @@ async function aggregateWeeklyFromDailyHistory(type: SalesType, weekStart: strin
     d.setDate(d.getDate() - 6);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
+
+  // 필요한 구간(prevWeekStart)보다 며칠 더 여유(버퍼)를 두고 시작 행을 찾습니다.
+  const bufferedSinceDate = (() => {
+    const d = new Date(`${prevWeekStart}T00:00:00`);
+    d.setDate(d.getDate() - 5);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const historyId = getHistorySheetId();
+  const startRow = await findDailyHistoryStartRow(historyId, bufferedSinceDate);
+  let raw: Row[];
+  if (startRow && startRow > 2) {
+    // 헤더(1행)는 expandAnyDailyHistoryRows가 컬럼 위치를 이름으로 찾는 데 반드시 필요합니다.
+    // dailySales.ts의 upsertFlatRowsForSingleDate(날짜별 targeted 쓰기 경로)와 똑같이,
+    // 실제 헤더 상수(DAILY_HISTORY_HEADER)를 그대로 재사용해서 별도 네트워크 왕복 없이 붙입니다.
+    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as Row[]);
+    raw = [DAILY_HISTORY_HEADER, ...tailRows];
+  } else {
+    raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => [] as Row[]);
+  }
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
 
   // 1차: 각 (key+매장)별로 이번주/전주 범위 안에서 가장 최근 날짜가 언제인지 파악합니다.
   const latestCurDate = new Map<string, string>();

@@ -424,7 +424,7 @@ export async function readDailySalesFromHistory(options?: { live?: boolean }) {
 // MARK 6.6: 데이터 폭증 방지를 위해 "일자+점포"당 한 줄만 쓰고,
 // 품번/칼라/사이즈 상세는 JSON 문자열 하나에 몰아서 저장합니다.
 // 기존 방식(조합마다 한 줄, 하루 약 2만 셀)보다 셀 수가 대폭 줄어듭니다.
-const DAILY_HISTORY_HEADER = [
+export const DAILY_HISTORY_HEADER = [
   "일자",
   "점포",
   "품목수",

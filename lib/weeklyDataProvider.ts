@@ -9,6 +9,9 @@ import {
   getSheetValuesById,
   replaceSheetValuesById,
   updateValuesById,
+  appendValuesById,
+  clearRangeById,
+  batchUpdateValuesById,
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
 import { expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "@/lib/dailySales";
@@ -1323,6 +1326,27 @@ function latestHistoryRowsByKey(rows: Row[], header: Row, includeStore: boolean)
   return [...latest.values()].sort((a, b) => a.index - b.index).map((item) => item.row);
 }
 
+// 연속된 숫자들을 [시작,끝] 구간들로 묶습니다. 예: [3,4,5,9,10] → [[3,5],[9,10]] (dailySales.ts와 동일한 패턴)
+function toContiguousRanges(sortedNumbers: number[]): [number, number][] {
+  const nums = [...sortedNumbers].sort((a, b) => a - b);
+  const ranges: [number, number][] = [];
+  for (const n of nums) {
+    const last = ranges[ranges.length - 1];
+    if (last && n === last[1] + 1) last[1] = n;
+    else ranges.push([n, n]);
+  }
+  return ranges;
+}
+
+// MARK 2026-09: 예전엔 "실시간 갱신"/"스냅샷 저장"마다 Weekly_history 시트 전체(A:S, 지금까지
+// 쌓인 모든 주차)를 읽어서 이번에 교체할 기준일만 걸러내고 통째로 다시 썼습니다. 주차가
+// 쌓일수록 매번 읽고 쓰는 양이 계속 늘어나는 구조라(Daily_Sales_History와 같은 패턴), 스냅샷
+// 저장이 느려지다 못해 타임아웃 나는 원인 중 하나였습니다. 기준일(A열, 이 시트는 항상 A열이
+// 기준일 — WEEKLY_HISTORY_HEADER 참고)만 먼저 가볍게 읽어서 이번에 교체할 주차의 행 번호만
+// 찾은 다음, 그 행들만 새 데이터로 덮어쓰고(모자라면 끝에 추가, 남으면 비움) —
+// dailySales.ts의 upsertFlatRowsForSingleDate와 같은 패턴입니다. 다른 주차 데이터는 아예
+// 안 읽고 안 씁니다. 헤더(1행)는 이 함수가 호출되기 전에 ensureWeeklyHistorySheet가 항상
+// 먼저 써두므로 여기서 따로 다룰 필요가 없습니다.
 async function replaceHistoryBasisRows(args: {
   historyId: string;
   sheetName: string;
@@ -1331,11 +1355,37 @@ async function replaceHistoryBasisRows(args: {
   replacementRows: Row[];
   clearRange: string;
 }) {
-  const existing = await getSheetValuesById(args.historyId, args.sheetName, args.clearRange).catch(() => [] as Row[]);
-  const header = existing[0]?.length ? existing[0] : args.header;
-  const kept = existing.slice(1).filter((row) => historyBasisFromRow(header, row) !== args.selectedBasis);
-  await replaceSheetValuesById(args.historyId, args.sheetName, [header, ...kept, ...args.replacementRows], args.clearRange);
-  return { keptRows: kept.length, writtenRows: args.replacementRows.length };
+  const { historyId, sheetName, selectedBasis, replacementRows, clearRange } = args;
+  const endCol = (clearRange.split(":")[1] || "S").trim();
+
+  const basisCol = await getSheetValuesById(historyId, sheetName, "A:A").catch(() => [] as Row[]);
+  const matchingRowNumbers: number[] = []; // 1-based 시트 행번호(헤더 포함)
+  for (let i = 1; i < basisCol.length; i++) {
+    const raw = basisCol[i]?.[0];
+    if (!raw) continue;
+    const parsed = parseDate(raw);
+    const basisKey = parsed ? isoDate(parsed) : text(raw);
+    if (basisKey === selectedBasis) matchingRowNumbers.push(i + 1);
+  }
+
+  const writeCount = Math.min(replacementRows.length, matchingRowNumbers.length);
+  const updates: { range: string; values: any[][] }[] = [];
+  for (let i = 0; i < writeCount; i++) {
+    updates.push({ range: `'${sheetName}'!A${matchingRowNumbers[i]}:${endCol}${matchingRowNumbers[i]}`, values: [replacementRows[i]] });
+  }
+  if (updates.length) await batchUpdateValuesById(historyId, updates);
+
+  if (replacementRows.length > matchingRowNumbers.length) {
+    const extra = replacementRows.slice(matchingRowNumbers.length);
+    await appendValuesById(historyId, `'${sheetName}'!A:${endCol}`, extra);
+  } else if (matchingRowNumbers.length > replacementRows.length) {
+    const leftover = matchingRowNumbers.slice(replacementRows.length);
+    for (const [start, end] of toContiguousRanges(leftover)) {
+      await clearRangeById(historyId, sheetName, `A${start}:${endCol}${end}`).catch(() => {});
+    }
+  }
+
+  return { keptRows: Math.max(0, basisCol.length - 1 - matchingRowNumbers.length), writtenRows: replacementRows.length };
 }
 
 /**

@@ -574,9 +574,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       ? mergeRows(pageData.current || [], pageData.compare || [], pageData.year || [])
       : mergeRows(pageData.current || [], pageData.compare || []);
 
-  const { core, shop } = splitStores(merged);
-  // 총매출은 위탁샵까지 포함하고, 호조/부진/순위/TOP상품은 핵심 오프라인 매장만 봅니다.
-  const salesBaseRows = [...core, ...shop];
+  const { core, shop, project } = splitStores(merged);
+  // 총매출은 위탁샵·포시즌아울렛까지 포함하고, 호조/부진/순위/TOP상품은 핵심 오프라인 매장만 봅니다.
+  const salesBaseRows = [...core, ...shop, ...project];
   const coreTotals = totals(salesBaseRows);
   const shopRows = shopSummary(shop);
 

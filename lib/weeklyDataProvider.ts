@@ -142,6 +142,21 @@ function isOfflineStore(store: string) {
   return true;
 }
 
+// MARK 2026-09: 주간 대시보드 상단 KPI(주간목표/주간매출/월누적매출)에는 포시즌아울렛·위탁샵
+// 매출도 합산해야 합니다(사용자 요청). 다만 isOfflineStore는 스타일/컬러별 집계 등 다른 여러
+// 곳에서도 공용으로 쓰여서 그쪽까지 바뀌면 안 되므로, 건드리지 않고 이 "일간매출(26년)" 기반
+// 점포 합계 경로(parseDailyStoreSalesRows/buildStoreSummaryFromDailySales)에서만 쓰는 별도
+// 판별 함수를 둡니다 — 온라인/글로벌/직원구매/물류만 걸러내고 위탁은 통과시킵니다. 포시즌은
+// 애초에 isOfflineStore가 걸러내지 않으므로 그대로 둬도 됩니다. 매장별 순위/호조·부진 목록에서
+// 포시즌·위탁을 계속 빼는 것은 클라이언트(lib/mark.ts)의 isCoreOfflineStore가 담당합니다.
+function isOfflineOrConsignmentStore(store: string) {
+  const s = text(store);
+  if (!s) return false;
+  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_") || s.startsWith("오프라인_")) return false;
+  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류")) return false;
+  return true;
+}
+
 
 function normalizeDailyStoreKey(storeName: string) {
   const raw = text(storeName);
@@ -174,6 +189,9 @@ function isNonOfflineDailyStore(channelName: string, teamName = "") {
   const team = text(teamName);
   const key = normalizeDailyStoreKey(raw);
   const teamKey = normalizeDailyStoreKey(team);
+  // MARK 2026-09: 포시즌아울렛·위탁샵도 주간 KPI 합계(주간목표/주간매출/월누적매출)에는
+  // 포함시켜야 해서 여기서는 더 이상 걸러내지 않습니다(사용자 요청). 매장별 순위/호조·부진
+  // 목록에서 계속 빼는 건 클라이언트(lib/mark.ts)의 isCoreOfflineStore가 맡습니다.
   return (
     !raw ||
     raw.startsWith("오프라인_") ||
@@ -187,8 +205,6 @@ function isNonOfflineDailyStore(channelName: string, teamName = "") {
     key.includes("글로벌") ||
     key === "기타" ||
     key.startsWith("기타") ||
-    key.includes("포시즌") ||
-    key.includes("위탁") ||
     key.includes("직원구매") ||
     key.includes("물류")
   );
@@ -255,7 +271,7 @@ function parseDailyStoreSalesRows(rows: Row[]) {
     const rawName = text(channelNames[c]) || text(channelCodes[c]);
     if (isNonOfflineDailyStore(rawName, teamName)) continue;
     const storeName = displayDailyStoreName(rawName);
-    if (!isOfflineStore(storeName)) continue;
+    if (!isOfflineOrConsignmentStore(storeName)) continue;
     targetCols.push({ col: c, storeName, channelCode: text(channelCodes[c]), weekTarget: num(targetRow[c]) });
   }
 
@@ -293,7 +309,7 @@ function buildStoreSummaryFromDailySales(rows: DailyStoreSaleRecord[], selected:
   const compareDates = new Set(dateRangeKeys(selected.compareStart, selected.compareEnd));
   const monthStart = selected.analysisEnd.slice(0, 8) + "01";
   const monthDates = new Set(dateRangeKeys(monthStart, selected.analysisEnd));
-  const stores = [...new Set(rows.map((r) => r.storeName).filter(Boolean))].filter(isOfflineStore).sort((a, b) => a.localeCompare(b, "ko"));
+  const stores = [...new Set(rows.map((r) => r.storeName).filter(Boolean))].filter(isOfflineOrConsignmentStore).sort((a, b) => a.localeCompare(b, "ko"));
   const targetMap = new Map<string, number>();
   for (const r of rows) {
     if (r.weekTarget) targetMap.set(r.storeName, Math.max(targetMap.get(r.storeName) || 0, r.weekTarget));

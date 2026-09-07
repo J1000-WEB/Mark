@@ -44,8 +44,15 @@ export function isOfflineDashboardStore(storeName: string) {
   return !isOnlineChannel(s);
 }
 
+// MARK 2026-09: 포시즌아울렛은 프로젝트성 매장이라 위탁샵과 마찬가지로 핵심매장
+// 랭킹(매장별 주간매출순위)·호조/부진(매출관리 필요매장)에서는 제외합니다. 총매출
+// (주간목표/주간매출/월누적매출)에는 위탁샵처럼 포함합니다 — splitStores/totals 참고.
+export function isProjectStore(storeName: string) {
+  return String(storeName || "").includes("포시즌");
+}
+
 export function isCoreOfflineStore(storeName: string) {
-  return isOfflineDashboardStore(storeName) && !isConsignmentChannel(storeName);
+  return isOfflineDashboardStore(storeName) && !isConsignmentChannel(storeName) && !isProjectStore(storeName);
 }
 
 export function won(value: number) {
@@ -108,6 +115,9 @@ export function splitStores(rows: any[]) {
   return {
     core: rows.filter((r) => isCoreOfflineStore(r.storeName)),
     shop: rows.filter((r) => isOfflineDashboardStore(r.storeName) && isConsignmentChannel(r.storeName)),
+    // MARK 2026-09: 포시즌아울렛은 "위탁"은 아니라서 shop(위탁 카드)에는 안 넣지만, 총매출
+    // 합계에는 위탁샵처럼 포함해야 하므로 별도 버킷으로 둡니다(totals 계산 시 core+shop+project).
+    project: rows.filter((r) => isOfflineDashboardStore(r.storeName) && isProjectStore(r.storeName)),
   };
 }
 

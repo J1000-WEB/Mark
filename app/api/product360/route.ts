@@ -38,6 +38,31 @@ export async function GET(req: Request) {
     }
 
     const data = await res.json();
+
+    // MARK 2026-09: visualTwin(비주얼 트윈, 닮은 상품 추천) 응답 형태가 이사님 쪽에서
+    // 확정됨(candidates/gate/dropped/stockAsOf/found). 다만 재고 판단(gate/totalStock/
+    // storeStock)은 gi-board 쪽 재고 원장 기준이라 우리 쪽 실시간 재고와 다를 수 있어서
+    // 안 쓰고, 클라이언트가 우리 자체 소스(/api/store-stock-lookup)로 다시 확인합니다
+    // — "이사님이라도 못 믿는다" 교차검증 원칙(CLAUDESS.md)과 같은 이유입니다.
+    // 그래서 여기선 후보 목록(스타일/이미지/컬러/톤유사도)만 클라이언트가 바로 쓸 수
+    // 있는 단일 형태(visualTwin.similarNeighbors)로 다듬어서 내려주고, gi-board의
+    // 재고 관련 필드(gate/dropped/totalStock/storeStock/stockAsOf)는 내려주지 않습니다.
+    if (data && data.visualTwin && typeof data.visualTwin === "object") {
+      const vt = data.visualTwin;
+      const rawCandidates = Array.isArray(vt.candidates) ? vt.candidates : [];
+      const found = vt.found !== false; // 명시적으로 false일 때만 "트윈 없음"
+      data.visualTwin = {
+        found,
+        reason: found ? undefined : vt.reason || "아직 촬영/누끼 작업이 안 끝난 품번이라 비슷한 상품 데이터가 없어요.",
+        similarNeighbors: rawCandidates.map((c: any) => ({
+          style: c.style,
+          heroUrl: c.heroUrl || null,
+          color: c.color || null,
+          toneSim: typeof c.toneSim === "number" ? c.toneSim : null,
+        })),
+      };
+    }
+
     return NextResponse.json({ ok: true, ...data }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("product360 proxy failed:", error);

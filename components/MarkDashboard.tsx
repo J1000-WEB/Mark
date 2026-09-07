@@ -392,12 +392,31 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     return String(dashboardData?.weekly?.anchorMonday || dashboardData?.weekly?.selectedWeek || "").trim();
   }
 
+  // MARK 2026-09: 실시간 갱신(refresh=1)은 Google Sheets를 캐시 없이 다시 읽고 집계하다 보니
+  // 데이터가 많을 때 서버 응답이 오래 걸릴 수 있고, 그 경우 Vercel이 함수를 타임아웃시키며
+  // JSON이 아닌 HTML 오류 페이지를 돌려줄 수 있습니다("Unexpected token '<'" 원인).
+  // res.json()으로 바로 파싱하지 않고 텍스트를 먼저 받아, 이런 경우 사람이 읽을 수 있는
+  // 에러 메시지로 바꿔줍니다.
+  async function fetchJsonSafe(url: string, init?: RequestInit) {
+    const res = await fetch(url, init);
+    const raw = await res.text();
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      const looksLikeGatewayError = /<!doctype/i.test(raw) || res.status === 504 || res.status === 502;
+      throw new Error(
+        looksLikeGatewayError
+          ? "서버 응답이 너무 오래 걸려 시간 초과됐습니다. 잠시 후 다시 시도해주세요."
+          : `서버 응답을 해석하지 못했습니다 (status ${res.status}).`
+      );
+    }
+  }
+
   async function requestLiveWeekly(week = "", refresh = false) {
     const params = new URLSearchParams({ dashboard: "1", _ts: String(Date.now()) });
     if (week) params.set("week", week);
     if (refresh) params.set("refresh", "1");
-    const res = await fetch(`/api/weekly-history?${params.toString()}`, { cache: "no-store" });
-    const payload = await res.json();
+    const payload = await fetchJsonSafe(`/api/weekly-history?${params.toString()}`, { cache: "no-store" });
     if (!payload?.ok || !payload?.weekly) throw new Error(payload?.error || "주간 원본 데이터를 불러오지 못했습니다.");
     return payload;
   }
@@ -480,8 +499,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       const basis = activeWeeklyBasis();
       const detailParams = new URLSearchParams({ type: "style", refresh: "1", _ts: String(Date.now()) });
       if (basis) detailParams.set("week", basis);
-      const detailRes = await fetch(`/api/weekly-history?${detailParams.toString()}`, { cache: "no-store" });
-      const detail = await detailRes.json();
+      const detail = await fetchJsonSafe(`/api/weekly-history?${detailParams.toString()}`, { cache: "no-store" });
       if (!detail?.ok) throw new Error(detail?.error || "Weekly_history 저장 실패");
 
       // 스냅샷에서 선택한 주차(예: 7/6)는 그대로 유지해 해당 주차 원본을 다시 계산한다.
@@ -530,13 +548,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     if (!window.confirm("MARK_WEEKLY_HISTORY / Weekly_history의 같은 주차·상품·점포 중복 행을 정리합니다. 각 키의 가장 마지막 저장본만 남깁니다.")) return;
     setRefreshing(true);
     try {
-      const res = await fetch("/api/weekly-history", {
+      const json = await fetchJsonSafe("/api/weekly-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({ action: "cleanup" }),
       });
-      const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Weekly_history 중복 정리 실패");
       setDataStatus(`${json.message} · 이후 같은 주차는 덮어쓰기 저장`);
     } catch (error: any) {

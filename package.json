@@ -13,9 +13,13 @@
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "googleapis": "^140.0.1",
+    "iconv-lite": "^0.7.3",
     "next": "14.2.5",
+    "otplib": "^13.4.1",
+    "puppeteer": "^25.8.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "xlsx": "^0.18.5"

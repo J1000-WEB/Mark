@@ -18,6 +18,14 @@
     "app/api/upload-style-channel-sheet/route.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "app/api/weekly-history/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/sales-data/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "crons": [

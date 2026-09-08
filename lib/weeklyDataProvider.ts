@@ -11,7 +11,6 @@ import {
   updateValuesById,
   appendValuesById,
   clearRangeById,
-  batchUpdateValuesById,
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
 import { expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER, type FlatDailyHistoryRow } from "@/lib/dailySales";
@@ -1387,7 +1386,7 @@ async function replaceHistoryBasisRows(args: {
   const endCol = (clearRange.split(":")[1] || "S").trim();
 
   const basisCol = await getSheetValuesById(historyId, sheetName, "A:A").catch(() => [] as Row[]);
-  const matchingRowNumbers: number[] = []; // 1-based 시트 행번호(헤더 포함)
+  const matchingRowNumbers: number[] = []; // 1-based 시트 행번호(헤더 포함), 오름차순
   for (let i = 1; i < basisCol.length; i++) {
     const raw = basisCol[i]?.[0];
     if (!raw) continue;
@@ -1397,11 +1396,28 @@ async function replaceHistoryBasisRows(args: {
   }
 
   const writeCount = Math.min(replacementRows.length, matchingRowNumbers.length);
-  const updates: { range: string; values: any[][] }[] = [];
-  for (let i = 0; i < writeCount; i++) {
-    updates.push({ range: `'${sheetName}'!A${matchingRowNumbers[i]}:${endCol}${matchingRowNumbers[i]}`, values: [replacementRows[i]] });
+  // MARK 2026-09: 한 주차에 스타일·컬러×점포 조합만큼(많으면 수천 개) 행이 있을 수 있는데,
+  // 예전엔 이걸 행 하나당 range 하나씩(A123:S123 등) 수천 개 만들어서 batchUpdate 하나에
+  // 몰아넣었습니다 — API 호출 수는 1번이지만, 그 1번의 요청 자체가 range 수천 개짜리라
+  // 여전히 느립니다(=PIP 업로드가 겪었던 "요청 하나가 너무 크면 느려진다"는 것과 같은 문제).
+  // 이 주차의 기존 행들은 (처음 저장될 때 한 덩어리로 append됐으므로) 대부분 시트 안에서
+  // 연속된 구간을 이룹니다 — 그 연속 구간을 찾아서, PIP 업로드가 청크를 한 번에 쓰는 것과
+  // 같은 방식으로 구간 하나당 값 여러 행을 한 번에 쓰는 update 호출로 바꿨습니다. 결과 값은
+  // 예전 방식과 완전히 동일(같은 위치에 같은 값)하고, range 개수만 수천 개에서 보통 1~2개로 줄어듭니다.
+  const rowsToWrite = matchingRowNumbers.slice(0, writeCount);
+  const valuesToWrite = replacementRows.slice(0, writeCount);
+  if (writeCount) {
+    const ranges = toContiguousRanges(rowsToWrite);
+    let cursor = 0;
+    await Promise.all(
+      ranges.map(([start, end]) => {
+        const count = end - start + 1;
+        const slice = valuesToWrite.slice(cursor, cursor + count);
+        cursor += count;
+        return updateValuesById(historyId, `'${sheetName}'!A${start}:${endCol}${end}`, slice);
+      })
+    );
   }
-  if (updates.length) await batchUpdateValuesById(historyId, updates);
 
   if (replacementRows.length > matchingRowNumbers.length) {
     const extra = replacementRows.slice(matchingRowNumbers.length);

@@ -145,21 +145,13 @@ function isOfflineStore(store: string) {
   return true;
 }
 
-// MARK 2026-09: 주간 대시보드 상단 KPI(주간목표/주간매출/월누적매출)에는 포시즌아울렛·위탁샵
-// 매출도 합산해야 합니다(사용자 요청). 다만 isOfflineStore는 스타일/컬러별 집계 등 다른 여러
-// 곳에서도 공용으로 쓰여서 그쪽까지 바뀌면 안 되므로, 건드리지 않고 이 "일간매출(26년)" 기반
-// 점포 합계 경로(parseDailyStoreSalesRows/buildStoreSummaryFromDailySales)에서만 쓰는 별도
-// 판별 함수를 둡니다 — 온라인/글로벌/직원구매/물류만 걸러내고 위탁은 통과시킵니다. 포시즌은
-// 애초에 isOfflineStore가 걸러내지 않으므로 그대로 둬도 됩니다. 매장별 순위/호조·부진 목록에서
-// 포시즌·위탁을 계속 빼는 것은 클라이언트(lib/mark.ts)의 isCoreOfflineStore가 담당합니다.
-function isOfflineOrConsignmentStore(store: string) {
-  const s = text(store);
-  if (!s) return false;
-  if (s.startsWith("온라인_") || s.startsWith("글로벌_") || s.startsWith("기타_") || s.startsWith("오프라인_")) return false;
-  if (s.includes("온라인") || s.includes("글로벌") || s.includes("직원구매") || s.includes("물류")) return false;
-  return true;
-}
-
+// MARK 2026-09: 주간 대시보드 상단 KPI(주간목표/주간매출/월누적매출)의 점포 합계 경로
+// (parseDailyStoreSalesRows/buildStoreSummaryFromDailySales)는 이제 이름 기반 키워드 판별이
+// 아니라 "일간매출(26년)" 시트의 팀 행이 "오프라인팀"인지만으로 점포를 판단합니다(사용자 확인:
+// 포시즌아울렛·위탁샵 모두 팀 행이 "오프라인팀"으로 되어있음 — 온라인/글로벌/직원구매/물류는
+// 애초에 다른 팀 값이라 여기 안 들어옴). 이름 키워드로 한 번 더 걸러내던 예전 방식은 위탁샵
+// 열이 이름 패턴과 안 맞아 통째로 누락되는 문제가 있어서 제거했습니다. 매장별 순위/호조·부진
+// 목록에서 포시즌·위탁을 빼는 것은 여전히 클라이언트(lib/mark.ts)의 isCoreOfflineStore가 담당.
 
 function normalizeDailyStoreKey(storeName: string) {
   const raw = text(storeName);
@@ -185,47 +177,6 @@ function displayDailyStoreName(storeName: string) {
 
 function isDailyOfflineTeamValue(value: any) {
   return text(value).replace(/[\s_\-·.()]/g, "").includes("오프라인팀");
-}
-
-function isNonOfflineDailyStore(channelName: string, teamName = "") {
-  const raw = text(channelName);
-  const team = text(teamName);
-  const key = normalizeDailyStoreKey(raw);
-  const teamKey = normalizeDailyStoreKey(team);
-  // MARK 2026-09: 포시즌아울렛·위탁샵도 주간 KPI 합계(주간목표/주간매출/월누적매출)에는
-  // 포함시켜야 해서 여기서는 더 이상 걸러내지 않습니다(사용자 요청). 매장별 순위/호조·부진
-  // 목록에서 계속 빼는 건 클라이언트(lib/mark.ts)의 isCoreOfflineStore가 맡습니다.
-  return (
-    !raw ||
-    raw.startsWith("오프라인_") ||
-    isOnlineChannelName(raw) ||
-    raw.startsWith("글로벌_") ||
-    raw.startsWith("기타_") ||
-    teamKey.includes("온라인") ||
-    teamKey.includes("글로벌") ||
-    teamKey.includes("기타") ||
-    key.includes("온라인") ||
-    key.includes("글로벌") ||
-    key === "기타" ||
-    key.startsWith("기타") ||
-    key.includes("직원구매") ||
-    key.includes("물류")
-  );
-}
-
-function isOnlineChannelName(storeName: string) {
-  const s = text(storeName).toLowerCase();
-  return (
-    s.startsWith("온라인") ||
-    s.includes("29cm") ||
-    s.includes("ssf") ||
-    s.includes("네이버") ||
-    s.includes("지그재그") ||
-    s.includes("w컨셉") ||
-    s.includes("wconcept") ||
-    s.includes("eql") ||
-    s.includes("한섬")
-  );
 }
 
 function normalizeDateKey(value: any) {
@@ -270,11 +221,14 @@ function parseDailyStoreSalesRows(rows: Row[]) {
   const targetCols: { col: number; storeName: string; channelCode: string; weekTarget: number }[] = [];
   for (let c = 7; c < Math.max(team.length, channelNames.length, channelCodes.length); c++) {
     const teamName = text(team[c]);
+    // MARK 2026-09: 팀 행이 "오프라인팀"인 열만 오프라인 매장 매출로 인정합니다(포시즌아울렛·
+    // 위탁샵 포함, 사용자 확인). 이름 키워드로 추가 판별하지 않습니다 — 위탁샵처럼 이름 패턴이
+    // 다양한 열이 통째로 누락되는 문제가 있었습니다.
     if (!isDailyOfflineTeamValue(teamName)) continue;
     const rawName = text(channelNames[c]) || text(channelCodes[c]);
-    if (isNonOfflineDailyStore(rawName, teamName)) continue;
+    if (!rawName) continue;
     const storeName = displayDailyStoreName(rawName);
-    if (!isOfflineOrConsignmentStore(storeName)) continue;
+    if (!storeName) continue;
     targetCols.push({ col: c, storeName, channelCode: text(channelCodes[c]), weekTarget: num(targetRow[c]) });
   }
 
@@ -312,7 +266,9 @@ function buildStoreSummaryFromDailySales(rows: DailyStoreSaleRecord[], selected:
   const compareDates = new Set(dateRangeKeys(selected.compareStart, selected.compareEnd));
   const monthStart = selected.analysisEnd.slice(0, 8) + "01";
   const monthDates = new Set(dateRangeKeys(monthStart, selected.analysisEnd));
-  const stores = [...new Set(rows.map((r) => r.storeName).filter(Boolean))].filter(isOfflineOrConsignmentStore).sort((a, b) => a.localeCompare(b, "ko"));
+  // MARK 2026-09: rows는 이미 parseDailyStoreSalesRows에서 팀="오프라인팀" 열만 골라 만든
+  // 것이므로 여기서 이름 기반으로 다시 걸러내지 않습니다(포시즌아울렛·위탁샵 누락 방지).
+  const stores = [...new Set(rows.map((r) => r.storeName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   const targetMap = new Map<string, number>();
   for (const r of rows) {
     if (r.weekTarget) targetMap.set(r.storeName, Math.max(targetMap.get(r.storeName) || 0, r.weekTarget));
@@ -1511,16 +1467,23 @@ async function buildCurrentWeeklySnapshotFromSource(args: { selected: WeekInfo; 
   const build = (async () => {
     const ids = [...new Set([dbId, historyId, mainId].filter(Boolean))];
     const productIds = [...new Set([getDailySourceSheetId(), dbId, historyId, mainId].filter(Boolean))];
-    const productRaw = await readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ");
-    const stockRaw = await readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ");
+    // MARK 2026-09: productRaw/stockRaw 읽기와 styleAgg/colorAgg 집계는 서로 데이터 의존성이
+    // 없으므로(모두 원본 시트에서 독립적으로 읽어옴) 순차 await 대신 Promise.all로 동시에
+    // 실행해 왕복 시간을 4번 합산이 아니라 가장 느린 1번으로 줄입니다. CPU 바운드인
+    // buildProductMaster/mergeOnOffStock, 그리고 이들을 필요로 하는 upsertWeeklyHistorySnapshot은
+    // 네 값이 모두 준비된 뒤에 순서대로 실행합니다.
+    const [productRaw, stockRaw, styleAgg, colorAgg] = await Promise.all([
+      readFirstAvailableSheet(productIds, ["스타일별 채널별 입고판매재고현황"], "A:AZ"),
+      readFirstAvailableSheet(ids, ["온오프재고현황", "재고_ON", "재고_OFF", "재고_물류"], "A:AZ"),
+      // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
+      aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd),
+      aggregateWeeklyFromDailyHistory("color", selected.analysisStart, selected.analysisEnd),
+    ]);
     // MARK 6.73: 업로드 쪽(InventoryDashboard.tsx)에서 compactStyleChannelRows로 압축해서 올리므로,
     // 읽을 때 원래(594열) 모양으로 되돌립니다. buildProductMaster는 이 사실을 몰라도 되게(원본과
     // 완전히 동일한 열 위치로 복원되므로) 그대로 둡니다.
     const productMaps = buildProductMaster(expandStyleChannelRows(productRaw.rows));
     mergeOnOffStock(stockRaw.rows, productMaps);
-    // MARK 6.50: "금주/전주"(주 1회 갱신) 대신 Daily_Sales_History(매일 갱신)를 직접 집계합니다.
-    const styleAgg = await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd);
-    const colorAgg = await aggregateWeeklyFromDailyHistory("color", selected.analysisStart, selected.analysisEnd);
     const appended = await upsertWeeklyHistorySnapshot({
       historyId,
       selected,

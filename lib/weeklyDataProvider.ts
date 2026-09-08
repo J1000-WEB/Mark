@@ -14,7 +14,7 @@ import {
   batchUpdateValuesById,
 } from "@/lib/googleSheets";
 import { getSavedWeeklyTarget, getSavedMonthlyTarget } from "@/lib/weeklyTarget";
-import { expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "@/lib/dailySales";
+import { expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER, type FlatDailyHistoryRow } from "@/lib/dailySales";
 import { expandStyleChannelRows } from "@/lib/styleChannelCompact";
 
 type SalesType = "style" | "color";
@@ -591,6 +591,52 @@ async function findDailyHistoryStartRow(historyId: string, sinceDateKey: string)
   }
 }
 
+// MARK 2026-09: 스타일별/컬러별 집계(aggregateWeeklyFromDailyHistory)는 같은 주차에 대해
+// "style"과 "color" 두 번 호출되고(buildCurrentWeeklySnapshotFromSource), 스냅샷 저장 버튼은
+// 그 뒤 별도 API 호출(getWeeklyDashboardPayload)에서 상품 TOP 계산용으로 "style"을 또 한 번
+// 호출합니다 — 셋 다 Daily_Sales_History의 **완전히 동일한 날짜범위**를 읽고 펼치는데, 그
+// 읽기+펼치기(expandAnyDailyHistoryRows, 압축 JSON 해제라 꽤 무거움)가 매번 새로 실행되고
+// 있었습니다. 실제로 다른 건 그 다음의 groupby 키(style vs color)뿐이라, 읽기+펼치기 결과를
+// 짧은 시간(60초) 캐시하고 동시 호출은 in-flight 프로미스를 공유하도록 분리했습니다 — style·
+// color 두 호출이 Promise.all로 동시에 나가도 실제 시트 읽기는 1번만 나갑니다.
+const dailyHistoryFlatRowsCache = new Map<string, { expiresAt: number; value: FlatDailyHistoryRow[] }>();
+const dailyHistoryFlatRowsInflight = new Map<string, Promise<FlatDailyHistoryRow[]>>();
+const DAILY_HISTORY_FLAT_ROWS_TTL_MS = 60_000;
+
+async function getDailyHistoryFlatRowsCached(historyId: string, bufferedSinceDate: string) {
+  const key = `${historyId}::${bufferedSinceDate}`;
+  const now = Date.now();
+  const cached = dailyHistoryFlatRowsCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const pending = dailyHistoryFlatRowsInflight.get(key);
+  if (pending) return pending;
+
+  const load = (async () => {
+    const startRow = await findDailyHistoryStartRow(historyId, bufferedSinceDate);
+    let raw: Row[];
+    if (startRow && startRow > 2) {
+      // 헤더(1행)는 expandAnyDailyHistoryRows가 컬럼 위치를 이름으로 찾는 데 반드시 필요합니다.
+      // dailySales.ts의 upsertFlatRowsForSingleDate(날짜별 targeted 쓰기 경로)와 똑같이,
+      // 실제 헤더 상수(DAILY_HISTORY_HEADER)를 그대로 재사용해서 별도 네트워크 왕복 없이 붙입니다.
+      const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as Row[]);
+      raw = [DAILY_HISTORY_HEADER, ...tailRows];
+    } else {
+      raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => [] as Row[]);
+    }
+    const flatRows = expandAnyDailyHistoryRows(raw || []);
+    dailyHistoryFlatRowsCache.set(key, { expiresAt: Date.now() + DAILY_HISTORY_FLAT_ROWS_TTL_MS, value: flatRows });
+    return flatRows;
+  })();
+
+  dailyHistoryFlatRowsInflight.set(key, load);
+  try {
+    return await load;
+  } finally {
+    dailyHistoryFlatRowsInflight.delete(key);
+  }
+}
+
 // MARK 6.50: "이번주"(아직 스냅샷 없는 현재 주차)는 "금주/전주" 대신 Daily_Sales_History를
 // 직접 집계합니다. 과거 주차는 이미 저장된 스냅샷(Weekly_History)을 그대로 쓰므로 안 건드립니다.
 // 재고(byStoreStock)는 합산하면 안 되므로(스냅샷 성격) 그 기간 중 가장 최근 날짜의 값만 씁니다.
@@ -619,18 +665,7 @@ async function aggregateWeeklyFromDailyHistory(type: SalesType, weekStart: strin
   })();
 
   const historyId = getHistorySheetId();
-  const startRow = await findDailyHistoryStartRow(historyId, bufferedSinceDate);
-  let raw: Row[];
-  if (startRow && startRow > 2) {
-    // 헤더(1행)는 expandAnyDailyHistoryRows가 컬럼 위치를 이름으로 찾는 데 반드시 필요합니다.
-    // dailySales.ts의 upsertFlatRowsForSingleDate(날짜별 targeted 쓰기 경로)와 똑같이,
-    // 실제 헤더 상수(DAILY_HISTORY_HEADER)를 그대로 재사용해서 별도 네트워크 왕복 없이 붙입니다.
-    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as Row[]);
-    raw = [DAILY_HISTORY_HEADER, ...tailRows];
-  } else {
-    raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => [] as Row[]);
-  }
-  const flatRows = expandAnyDailyHistoryRows(raw || []);
+  const flatRows = await getDailyHistoryFlatRowsCached(historyId, bufferedSinceDate);
 
   // 1차: 각 (key+매장)별로 이번주/전주 범위 안에서 가장 최근 날짜가 언제인지 파악합니다.
   const latestCurDate = new Map<string, string>();
@@ -1088,13 +1123,50 @@ function aggregateWeeklyStoreRecords(records: any[]) {
   return [...grouped.values()];
 }
 
-async function readDedicatedWeeklyHistory(historyId: string) {
-  // 조회 중에는 시트를 새로 만들거나 헤더를 덮어쓰지 않는다.
-  const rows = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:S").catch(() => [] as Row[]);
-  const header = rows[0] || WEEKLY_HISTORY_HEADER;
-  const storeRecords = rows.slice(1)
+// MARK 2026-09: 판매데이터 탭(getSalesDataPayload, "스냅샷 저장"의 1단계)이 호출될 때마다
+// Weekly_history 시트 전체(A:S, 지금까지 쌓인 모든 주차·스타일·컬러·점포 조합)를 읽고
+// 있었습니다 — 그것도 refresh일 땐 재계산 전/후로 두 번. 이 시트는 매주 스타일·컬러·점포
+// 조합만큼 행이 계속 쌓이는 구조(Daily_Sales_History와 같은 성격)라 시간이 갈수록 이 읽기
+// 자체가 무거워집니다. 실제로 화면 하나를 그리는 데 필요한 건 딱 3개 주차(선택 주차, 1주 전,
+// 2주 전)뿐이고, 전체 주차 목록(드롭다운)에는 각 행의 기준일 값만 있으면 됩니다 — 그래서
+// 기준일(A열)만 먼저 가볍게 전체를 읽어 주차 목록을 만들고, 실제 상세 데이터(A:S)는 필요한
+// 3개 주차에 해당하는 행 번호만 찾아 그 행들만 targeted로 읽습니다. replaceHistoryBasisRows
+// (쓰기 경로)와 같은 방식입니다.
+async function readWeeklyHistoryBasisDates(historyId: string) {
+  const basisCol = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:A").catch(() => [] as Row[]);
+  const out: string[] = [];
+  for (let i = 1; i < basisCol.length; i++) {
+    const raw = basisCol[i]?.[0];
+    if (!raw) continue;
+    const parsed = parseDate(raw);
+    out.push(parsed ? isoDate(parsed) : text(raw));
+  }
+  return out;
+}
+
+async function readDedicatedWeeklyHistoryForBases(historyId: string, targetBases: string[]) {
+  const targetSet = new Set(targetBases.filter(Boolean));
+  if (!targetSet.size) return { storeRecords: [] as any[], productRecords: [] as any[] };
+
+  const basisCol = await getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, "A:A").catch(() => [] as Row[]);
+  const matchingRowNumbers: number[] = [];
+  for (let i = 1; i < basisCol.length; i++) {
+    const raw = basisCol[i]?.[0];
+    if (!raw) continue;
+    const parsed = parseDate(raw);
+    const basisKey = parsed ? isoDate(parsed) : text(raw);
+    if (targetSet.has(basisKey)) matchingRowNumbers.push(i + 1);
+  }
+  if (!matchingRowNumbers.length) return { storeRecords: [] as any[], productRecords: [] as any[] };
+
+  const ranges = toContiguousRanges(matchingRowNumbers);
+  const chunks = await Promise.all(
+    ranges.map(([start, end]) => getSheetValuesById(historyId, WEEKLY_HISTORY_SHEET, `A${start}:S${end}`).catch(() => [] as Row[]))
+  );
+  const rows = chunks.flat();
+  const storeRecords = rows
     .filter((r) => text(r[0]) && text(r[5]) && text(r[6]) && text(r[11]))
-    .map((r) => weeklyStoreRecordFromRow(header, r));
+    .map((r) => weeklyStoreRecordFromRow(WEEKLY_HISTORY_HEADER, r));
   return {
     storeRecords,
     productRecords: aggregateWeeklyStoreRecords(storeRecords),
@@ -1523,22 +1595,32 @@ export async function getSalesDataPayload(type: SalesType, requestedWeek = "", o
   // (금주/전주는 주 1회만 갱신되어 최대 6일까지 최신 주차 판단이 늦어질 수 있었음)
   const currentBasis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));
   const requested = explicitWeekInfo(requestedWeek);
-  let historyBundle = await readDedicatedWeeklyHistory(weeklyHistoryId);
-  let historyRecords = historyBundle.productRecords;
-  let storeHistoryRecords = historyBundle.storeRecords;
-  let weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
+  // 주차 목록(드롭다운)엔 전체 기준일이 필요하지만, 그건 A열 값만 있으면 되는 가벼운 조회다.
+  const allBases = await readWeeklyHistoryBasisDates(weeklyHistoryId);
+  let weeks = makeWeeksFromBases(allBases, salesRows, currentBasis, requested ? [requested.week] : []);
   // 스냅샷에서 7/6 같은 특정 주차를 선택해 갱신하면, B2의 현재 주차와 무관하게 그 선택 주차를 우선한다.
   let selected = requested || weeks.find((w) => w.week === currentBasis) || weeks[0] || weekInfoFromMonday(mondayOfWeek(new Date()));
+
+  // historyRecordsToMaps는 선택 주차·1주 전·2주 전, 딱 3개 기준일만 사용한다 — 그 3개 주차에
+  // 해당하는 행만 targeted로 읽는다(Weekly_history 전체를 읽지 않음).
+  const prevBasisDates = (basis: string) => [
+    isoDate(addDays(parseSelectedMonday(basis) || new Date(basis), -7)),
+    isoDate(addDays(parseSelectedMonday(basis) || new Date(basis), -14)),
+  ];
+  let historyBundle = await readDedicatedWeeklyHistoryForBases(weeklyHistoryId, [selected.week, ...prevBasisDates(selected.week)]);
+  let historyRecords = historyBundle.productRecords;
+  let storeHistoryRecords = historyBundle.storeRecords;
 
   const selectedTypeLabel = type === "color" ? "컬러" : "품번";
   const hasSelected = historyRecords.some((r) => r.basis === selected.week && r.typeLabel === selectedTypeLabel);
   if (options.refresh || (!hasSelected && (!requestedWeek || selected.week === currentBasis))) {
     await buildCurrentWeeklySnapshotFromSource({ selected, historyId: weeklyHistoryId, dbId, mainId });
-    historyBundle = await readDedicatedWeeklyHistory(weeklyHistoryId);
+    const refreshedBases = await readWeeklyHistoryBasisDates(weeklyHistoryId);
+    weeks = makeWeeksFromBases(refreshedBases, salesRows, currentBasis, requested ? [requested.week] : []);
+    selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
+    historyBundle = await readDedicatedWeeklyHistoryForBases(weeklyHistoryId, [selected.week, ...prevBasisDates(selected.week)]);
     historyRecords = historyBundle.productRecords;
     storeHistoryRecords = historyBundle.storeRecords;
-    weeks = makeWeeksFromBases(historyRecords.map((r) => r.basis), salesRows, currentBasis, requested ? [requested.week] : []);
-    selected = requested || weeks.find((w) => w.week === currentBasis) || selected;
   }
 
   const mapped = historyRecordsToMaps(historyRecords, selected.week, type, storeHistoryRecords);
@@ -1797,23 +1879,35 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
   const b2Basis = isoDate(mondayOfWeek(new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }))));
 
   const selected = requested || weekInfoFromMonday(parseSelectedMonday(b2Basis) || new Date(b2Basis));
-  // MARK 6.75: "일간매출(26년)"을 이제 전용 스프레드시트(getDailyStoreSalesSheetId)에서 먼저
-  // 찾습니다. 전환 기간이라 기존 MARK_DB 등도 계속 후보로 남겨둡니다(새 소스에 없으면 구 소스로 폴백).
-  const dailyStoreRaw = await readFirstAvailableSheet(
-    [getDailyStoreSalesSheetId(), dbId, mainId, historyId].filter(Boolean),
-    ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"],
-    "A:ZZ",
-    { refresh: options.refresh }
-  );
+  const currentMonthKey = (selected.analysisEnd || selected.week || "").slice(0, 7);
+  // MARK 6.74: 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다(Daily_Sales_History 직접 집계).
+  // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
+  const needsProductSummary = !requested || requested.week === b2Basis || options.refresh;
+
+  // MARK 2026-09: 아래 4가지(점포별 일간매출 원본 읽기, 주간목표 조회, 월목표 조회, 상품 TOP
+  // 집계)는 서로 데이터 의존관계가 없는데도 순차 await 되고 있었습니다. Promise.all로 동시에
+  // 실행해서 왕복 시간을 4번 합산이 아니라 가장 느린 1번으로 줄입니다. (상품 TOP 집계는
+  // aggregateWeeklyFromDailyHistory 내부의 캐시 덕에, 스냅샷 저장 흐름에서 바로 앞서 같은
+  // 주차로 이미 호출된 적이 있으면 시트를 다시 읽지 않고 캐시된 결과를 씁니다.)
+  const [dailyStoreRaw, savedWeeklyTarget, savedMonthlyTarget, productAgg] = await Promise.all([
+    // MARK 6.75: "일간매출(26년)"을 이제 전용 스프레드시트(getDailyStoreSalesSheetId)에서 먼저
+    // 찾습니다. 전환 기간이라 기존 MARK_DB 등도 계속 후보로 남겨둡니다(새 소스에 없으면 구 소스로 폴백).
+    readFirstAvailableSheet(
+      [getDailyStoreSalesSheetId(), dbId, mainId, historyId].filter(Boolean),
+      ["일간매출(26년)", "일간매출26년", "일간매출", "Daily_Store_Sales", "DailyStoreSales"],
+      "A:ZZ",
+      { refresh: options.refresh }
+    ),
+    // MARK 6.12: 예전엔 일간매출(26년) 시트의 "기간목표"(연간 스케일) 값을 그대로 주간목표로 썼던 버그가 있었습니다.
+    // 이제는 일_전일!I열에서 주차별로 캡처해둔 스냅샷(Weekly_Target_History)에서, 지금 보는 주(selected.week)와
+    // 정확히 일치하는 주차 목표만 사용합니다. 저장된 게 없으면 목표 없이("-") 보여줍니다.
+    getSavedWeeklyTarget(selected.week).catch(() => null),
+    currentMonthKey ? getSavedMonthlyTarget(currentMonthKey).catch(() => null) : Promise.resolve(null),
+    needsProductSummary ? aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd) : Promise.resolve(null),
+  ]);
   const dailyStoreRows = parseDailyStoreSalesRows(dailyStoreRaw.rows || []);
   const dailyStoreSummary = dailyStoreRows.length ? buildStoreSummaryFromDailySales(dailyStoreRows, selected) : { current: [], compare: [], productStoreNames: [] as string[] };
 
-  // MARK 6.12: 예전엔 일간매출(26년) 시트의 "기간목표"(연간 스케일) 값을 그대로 주간목표로 썼던 버그가 있었습니다.
-  // 이제는 일_전일!I열에서 주차별로 캡처해둔 스냅샷(Weekly_Target_History)에서, 지금 보는 주(selected.week)와
-  // 정확히 일치하는 주차 목표만 사용합니다. 저장된 게 없으면 목표 없이("-") 보여줍니다.
-  const savedWeeklyTarget = await getSavedWeeklyTarget(selected.week).catch(() => null);
-  const currentMonthKey = (selected.analysisEnd || selected.week || "").slice(0, 7);
-  const savedMonthlyTarget = currentMonthKey ? await getSavedMonthlyTarget(currentMonthKey).catch(() => null) : null;
   for (const row of dailyStoreSummary.current) {
     const matched = savedWeeklyTarget?.byStore.get(row.storeName);
     row.weekTarget = matched || 0;
@@ -1836,10 +1930,8 @@ export async function getWeeklyDashboardPayload(requestedWeek = "", options: { r
     companyTarget: savedMonthlyTarget?.companyTarget || 0,
   };
 
-  // MARK 6.74: 상품 TOP은 B2와 동일한 현재 주차에서만 노출한다(Daily_Sales_History 직접 집계).
-  // 과거 주차는 Weekly_Snapshot을 선택하면 당시 저장된 상품 TOP을 그대로 본다.
-  const productSummary = !requested || requested.week === b2Basis || options.refresh
-    ? productSummaryFromDailyHistory(await aggregateWeeklyFromDailyHistory("style", selected.analysisStart, selected.analysisEnd))
+  const productSummary = productAgg
+    ? productSummaryFromDailyHistory(productAgg)
     : { companyTopProducts: [] as any[], storeTopProducts: {} as Record<string, any[]> };
   const aggregation = {
     source: "MARK_DB / 일간매출(26년)",

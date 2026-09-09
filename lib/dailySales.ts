@@ -347,6 +347,34 @@ export async function parseDailySalesRows(rows: any[][], sheetName = "업로드 
 
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 
+// MARK 2026-09: 이 함수는 결국 하루치(today)만 쓰는데 매번 Daily_Sales_History 전체를
+// ("A:ZZ") 읽고 있었습니다 — dataBuilder.ts의 loadDashboardDailyHistory에서 겪은 것과 똑같은
+// 문제(계속 쌓이는 시트를 매번 전체 읽기 → 응답이 느려지다 결국 크래시)입니다. A열(날짜)만
+// 먼저 가볍게 읽어서 그 날짜 블록이 시작/끝나는 행을 찾고, 그 구간만 읽습니다. 쓰기 쪽이 항상
+// 날짜 오름차순으로 저장하므로 같은 날짜 행들은 항상 붙어있어 안전하고, 못 찾으면 전체 읽기로
+// 폴백합니다.
+async function findDailyHistoryDateRowRange(historyId: string, dateKey: string): Promise<{ start: number; end: number } | null> {
+  try {
+    const dateCol = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A");
+    if (!dateCol.length) return null;
+    let start = -1;
+    let end = -1;
+    for (let i = 1; i < dateCol.length; i++) {
+      const d = normalizeDateKey(dateCol[i]?.[0]);
+      if (d === dateKey) {
+        if (start === -1) start = i;
+        end = i;
+      } else if (start !== -1) {
+        break; // 오름차순 저장이므로 그 날짜 블록을 한 번 지나갔으면 더 볼 필요 없음
+      }
+    }
+    if (start === -1) return null;
+    return { start: start + 1, end: end + 1 }; // 0-based 배열 인덱스 → 1-based 시트 행 번호
+  } catch {
+    return null;
+  }
+}
+
 // MARK 6.75: "오늘 판매 TOP상품/채널TOP/결품위험" 위젯(GET /api/daily-sales)이 "스타일별
 // 채널별..." 시트의 "일간" 컬럼을 직접 읽고 있었는데, 같은 일간탭 안의 "매장별 일매출 순위"
 // (Daily_Sales_History 기반)랑 숫자가 미묘하게 달라서 혼란스러운 문제가 있었습니다
@@ -356,11 +384,18 @@ const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 // Daily_Sales_History로 백필하는 데 계속 쓰이므로 그대로 둡니다 — 여긴 표시 전용 신규 함수.)
 export async function readDailySalesFromHistory(options?: { live?: boolean }) {
   const historyId = getHistorySheetId();
-  const raw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
-  const flatRows = expandAnyDailyHistoryRows(raw || []);
-
   // MARK 6.83: 기본값은 "전일(확정치)" — live:true를 명시적으로 줬을 때만 오늘 실시간으로 봅니다.
   const today = options?.live ? ymdKST() : yesterdayKST();
+
+  const range = await findDailyHistoryDateRowRange(historyId, today);
+  let raw: any[][];
+  if (range) {
+    const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
+    raw = [DAILY_HISTORY_HEADER, ...tailRows];
+  } else {
+    raw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
+  }
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
   const todayRows = flatRows.filter((r) => normalizeDateKey(r.date) === today);
 
   const totalDailySales = todayRows.reduce((sum, r) => sum + num(r.qty), 0);

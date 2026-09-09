@@ -3034,27 +3034,16 @@ function latestStoreSalesDate(rows: any[]) {
   return [...new Set(rows.map((r: any) => r.date).filter(Boolean))].sort().pop() || "";
 }
 
-function normalizeAnchorMondayFromValue(value: any) {
-  const d = parseDate(normalizeDateKey(value) || value);
-  if (!d) return "";
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  const day = out.getDay();
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  out.setDate(out.getDate() + diffToMonday);
-  return ymdLocalDate(out);
-}
-
 function sumStoreSalesRows(rows: any[], storeName: string, dates: Set<string>) {
   return rows
     .filter((r: any) => r.storeName === storeName && dates.has(r.date))
     .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
 }
 
-function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "", weeklyAnchorOverride = "", dailyAmountMap?: Map<string, Map<string, number>>) {
+function buildDailyStoreSalesDashboardRows(rows: any[], currentDate: string, compareDate = "", dailyAmountMap?: Map<string, Map<string, number>>) {
   if (!currentDate) return null as any;
 
-  const weeklyAnchorMonday = weeklyAnchorOverride || mondayAfterDate(currentDate);
+  const weeklyAnchorMonday = mondayAfterDate(currentDate);
   const currentWeek = weekWindowBeforeMonday(weeklyAnchorMonday, 0);
   const prevWeek = weekWindowBeforeMonday(weeklyAnchorMonday, -1);
   const currentMonthStart = firstDayOfMonth(currentDate);
@@ -3127,22 +3116,17 @@ export async function buildDashboardDataFromGoogleSheet() {
   // MARK 5.0.1:
   // 일간/주간/월간 매출대시보드는 Daily_Sales_History 누적 데이터로 집계합니다.
   // ERP 원본 시트는 Daily_Sales_History 생성/재고CTRL/재고현황 보조용으로만 최소 조회합니다.
-  const productSheet = pickProductSheet(titles);
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
   const annualSalesSheet = pickNormalizedTitle(titles, ["연간판매", "연간 판매"], "연간판매");
   const standardSheet = pickNormalizedTitle(titles, ["기준"], "기준");
 
-  // MARK 2026-09: "금주/전주"(productSheet)는 B2 셀 하나(주간 기준 월요일)만 씁니다
-  // (weeklyAnchorFromWeeklySheet 참고). 그런데도 나머지 3개 시트와 함께 매번 "A:AZ" 전체를
-  // 읽고 있었습니다 — 이 시트가 커질수록(현재도 다른 ERP 시트들이 만 행대) 매 요청마다
-  // 필요 없는 전체 읽기가 쌓여 응답이 느려지고 메모리를 잡아먹는 원인이었습니다.
-  // B2만 따로 가볍게 읽고, 전체 읽기 배치에서는 제외합니다.
+  // MARK 2026-09: "금주/전주" 시트 B2(주간 기준 월요일)를 읽어와 override로 쓰던 걸 완전히
+  // 없앴습니다 — 확인 결과 그 값을 사람이 계산값과 다르게 수동으로 바꿔두는 경우가 없어서,
+  // 이 파일의 다른 모든 곳과 똑같이 mondayAfterDate(currentDate) 계산값만 쓰면 충분합니다.
+  // (시트 읽기 자체를 없앤 거라 B2만 가볍게 읽던 것보다 한 걸음 더 나갑니다.)
   const needed = [inventorySheet, annualSalesSheet, standardSheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
-  const [values, productB2Rows] = await Promise.all([
-    getManySheetValues(needed, "A:AZ"),
-    productSheet ? getSheetValuesById(getSheetId(), productSheet, "B2:B2").catch(() => [] as any[]) : Promise.resolve([] as any[]),
-  ]);
+  const values = await getManySheetValues(needed, "A:AZ");
 
   const history = await loadDashboardDailyHistory();
   const historyRowsAll = history.rows || [];
@@ -3152,9 +3136,6 @@ export async function buildDashboardDataFromGoogleSheet() {
   // MARK 5.0 final:
   // 점포별 일/주/월 매출은 MARK_DB의 `일간매출(26년)` 시트를 우선 사용합니다.
   // 왼쪽 A~G 합산 영역은 제외하고 H열 이후의 `오프라인팀` 채널만 집계합니다.
-  // "B2:B2" 범위로 읽으면 결과는 1행 1열(그 셀 값 하나)이라, weeklyAnchorFromWeeklySheet의
-  // rows[1][1] 규칙을 그대로 재사용하는 대신 같은 파싱(normalizeAnchorMondayFromValue)만 직접 씁니다.
-  const weeklyAnchorFromB2 = normalizeAnchorMondayFromValue(productB2Rows?.[0]?.[0]);
   const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
   const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
   // MARK 6.40: 일간 탭과 매장 탭의 기준일을 통일합니다 — 둘 다 기본값은 "어제"(KST)이고,
@@ -3170,7 +3151,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   );
 
   const historyStores = dailyStoreRows.length
-    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, dailyCompareDate, weeklyAnchorFromB2, dailyAmountMap)
+    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, dailyCompareDate, dailyAmountMap)
     : buildHistoryStoreRows(historyRows, currentDate);
   const dailyCur = historyStores?.dailyCur || [];
   const dailyCmp = historyStores?.dailyCmp || [];

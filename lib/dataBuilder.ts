@@ -2211,6 +2211,23 @@ function overridePeriods(row: any, override?: PerformanceOverride) {
   };
 }
 
+// MARK 2026-09: buildPerformanceAnalysis가 RT/프로모션 성과 수량 추이를 계산하려고
+// Daily_Sales_History 전체를 매번 새로 읽고 있었습니다(dataBuilder.ts의 다른 곳에서
+// 이미 겪고 고친 것과 같은 OOM 위험). 이 함수가 실제로 보는 날짜는 각 성과 행의
+// before/during 기간뿐이므로, 그 중 가장 이른 날짜를 먼저 계산해서 그 이후만 읽으면 됩니다.
+// (performancePeriods/overridePeriods는 나중에 sumDailyPerformance가 쓰는 것과 똑같은
+// 함수라 여기서 미리 불러도 결과가 어긋나지 않습니다 — 순수 날짜 계산이라 비용도 거의 없음.)
+function earliestNeededDailyHistoryDate(performanceRows: any[], override?: PerformanceOverride): string {
+  let earliest = "";
+  for (const row of performanceRows) {
+    const periods = overridePeriods(row, override) || performancePeriods(row);
+    for (const d of [...(periods.beforeDates || []), ...(periods.duringDates || [])]) {
+      if (!earliest || d < earliest) earliest = d;
+    }
+  }
+  return earliest;
+}
+
 function targetStoreKeys(row: any) {
   const rawTargets: string[] = [];
   if (Array.isArray(row.toStores)) rawTargets.push(...row.toStores);
@@ -2618,36 +2635,9 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
       if (style && productName) productNameMap.set(style, productName);
     }
 
-    let dailyValues: any[][] = [];
-    let dailySource = "NOT_FOUND";
-    const dailySheetName = pickNormalizedTitle(historyTitles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
-
-    if (dailySheetName && historyTitles.includes(dailySheetName)) {
-      dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);
-      dailySource = "MARK_HISTORY";
-    } else if (dbTitles.includes("Daily_Sales_History")) {
-      dailyValues = await getSheetValuesById(dbId, "Daily_Sales_History", "A:AZ").catch(() => []);
-      dailySource = "MARK_DB_FALLBACK";
-    }
-
-    const dailyRows = parseDailyHistoryRows(dailyValues || []);
-
-    const weeklyStoreSheetName = weeklyHistoryTitles.includes("Weekly_history") ? "Weekly_history" : "";
-    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(weeklyHistoryId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
-    const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
-
-    const weeklyPriceSheetName = pickNormalizedTitle(mainTitles, ["금주전주", "금주/전주", "금주 전주"], "금주전주");
-    const weeklyPriceValues = weeklyPriceSheetName && mainTitles.includes(weeklyPriceSheetName)
-      ? await getSheetValuesById(mainId, weeklyPriceSheetName, "A:AZ").catch(() => [])
-      : [];
-    const weeklyUnitPriceMap = parseWeeklyUnitPriceMap(weeklyPriceValues || []);
-
-    for (const row of dailyRows as any[]) {
-      const style = text(row.styleCode);
-      const productName = text(row.productName);
-      if (style && productName && !productNameMap.has(style)) productNameMap.set(style, productName);
-    }
-
+    // MARK 2026-09: RT_Result/채널 읽기를 Daily_Sales_History 읽기보다 먼저 하도록 순서를
+    // 바꿨습니다 — performanceRows(RT/프로모션 성과 행)의 실제 시작일들을 먼저 알아야, 그 아래
+    // Daily_Sales_History 읽기를 "필요한 기간만"으로 좁힐 수 있기 때문입니다.
     const rtSheetName = mainTitles.includes("RT_Result") ? "RT_Result" : "";
     const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
     const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
@@ -2665,6 +2655,64 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     }
     if (override.categoryFilter && override.categoryFilter !== "ALL") {
       performanceRows = performanceRows.filter((row: any) => row.category === override.categoryFilter);
+    }
+
+    // MARK 2026-09: Daily_Sales_History는 계속 쌓이기만 하는 시트라 매번 전체를("A:AZ") 읽으면
+    // OOM 위험이 큽니다(dataBuilder.ts 다른 곳에서 이미 겪고 고친 문제와 동일 — /api/data가
+    // try/catch로도 못 잡는 크래시를 내던 원인 중 하나였습니다). 이 함수가 실제로 보는 날짜는
+    // 위에서 구한 performanceRows들의 before/during 기간뿐이므로, 그 중 가장 이른 날짜부터만
+    // 읽습니다. sheetName이 확정된 압축 포맷("Daily_Sales_History")일 때만 이 지름길을 쓰고,
+    // 다른 후보 이름으로 폴백된 경우엔 포맷이 보장되지 않으므로 전체 읽기로 안전하게 폴백합니다.
+    const neededSinceDate = earliestNeededDailyHistoryDate(performanceRows, override);
+
+    let dailyValues: any[][] = [];
+    let dailySource = "NOT_FOUND";
+    const dailySheetName = pickNormalizedTitle(historyTitles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
+
+    if (dailySheetName && historyTitles.includes(dailySheetName)) {
+      if (dailySheetName === "Daily_Sales_History" && neededSinceDate) {
+        const startRow = await findDailyHistoryStartRowIn(historyId, dailySheetName, neededSinceDate);
+        if (startRow && startRow > 2) {
+          const tailRows = await getSheetValuesById(historyId, dailySheetName, `A${startRow}:AZ`).catch(() => [] as any[]);
+          dailyValues = [DAILY_HISTORY_HEADER, ...tailRows];
+        } else {
+          dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);
+        }
+      } else {
+        dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);
+      }
+      dailySource = "MARK_HISTORY";
+    } else if (dbTitles.includes("Daily_Sales_History")) {
+      dailyValues = await getSheetValuesById(dbId, "Daily_Sales_History", "A:AZ").catch(() => []);
+      dailySource = "MARK_DB_FALLBACK";
+    }
+
+    const dailyRows = parseDailyHistoryRows(dailyValues || []);
+
+    const weeklyStoreSheetName = weeklyHistoryTitles.includes("Weekly_history") ? "Weekly_history" : "";
+    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(weeklyHistoryId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
+    const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
+
+    // MARK 2026-09: "금주/전주" 시트가 원래 예상(매주 새로 쓰는 작은 시트)과 달리
+    // 121,197행(약 400만 셀)까지 자라있는 게 발견됐습니다 — 계속 growing 상태라면 매번
+    // 전체를("A:AZ") 읽는 순간 OOM 크래시로 이어집니다. parseWeeklyUnitPriceMap이 찾는 헤더는
+    // 항상 맨 위 20행 안에 있으므로(findHeaderRow), 헤더+이후 데이터를 넉넉히(5,000행)만
+    // 읽도록 안전장치를 걸어뒀습니다 — 원래 의도대로 작은 시트면 전혀 영향 없고, 지금처럼
+    // 비정상적으로 커진 경우에도 최소한 크래시는 막습니다. 다만 이 시트가 왜 계속 쌓이고
+    // 있는지(매주 덮어쓰기가 안 되고 있는 건지)는 별도로 확인이 필요합니다.
+    const weeklyPriceSheetName = pickNormalizedTitle(mainTitles, ["금주전주", "금주/전주", "금주 전주"], "금주전주");
+    const weeklyPriceValues = weeklyPriceSheetName && mainTitles.includes(weeklyPriceSheetName)
+      ? await getSheetValuesById(mainId, weeklyPriceSheetName, "A1:AZ5000").catch(() => [])
+      : [];
+    const weeklyUnitPriceMap = parseWeeklyUnitPriceMap(weeklyPriceValues || []);
+
+    for (const row of dailyRows as any[]) {
+      const style = text(row.styleCode);
+      const productName = text(row.productName);
+      if (style && productName && !productNameMap.has(style)) productNameMap.set(style, productName);
+    }
+    for (const row of performanceRows as any[]) {
+      if (!row.productName && productNameMap.has(row.styleCode)) row.productName = productNameMap.get(row.styleCode) || "";
     }
 
     // RT/프로모션 성과의 수량 추이는 Daily_Sales_History 기준으로 봅니다.

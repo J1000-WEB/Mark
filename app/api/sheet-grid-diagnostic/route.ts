@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getHistorySheetId, getDailySourceSheetId, getSheetsClient } from "@/lib/googleSheets";
+import { getHistorySheetId, getDailySourceSheetId, getSheetId, getSheetsClient } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,11 +44,21 @@ export async function GET() {
   try {
     const historyId = getHistorySheetId();
     const dailySourceId = getDailySourceSheetId();
+    // MARK 2026-09: buildDashboardDataFromGoogleSheet()가 실제로 "A:AZ" 전체 읽기를 거는
+    // 곳(금주/전주, 온오프재고현황, 연간판매, 기준)은 getSheetId()(기본 MARK_DB) 스프레드시트에
+    // 있는데, 지금까지 이 스프레드시트는 진단 대상이 아니어서 사각지대였습니다. 같이 확인합니다.
+    const baseId = getSheetId();
 
     const results: any = { ok: true, history: await inspectSpreadsheet(historyId) };
+    const seen = new Set([historyId]);
     // 같은 스프레드시트면 중복으로 또 안 보여줍니다.
-    if (dailySourceId !== historyId) {
+    if (!seen.has(dailySourceId)) {
       results.dailySource = await inspectSpreadsheet(dailySourceId);
+      seen.add(dailySourceId);
+    }
+    if (!seen.has(baseId)) {
+      results.base = await inspectSpreadsheet(baseId);
+      seen.add(baseId);
     }
 
     return NextResponse.json(results, { headers: { "Cache-Control": "no-store, max-age=0" } });

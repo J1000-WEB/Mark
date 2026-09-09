@@ -3045,12 +3045,6 @@ function normalizeAnchorMondayFromValue(value: any) {
   return ymdLocalDate(out);
 }
 
-function weeklyAnchorFromWeeklySheet(rows: any[][]) {
-  // 금주/전주 시트 B2는 주간 대시보드 기준 월요일입니다.
-  // 예: B2=2026-06-29 → 분석기간 2026-06-22~2026-06-28.
-  return normalizeAnchorMondayFromValue(rows?.[1]?.[1]);
-}
-
 function sumStoreSalesRows(rows: any[], storeName: string, dates: Set<string>) {
   return rows
     .filter((r: any) => r.storeName === storeName && dates.has(r.date))
@@ -3138,9 +3132,17 @@ export async function buildDashboardDataFromGoogleSheet() {
   const annualSalesSheet = pickNormalizedTitle(titles, ["연간판매", "연간 판매"], "연간판매");
   const standardSheet = pickNormalizedTitle(titles, ["기준"], "기준");
 
-  const needed = [productSheet, inventorySheet, annualSalesSheet, standardSheet]
+  // MARK 2026-09: "금주/전주"(productSheet)는 B2 셀 하나(주간 기준 월요일)만 씁니다
+  // (weeklyAnchorFromWeeklySheet 참고). 그런데도 나머지 3개 시트와 함께 매번 "A:AZ" 전체를
+  // 읽고 있었습니다 — 이 시트가 커질수록(현재도 다른 ERP 시트들이 만 행대) 매 요청마다
+  // 필요 없는 전체 읽기가 쌓여 응답이 느려지고 메모리를 잡아먹는 원인이었습니다.
+  // B2만 따로 가볍게 읽고, 전체 읽기 배치에서는 제외합니다.
+  const needed = [inventorySheet, annualSalesSheet, standardSheet]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
-  const values = await getManySheetValues(needed, "A:AZ");
+  const [values, productB2Rows] = await Promise.all([
+    getManySheetValues(needed, "A:AZ"),
+    productSheet ? getSheetValuesById(getSheetId(), productSheet, "B2:B2").catch(() => [] as any[]) : Promise.resolve([] as any[]),
+  ]);
 
   const history = await loadDashboardDailyHistory();
   const historyRowsAll = history.rows || [];
@@ -3150,8 +3152,9 @@ export async function buildDashboardDataFromGoogleSheet() {
   // MARK 5.0 final:
   // 점포별 일/주/월 매출은 MARK_DB의 `일간매출(26년)` 시트를 우선 사용합니다.
   // 왼쪽 A~G 합산 영역은 제외하고 H열 이후의 `오프라인팀` 채널만 집계합니다.
-  const productValues = values[productSheet] || [];
-  const weeklyAnchorFromB2 = weeklyAnchorFromWeeklySheet(productValues);
+  // "B2:B2" 범위로 읽으면 결과는 1행 1열(그 셀 값 하나)이라, weeklyAnchorFromWeeklySheet의
+  // rows[1][1] 규칙을 그대로 재사용하는 대신 같은 파싱(normalizeAnchorMondayFromValue)만 직접 씁니다.
+  const weeklyAnchorFromB2 = normalizeAnchorMondayFromValue(productB2Rows?.[0]?.[0]);
   const dailyStoreSales = await loadDailyStoreSalesFromMarkDb();
   const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
   // MARK 6.40: 일간 탭과 매장 탭의 기준일을 통일합니다 — 둘 다 기본값은 "어제"(KST)이고,

@@ -1,6 +1,6 @@
 import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
-import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows } from "./dailySales";
+import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
@@ -2406,8 +2406,18 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
   const prevWeekEnd = addDaysKST(weekStart, -1);
   const prevWeekStart = addDaysKST(prevWeekEnd, -(windowDays - 1));
 
+  // loadDashboardDailyHistory와 같은 이유(전체 읽기 OOM)로, 이 함수가 실제로 쓰는 구간
+  // (prevWeekStart~weekEnd, 보통 2주)만 읽습니다. 시트 이름이 고정된 "Daily_Sales_History"라
+  // 포맷(압축)이 항상 보장되므로 바로 지름길을 씁니다.
   const historyId = getHistorySheetId();
-  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
+  const startRow = await findDailyHistoryStartRowIn(historyId, "Daily_Sales_History", prevWeekStart);
+  let raw: any[][];
+  if (startRow && startRow > 2) {
+    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as any[]);
+    raw = [DAILY_HISTORY_HEADER, ...tailRows];
+  } else {
+    raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
+  }
   const flatRows = expandAnyDailyHistoryRows(raw || []);
   const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
 
@@ -2867,12 +2877,60 @@ function buildHistoryProductRows(rows: any[], currentDate: string) {
   return Array.from(map.values()).filter((r: any) => Number(r.weekNet || 0) || Number(r.weekAmount || 0) || Number(r.prevNet || 0) || Number(r.prevAmount || 0));
 }
 
+// MARK 2026-09: Daily_Sales_History는 매일 계속 쌓이기만 하는 시트라(압축 형식이어도 반년
+// 넘으면 수만 행 + 행마다 최대 4만자 JSON), "A:AZ"/"A:ZZ"로 매번 전체를 읽어서 펼치면 서버가
+// 감당 못 하고 그대로 죽어버립니다(try/catch도 못 잡는 OOM 크래시 — /api/data가 통째로 500
+// HTML을 뱉던 원인). weeklyDataProvider.ts에서 이미 겪고 고친 것과 완전히 같은 문제라 같은
+// 패턴을 씁니다: A열(날짜)만 먼저 가볍게 읽어서 필요한 구간이 시작되는 행을 찾고, 그 아래만
+// 읽습니다. 쓰기 쪽이 항상 날짜 오름차순으로 저장하므로 안전하고, 못 찾으면 전체 읽기로 폴백합니다.
+async function findDailyHistoryStartRowIn(historyId: string, sheetName: string, sinceDateKey: string): Promise<number | null> {
+  try {
+    const dateCol = await getSheetValuesById(historyId, sheetName, "A:A");
+    if (!dateCol.length) return null;
+    let startRow = 1; // 0-based index into dateCol; 헤더(0번) 다음부터
+    let found = false;
+    for (let i = 1; i < dateCol.length; i++) {
+      const d = normalizeDateKey(dateCol[i]?.[0]);
+      if (d && d >= sinceDateKey) {
+        startRow = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return null;
+    return startRow + 1; // 1-based 시트 행 번호
+  } catch {
+    return null;
+  }
+}
+
 async function loadDashboardDailyHistory() {
   const historyId = getHistorySheetId();
   const titles = await getSpreadsheetTitlesById(historyId).catch(() => []);
   const sheetName = pickNormalizedTitle(titles, ["Daily_Sales_History", "DailySalesHistory", "Daily_History", "일간스냅샷", "일별판매히스토리"], "Daily_Sales_History");
   if (!sheetName || !titles.includes(sheetName)) return { sheetName: "", rows: [] as any[] };
-  const values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);
+
+  // 이 함수 결과가 쓰이는 곳 중 가장 넓은 범위는 월간 비교(이번 달 + 지난 달)라, 지난달 1일부터
+  // 여유(10일)를 두고 그 이후만 읽으면 daily/weekly/monthly 전부 충분합니다.
+  const currentDate = yesterdayDateKeyKST();
+  const prevMonthKey = previousMonthKey(currentDate);
+  const prevMonthStart = prevMonthKey ? `${prevMonthKey}-01` : firstDayOfMonth(currentDate);
+  const bufferedSinceDate = dateAddDays(prevMonthStart, -10);
+
+  // sheetName이 확정된 압축 포맷("Daily_Sales_History")일 때만 헤더를 직접 붙이는 지름길을
+  // 씁니다. 다른 후보 이름으로 폴백된 경우 포맷이 보장되지 않으므로 원래의 전체 읽기로 갑니다.
+  let values: any[][];
+  if (sheetName === "Daily_Sales_History") {
+    const startRow = await findDailyHistoryStartRowIn(historyId, sheetName, bufferedSinceDate);
+    if (startRow && startRow > 2) {
+      const tailRows = await getSheetValuesById(historyId, sheetName, `A${startRow}:AZ`).catch(() => [] as any[]);
+      values = [DAILY_HISTORY_HEADER, ...tailRows];
+    } else {
+      values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);
+    }
+  } else {
+    values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);
+  }
   return { sheetName, rows: parseDailyHistoryRows(values || []) };
 }
 

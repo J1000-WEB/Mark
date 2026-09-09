@@ -21,14 +21,30 @@
     },
     "app/api/weekly-history/route.ts": {
       "memory": 3009,
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/sales-data/route.ts": {
       "memory": 3009,
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/data/route.ts": {
       "memory": 3009,
+      "maxDuration": 120
+    },
+    "app/api/snapshots/route.ts": {
+      "memory": 3009,
+      "maxDuration": 120
+    },
+    "app/api/auto-weekly-snapshot/route.ts": {
+      "memory": 2048,
+      "maxDuration": 300
+    },
+    "app/api/auto-monthly-snapshot/route.ts": {
+      "memory": 1024,
+      "maxDuration": 120
+    },
+    "app/api/daily-sales/route.ts": {
+      "memory": 1024,
       "maxDuration": 60
     }
   },

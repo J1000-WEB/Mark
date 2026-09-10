@@ -493,6 +493,17 @@ async function readDailyHistoryBlock(historyId: string, range: { start: number; 
   return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
 }
 
+// MARK 2026-09: 시간별 매출 기록(realtimeHourlySnapshot.ts)에서도 "오늘 누적" 데이터가
+// 필요해서, readRealtimeOverview에 있던 "오늘자만 targeted로 읽기" 로직을 재사용 가능한
+// 함수로 뽑아냈습니다.
+export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows: FlatDailyHistoryRow[] }> {
+  const historyId = getHistorySheetId();
+  const today = ymdKST();
+  const ranges = await findDailyHistoryRowRangesForDates(historyId, [today]);
+  const rows = (await readDailyHistoryBlock(historyId, ranges.get(today))).filter((r) => normalizeDateKey(r.date) === today);
+  return { today, rows };
+}
+
 function kstDateKeyOffset(offsetDays: number) {
   const now = new Date();
   const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
@@ -581,6 +592,18 @@ export async function readRealtimeOverview() {
    .sort((a: any, b: any) => b.dailySales - a.dailySales)
    .slice(0, 30);
 
+  // MARK: "오늘 잘 팔리는 상품 TOP10" — 재고 이슈 자리에 있던 걸 여기로 옮기면서 추가.
+  const topProducts = Array.from(
+    todayRows.reduce((map, r) => {
+      const key = `${r.styleCode}__${r.productName}`;
+      if (!map.has(key)) map.set(key, { styleCode: r.styleCode, productName: r.productName, dailySales: 0, dailyAmount: 0 });
+      const bucket = map.get(key);
+      bucket.dailySales += num(r.qty);
+      bucket.dailyAmount += num(r.amount);
+      return map;
+    }, new Map()).values()
+  ).sort((a: any, b: any) => b.dailySales - a.dailySales).slice(0, 10);
+
   return {
     today,
     generatedAt: new Date().toISOString(),
@@ -589,6 +612,7 @@ export async function readRealtimeOverview() {
     activeChannels,
     activeProducts,
     topChannels,
+    topProducts,
     stockBaselineDate: baselineDate,
     stockIssues,
   };

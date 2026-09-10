@@ -50,6 +50,10 @@
     "app/api/realtime/route.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "app/api/auto-realtime-hourly-snapshot/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "crons": [

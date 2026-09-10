@@ -461,12 +461,26 @@ export async function readDailySalesFromHistory(options?: { live?: boolean }) {
 // 읽어서 "새벽 재고 - 오늘 누적판매 = 추정 현재재고"를 계산합니다. 날짜별로 딱 필요한
 // 구간만 읽습니다(전체 히스토리를 읽지 않음 — 이 파일 위쪽의 크래시 사고와 같은 패턴을
 // 반복하지 않기 위함).
+// MARK 2026-09-10: 실시간 탭이 매장 1곳만 보이는 문제의 진짜 원인을 여기서 찾았습니다 —
+// upsert가 새 매장을 찾을 때마다 시트 "맨 끝"에 그 매장 행을 추가해서(backfillFlatRows의
+// append 부분), 재고/매출 갱신이 번갈아 돌면서 "오늘" 날짜 블록이 하루 동안 여러 조각으로
+// 흩어집니다(연속된 한 덩어리가 아니라 여러 군데). 그런데 이 함수는 날짜가 바뀌는 지점마다
+// map.set()으로 "그 날짜의 범위"를 덮어썼어서, 같은 날짜 블록이 여러 개면 스캔하다가 가장
+// 마지막에 만난 블록 하나만 남고 앞의 블록들은 조용히 사라졌습니다 — 그래서 매장이 22개
+// 다 있는데도 마지막 블록에 담긴 매장 1곳만 읽힌 것입니다. 이제 날짜별로 블록을 배열로
+// 전부 모아서, 그 블록들을 다 읽어 합칩니다(가까이 있는 블록은 합쳐서 읽어 API 호출 수를
+// 줄임 — 완전히 안 붙어있어도 사이 간격이 좁으면 어차피 한 번에 읽는 게 더 쌉니다).
 async function findDailyHistoryRowRangesForDates(
   historyId: string,
   dateKeys: string[]
-): Promise<Map<string, { start: number; end: number }>> {
+): Promise<Map<string, { start: number; end: number }[]>> {
   const wanted = new Set(dateKeys);
-  const map = new Map<string, { start: number; end: number }>();
+  const map = new Map<string, { start: number; end: number }[]>();
+  const pushRange = (dateKey: string, range: { start: number; end: number }) => {
+    const list = map.get(dateKey);
+    if (list) list.push(range);
+    else map.set(dateKey, [range]);
+  };
   try {
     const dateCol = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A");
     if (!dateCol.length) return map;
@@ -475,22 +489,45 @@ async function findDailyHistoryRowRangesForDates(
     for (let i = 1; i < dateCol.length; i++) {
       const d = normalizeDateKey(dateCol[i]?.[0]);
       if (d !== curDate) {
-        if (curDate && wanted.has(curDate) && curStart !== -1) map.set(curDate, { start: curStart + 1, end: i });
+        if (curDate && wanted.has(curDate) && curStart !== -1) pushRange(curDate, { start: curStart + 1, end: i });
         curDate = d;
         curStart = i;
       }
     }
-    if (curDate && wanted.has(curDate) && curStart !== -1) map.set(curDate, { start: curStart + 1, end: dateCol.length });
+    if (curDate && wanted.has(curDate) && curStart !== -1) pushRange(curDate, { start: curStart + 1, end: dateCol.length });
     return map;
   } catch {
     return map;
   }
 }
 
-async function readDailyHistoryBlock(historyId: string, range: { start: number; end: number } | undefined): Promise<FlatDailyHistoryRow[]> {
-  if (!range) return [];
-  const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
-  return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+// 서로 가까운(간격 300행 이하) 범위는 하나로 합쳐서 읽습니다 — 완전히 붙어있지 않아도
+// 별도 API 호출 한 번보다 몇백 행 더 읽는 쪽이 훨씬 저렴합니다.
+function mergeNearbyRanges(ranges: { start: number; end: number }[], maxGap = 300): { start: number; end: number }[] {
+  if (!ranges.length) return [];
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    const cur = sorted[i];
+    if (cur.start - last.end <= maxGap) {
+      last.end = Math.max(last.end, cur.end);
+    } else {
+      merged.push({ ...cur });
+    }
+  }
+  return merged;
+}
+
+async function readDailyHistoryBlock(historyId: string, ranges: { start: number; end: number }[] | undefined): Promise<FlatDailyHistoryRow[]> {
+  if (!ranges || !ranges.length) return [];
+  const merged = mergeNearbyRanges(ranges);
+  const all: FlatDailyHistoryRow[] = [];
+  for (const range of merged) {
+    const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
+    all.push(...expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]));
+  }
+  return all;
 }
 
 // MARK 2026-09: 시간별 매출 기록(realtimeHourlySnapshot.ts)에서도 "오늘 누적" 데이터가

@@ -102,10 +102,20 @@ async function probeJson(url: string, timeoutMs: number) {
   }
 }
 
+// MARK 2026-09: KST 현재 시각(시)을 안정적으로 구하기 위한 헬퍼 — toLocaleString 파싱보다
+// Intl.DateTimeFormat(hourCycle: "h23")이 자정 근처 "24시" 같은 엣지케이스가 없어 안전합니다.
+function currentKstHour() {
+  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+}
+
+const REALTIME_OPERATING_START_HOUR = 11;
+const REALTIME_OPERATING_END_HOUR = 22;
+
 async function runHealthChecks(): Promise<HealthCheckResult[]> {
-  const [dataRes, dailyRes, weeklyRes, snapshotsRes, gridRes] = await Promise.all([
+  const [dataRes, dailyRes, realtimeRes, weeklyRes, snapshotsRes, gridRes] = await Promise.all([
     probeJson("/api/data", 40000),
     probeJson("/api/daily-sales", 20000),
+    probeJson("/api/realtime", 30000),
     probeJson("/api/weekly-history?dashboard=1", 30000),
     probeJson("/api/weekly-snapshots", 15000),
     probeJson("/api/sheet-grid-diagnostic", 15000),
@@ -143,6 +153,91 @@ async function runHealthChecks(): Promise<HealthCheckResult[]> {
       detail: dailyRes.json?.error || `응답 실패 (status ${dailyRes.status})`,
       ms: dailyRes.ms,
     });
+  }
+
+  // /api/realtime: 실시간 탭 핵심 데이터(오늘 매출 + 추정 재고 + 시간대별 추이)
+  const realtimeData = realtimeRes.json?.ok ? realtimeRes.json?.data : null;
+  if (realtimeData) {
+    results.push({
+      id: "realtime",
+      label: "실시간 탭 데이터",
+      status: "ok",
+      detail: `정상 (오늘 판매 ${fmtNum(realtimeData.totalDailySales || 0)}건)`,
+      ms: realtimeRes.ms,
+    });
+  } else if (realtimeRes.timedOut) {
+    results.push({ id: "realtime", label: "실시간 탭 데이터", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: realtimeRes.ms });
+  } else {
+    results.push({
+      id: "realtime",
+      label: "실시간 탭 데이터",
+      status: "error",
+      detail: realtimeRes.json?.error || `응답 실패 (status ${realtimeRes.status})`,
+      ms: realtimeRes.ms,
+    });
+  }
+
+  // MARK: "이런것들이 재고컨트롤 상단에 시스템상태점검에 들어가야되" 요청 — GitHub Actions가
+  // 정시(11~22시)마다 Realtime_Hourly_Snapshot에 잘 기록하고 있는지, /api/realtime이 이미
+  // 돌려주는 trend.hours(오늘자 기록된 시간)를 보고 판단합니다(별도 API 호출 없이 재사용).
+  const trend = realtimeData?.trend;
+  const kstHour = currentKstHour();
+  if (!realtimeData) {
+    results.push({
+      id: "realtime-hourly",
+      label: "시간별 매출 기록 (GitHub Actions)",
+      status: "warn",
+      detail: "실시간 데이터를 못 불러와서 확인할 수 없습니다",
+      ms: realtimeRes.ms,
+    });
+  } else if (!trend) {
+    results.push({
+      id: "realtime-hourly",
+      label: "시간별 매출 기록 (GitHub Actions)",
+      status: "warn",
+      detail: "시간대별 추이 데이터를 확인하지 못했습니다",
+      ms: realtimeRes.ms,
+    });
+  } else if (kstHour < REALTIME_OPERATING_START_HOUR) {
+    results.push({
+      id: "realtime-hourly",
+      label: "시간별 매출 기록 (GitHub Actions)",
+      status: "ok",
+      detail: "매장 운영 전입니다 (11시부터 기록 시작)",
+      ms: realtimeRes.ms,
+    });
+  } else {
+    const hours: { hour: string; todayAmount: number | null }[] = trend.hours || [];
+    const expected = hours.filter((h) => {
+      const hh = Number(String(h.hour).split(":")[0]);
+      return hh >= REALTIME_OPERATING_START_HOUR && hh < Math.min(kstHour, REALTIME_OPERATING_END_HOUR + 1);
+    });
+    const missing = expected.filter((h) => h.todayAmount === null || h.todayAmount === undefined);
+    if (!expected.length) {
+      results.push({
+        id: "realtime-hourly",
+        label: "시간별 매출 기록 (GitHub Actions)",
+        status: "ok",
+        detail: kstHour > REALTIME_OPERATING_END_HOUR ? "오늘 운영시간이 끝났습니다" : "이번 시간 기록 대기 중",
+        ms: realtimeRes.ms,
+      });
+    } else if (missing.length) {
+      results.push({
+        id: "realtime-hourly",
+        label: "시간별 매출 기록 (GitHub Actions)",
+        status: "warn",
+        detail: `${missing.map((h) => h.hour).join(", ")} 기록이 비어있습니다 — GitHub 저장소 Actions 탭에서 워크플로가 정상 실행됐는지 확인해주세요`,
+        ms: realtimeRes.ms,
+      });
+    } else {
+      results.push({
+        id: "realtime-hourly",
+        label: "시간별 매출 기록 (GitHub Actions)",
+        status: "ok",
+        detail: `정상 기록 중 (최근 ${expected[expected.length - 1].hour})`,
+        ms: realtimeRes.ms,
+      });
+    }
   }
 
   // /api/weekly-history

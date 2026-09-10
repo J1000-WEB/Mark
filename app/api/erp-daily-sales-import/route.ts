@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const mode = body.mode === "upsert" || body.mode === "append" ? body.mode : body.append ? "append" : "replace";
     const onlyFields = Array.isArray(body.onlyFields) ? body.onlyFields : undefined;
+    const force = body.force === true;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json({ ok: false, error: "date가 YYYY-MM-DD 형식으로 필요합니다." }, { status: 400 });
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
       stockUpdatedAt: r.stockUpdatedAt ? String(r.stockUpdatedAt) : undefined,
     })).filter((r: any) => r.storeName && r.styleCode);
 
-    const result = await backfillFlatRows(flatRows, { mode, onlyFields });
+    const result = await backfillFlatRows(flatRows, { mode, onlyFields, force });
 
     return NextResponse.json({ ok: true, ...result });
   } catch (error: any) {

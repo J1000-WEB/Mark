@@ -456,6 +456,144 @@ export async function readDailySalesFromHistory(options?: { live?: boolean }) {
   };
 }
 
+// MARK 2026-09: "실시간" 탭용 — 오늘자 실시간 매출(run-loop.js가 10분마다 갱신)과, 가장
+// 최근 재고 스냅샷(daily-snapshot.js가 새벽에 1회 갱신, 보통 "어제" 날짜로 저장됨)을 같이
+// 읽어서 "새벽 재고 - 오늘 누적판매 = 추정 현재재고"를 계산합니다. 날짜별로 딱 필요한
+// 구간만 읽습니다(전체 히스토리를 읽지 않음 — 이 파일 위쪽의 크래시 사고와 같은 패턴을
+// 반복하지 않기 위함).
+async function findDailyHistoryRowRangesForDates(
+  historyId: string,
+  dateKeys: string[]
+): Promise<Map<string, { start: number; end: number }>> {
+  const wanted = new Set(dateKeys);
+  const map = new Map<string, { start: number; end: number }>();
+  try {
+    const dateCol = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A");
+    if (!dateCol.length) return map;
+    let curDate = "";
+    let curStart = -1;
+    for (let i = 1; i < dateCol.length; i++) {
+      const d = normalizeDateKey(dateCol[i]?.[0]);
+      if (d !== curDate) {
+        if (curDate && wanted.has(curDate) && curStart !== -1) map.set(curDate, { start: curStart + 1, end: i });
+        curDate = d;
+        curStart = i;
+      }
+    }
+    if (curDate && wanted.has(curDate) && curStart !== -1) map.set(curDate, { start: curStart + 1, end: dateCol.length });
+    return map;
+  } catch {
+    return map;
+  }
+}
+
+async function readDailyHistoryBlock(historyId: string, range: { start: number; end: number } | undefined): Promise<FlatDailyHistoryRow[]> {
+  if (!range) return [];
+  const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
+  return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+}
+
+function kstDateKeyOffset(offsetDays: number) {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  kst.setDate(kst.getDate() + offsetDays);
+  const y = kst.getFullYear();
+  const m = String(kst.getMonth() + 1).padStart(2, "0");
+  const d = String(kst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export type RealtimeStockIssue = {
+  storeName: string;
+  styleCode: string;
+  productName: string;
+  colorCode: string;
+  colorName: string;
+  baselineStock: number;
+  todaySold: number;
+  estimatedStock: number;
+};
+
+export async function readRealtimeOverview() {
+  const historyId = getHistorySheetId();
+  const today = ymdKST();
+  // 최대 7일 전까지 거슬러 올라가며 재고 스냅샷이 있는 가장 최근 날짜를 찾습니다
+  // (평소엔 "어제" 날짜에 있음 — daily-snapshot.js가 새벽에 전일자로 저장하기 때문).
+  const lookbackDates = Array.from({ length: 7 }, (_, i) => kstDateKeyOffset(-(i + 1)));
+  const ranges = await findDailyHistoryRowRangesForDates(historyId, [today, ...lookbackDates]);
+
+  const todayRows = (await readDailyHistoryBlock(historyId, ranges.get(today))).filter((r) => normalizeDateKey(r.date) === today);
+
+  let baselineDate = "";
+  let baselineRows: FlatDailyHistoryRow[] = [];
+  for (const dateKey of lookbackDates) {
+    const range = ranges.get(dateKey);
+    if (!range) continue;
+    const rows = (await readDailyHistoryBlock(historyId, range)).filter((r) => normalizeDateKey(r.date) === dateKey);
+    if (rows.length && rows.some((r) => num(r.stock) > 0)) {
+      baselineDate = dateKey;
+      baselineRows = rows;
+      break;
+    }
+  }
+
+  const comboKey = (storeName: string, styleCode: string, colorCode: string) => `${storeName}__${styleCode}__${colorCode}`;
+
+  const baselineMap = new Map<string, { storeName: string; styleCode: string; productName: string; colorCode: string; colorName: string; stock: number }>();
+  for (const r of baselineRows) {
+    const key = comboKey(r.storeName, r.styleCode, r.colorCode);
+    const existing = baselineMap.get(key);
+    if (existing) existing.stock += num(r.stock);
+    else baselineMap.set(key, { storeName: r.storeName, styleCode: r.styleCode, productName: r.productName, colorCode: r.colorCode, colorName: r.colorName, stock: num(r.stock) });
+  }
+
+  const todaySoldMap = new Map<string, number>();
+  for (const r of todayRows) {
+    const key = comboKey(r.storeName, r.styleCode, r.colorCode);
+    todaySoldMap.set(key, (todaySoldMap.get(key) || 0) + num(r.qty));
+  }
+
+  const stockIssues: RealtimeStockIssue[] = Array.from(baselineMap.entries())
+    .map(([key, base]) => {
+      const todaySold = todaySoldMap.get(key) || 0;
+      return { ...base, baselineStock: base.stock, todaySold, estimatedStock: base.stock - todaySold };
+    })
+    .filter((item) => item.todaySold > 0 && item.estimatedStock <= Math.max(item.todaySold * 2, 3))
+    .sort((a, b) => a.estimatedStock - b.estimatedStock)
+    .slice(0, 30);
+
+  const totalDailySales = todayRows.reduce((sum, r) => sum + num(r.qty), 0);
+  const totalDailyAmount = todayRows.reduce((sum, r) => sum + num(r.amount), 0);
+  const activeChannels = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.storeName)).size;
+  const activeProducts = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.styleCode)).size;
+
+  const topChannels = Array.from(
+    todayRows.reduce((map, r) => {
+      const key = r.storeName;
+      if (!map.has(key)) map.set(key, { channelName: key, dailySales: 0, dailyAmount: 0, skuCount: new Set() });
+      const bucket = map.get(key);
+      bucket.dailySales += num(r.qty);
+      bucket.dailyAmount += num(r.amount);
+      if (num(r.qty) > 0) bucket.skuCount.add(r.styleCode);
+      return map;
+    }, new Map()).values()
+  ).map((x: any) => ({ ...x, skuCount: x.skuCount.size }))
+   .sort((a: any, b: any) => b.dailySales - a.dailySales)
+   .slice(0, 30);
+
+  return {
+    today,
+    generatedAt: new Date().toISOString(),
+    totalDailySales,
+    totalDailyAmount,
+    activeChannels,
+    activeProducts,
+    topChannels,
+    stockBaselineDate: baselineDate,
+    stockIssues,
+  };
+}
+
 // MARK 6.6: 데이터 폭증 방지를 위해 "일자+점포"당 한 줄만 쓰고,
 // 품번/칼라/사이즈 상세는 JSON 문자열 하나에 몰아서 저장합니다.
 // 기존 방식(조합마다 한 줄, 하루 약 2만 셀)보다 셀 수가 대폭 줄어듭니다.

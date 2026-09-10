@@ -60,6 +60,262 @@ function StockInboundAlertCard() {
   );
 }
 
+// MARK: "재고컨트롤 탭에 작은 알림판을하나만들어서 각기능마다 정상작동되고있는지 체크" 요청 —
+// 주요 API를 가볍게 호출해서 응답 상태/소요시간을 보여주는 자가진단 패널입니다.
+type HealthStatus = "ok" | "warn" | "error" | "checking";
+
+type HealthCheckResult = {
+  id: string;
+  label: string;
+  status: HealthStatus;
+  detail: string;
+  ms?: number;
+};
+
+const HEALTH_SHEET_ROW_WATCH: Record<string, number> = {
+  "금주/전주": 20000,
+  Daily_Sales_History: 60000,
+  온오프재고현황: 40000,
+  "일간매출(26년)": 20000,
+};
+
+async function probeJson(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    const ms = Date.now() - startedAt;
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    return { ok: res.ok, status: res.status, json, ms, timedOut: false };
+  } catch (error: any) {
+    const ms = Date.now() - startedAt;
+    const timedOut = error?.name === "AbortError";
+    return { ok: false, status: 0, json: null, ms, timedOut, error: error?.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runHealthChecks(): Promise<HealthCheckResult[]> {
+  const [dataRes, dailyRes, weeklyRes, snapshotsRes, gridRes] = await Promise.all([
+    probeJson("/api/data", 40000),
+    probeJson("/api/daily-sales", 20000),
+    probeJson("/api/weekly-history?dashboard=1", 30000),
+    probeJson("/api/weekly-snapshots", 15000),
+    probeJson("/api/sheet-grid-diagnostic", 15000),
+  ]);
+
+  const results: HealthCheckResult[] = [];
+
+  // /api/data: 일간/월간 대시보드 핵심 데이터
+  if (dataRes.json && dataRes.json.source && dataRes.json.source !== "fallback") {
+    results.push({ id: "data", label: "일간/월간 데이터", status: "ok", detail: `정상 (${dataRes.json.source})`, ms: dataRes.ms });
+  } else if (dataRes.json && dataRes.json.source === "fallback") {
+    results.push({
+      id: "data",
+      label: "일간/월간 데이터",
+      status: "error",
+      detail: dataRes.json.googleError ? `오류: ${dataRes.json.googleError}` : "구글시트 연동 실패 (내장 데이터로 대체됨)",
+      ms: dataRes.ms,
+    });
+  } else if (dataRes.timedOut) {
+    results.push({ id: "data", label: "일간/월간 데이터", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: dataRes.ms });
+  } else {
+    results.push({ id: "data", label: "일간/월간 데이터", status: "error", detail: `응답 실패 (status ${dataRes.status})`, ms: dataRes.ms });
+  }
+
+  // /api/daily-sales
+  if (dailyRes.json?.ok) {
+    results.push({ id: "daily-sales", label: "Daily Sales 스냅샷", status: "ok", detail: "정상", ms: dailyRes.ms });
+  } else if (dailyRes.timedOut) {
+    results.push({ id: "daily-sales", label: "Daily Sales 스냅샷", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: dailyRes.ms });
+  } else {
+    results.push({
+      id: "daily-sales",
+      label: "Daily Sales 스냅샷",
+      status: "error",
+      detail: dailyRes.json?.error || `응답 실패 (status ${dailyRes.status})`,
+      ms: dailyRes.ms,
+    });
+  }
+
+  // /api/weekly-history
+  if (weeklyRes.json?.ok) {
+    results.push({ id: "weekly", label: "주간 데이터", status: "ok", detail: "정상", ms: weeklyRes.ms });
+  } else if (weeklyRes.timedOut) {
+    results.push({ id: "weekly", label: "주간 데이터", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: weeklyRes.ms });
+  } else {
+    results.push({
+      id: "weekly",
+      label: "주간 데이터",
+      status: "error",
+      detail: weeklyRes.json?.error || `응답 실패 (status ${weeklyRes.status})`,
+      ms: weeklyRes.ms,
+    });
+  }
+
+  // /api/weekly-snapshots
+  if (snapshotsRes.json?.ok) {
+    results.push({
+      id: "snapshots",
+      label: "주간 스냅샷 목록",
+      status: "ok",
+      detail: `정상 (${fmtNum(snapshotsRes.json.count || 0)}건)`,
+      ms: snapshotsRes.ms,
+    });
+  } else {
+    results.push({
+      id: "snapshots",
+      label: "주간 스냅샷 목록",
+      status: snapshotsRes.timedOut ? "error" : "warn",
+      detail: snapshotsRes.json?.error || (snapshotsRes.timedOut ? "응답 시간 초과" : `응답 실패 (status ${snapshotsRes.status})`),
+      ms: snapshotsRes.ms,
+    });
+  }
+
+  // /api/sheet-grid-diagnostic: 시트 크기 이상 감지
+  if (gridRes.json?.ok) {
+    const allSheets: any[] = [
+      ...Object.values(gridRes.json.history || {}),
+      ...Object.values(gridRes.json.dailySource || {}),
+      ...Object.values(gridRes.json.base || {}),
+    ];
+    const warnings: string[] = [];
+    for (const sheet of allSheets) {
+      const title = sheet?.title;
+      const rowCount = Number(sheet?.rowCount || 0);
+      const watchLimit = title && HEALTH_SHEET_ROW_WATCH[title];
+      if (watchLimit && rowCount > watchLimit) {
+        warnings.push(`${title} ${fmtNum(rowCount)}행 (기준 ${fmtNum(watchLimit)}행 초과)`);
+      }
+    }
+    if (warnings.length) {
+      results.push({ id: "sheet-size", label: "구글시트 용량 점검", status: "warn", detail: warnings.join(", "), ms: gridRes.ms });
+    } else {
+      results.push({ id: "sheet-size", label: "구글시트 용량 점검", status: "ok", detail: "정상 범위", ms: gridRes.ms });
+    }
+  } else {
+    results.push({
+      id: "sheet-size",
+      label: "구글시트 용량 점검",
+      status: "warn",
+      detail: gridRes.timedOut ? "응답 시간 초과" : `확인 실패 (status ${gridRes.status})`,
+      ms: gridRes.ms,
+    });
+  }
+
+  return results;
+}
+
+function HealthStatusBadge({ status }: { status: HealthStatus }) {
+  const map: Record<HealthStatus, string> = {
+    ok: "bg-emerald-100 text-emerald-700",
+    warn: "bg-amber-100 text-amber-700",
+    error: "bg-red-100 text-red-700",
+    checking: "bg-slate-100 text-slate-500",
+  };
+  const label: Record<HealthStatus, string> = {
+    ok: "정상",
+    warn: "주의",
+    error: "오류",
+    checking: "확인 중",
+  };
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-black ${map[status]}`}>{label[status]}</span>;
+}
+
+function SystemHealthPanel() {
+  const [results, setResults] = useState<HealthCheckResult[]>([]);
+  const [checking, setChecking] = useState(true);
+  const [lastCheckedAt, setLastCheckedAt] = useState("");
+  const [open, setOpen] = useState(false);
+
+  async function check() {
+    setChecking(true);
+    try {
+      const next = await runHealthChecks();
+      setResults(next);
+      setLastCheckedAt(new Date().toLocaleTimeString("ko-KR"));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    check();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const overall: HealthStatus = checking && !results.length
+    ? "checking"
+    : results.some((r) => r.status === "error")
+    ? "error"
+    : results.some((r) => r.status === "warn")
+    ? "warn"
+    : "ok";
+
+  const overallText: Record<HealthStatus, string> = {
+    ok: "✅ 모든 기능이 정상 작동 중입니다",
+    warn: "⚠️ 일부 항목에 주의가 필요합니다",
+    error: "🚨 정상 작동하지 않는 기능이 있습니다",
+    checking: "점검 중...",
+  };
+
+  const overallClass: Record<HealthStatus, string> = {
+    ok: "border-emerald-200 bg-emerald-50",
+    warn: "border-amber-200 bg-amber-50",
+    error: "border-red-200 bg-red-50",
+    checking: "border-slate-200 bg-slate-50",
+  };
+
+  return (
+    <div className={`rounded-3xl border p-5 shadow-sm ${overallClass[overall]}`}>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left">
+        <div>
+          <p className="text-xs font-bold text-slate-500">시스템 상태 점검</p>
+          <p className="mt-1 text-sm font-black text-slate-900">{overallText[overall]}</p>
+          {lastCheckedAt && <p className="mt-1 text-[11px] font-semibold text-slate-400">마지막 확인: {lastCheckedAt}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            role="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              check();
+            }}
+            className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-100"
+          >
+            {checking ? "확인 중..." : "다시 확인"}
+          </span>
+          <span className="text-lg text-slate-400">{open ? "▲" : "▼"}</span>
+        </div>
+      </button>
+
+      {open && (
+        <div className="mt-4 flex flex-col gap-2">
+          {results.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900">{r.label}</p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">{r.detail}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {typeof r.ms === "number" && <span className="text-[11px] font-semibold text-slate-400">{(r.ms / 1000).toFixed(1)}초</span>}
+                <HealthStatusBadge status={r.status} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function stockWeekText(value: any) {
   const n = Number(value || 0);
   if (n >= 999) return "판매없음";
@@ -1812,6 +2068,8 @@ export default function InventoryDashboard() {
         <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
           {data.periodLabel}
         </section>
+
+        <SystemHealthPanel />
 
         <a
           href="/consignment-upload"

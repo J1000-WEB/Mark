@@ -1,1 +1,42 @@
+name: Realtime Hourly Snapshot
 
+# MARK 2026-09: 실시간 탭의 "시간대별 매출추이" + "예상 마감 매출" 기능을 위해, 매장
+# 운영시간(11시~22시, KST) 동안 정시마다 MARK의 /api/auto-realtime-hourly-snapshot을
+# 호출합니다. Vercel Hobby 요금제는 자체 크론이 하루 1회로 제한되어 있어서, 그 대신
+# GitHub Actions로 정시 호출을 대신합니다.
+#
+# 참고: GitHub Actions의 스케줄 크론은 "최선 노력(best-effort)"이라 트래픽이 몰리는
+# 시간대엔 몇 분 정도 늦게 시작될 수 있습니다 — 시간대별 매출 추이를 보는 용도로는
+# 문제없는 수준입니다.
+#
+# 만약 Vercel 프로젝트에 CRON_SECRET 환경변수를 설정해뒀다면, 이 저장소의
+# Settings → Secrets and variables → Actions에 같은 값으로 MARK_CRON_SECRET 시크릿을
+# 추가해주세요. CRON_SECRET을 따로 설정 안 했다면 아무것도 안 해도 됩니다(인증 없이 호출).
+
+on:
+  schedule:
+    - cron: "0 2-13 * * *" # UTC 02~13시 = KST 11~22시, 정시마다
+  workflow_dispatch: {} # 저장소의 Actions 탭에서 수동으로도 바로 실행해볼 수 있습니다.
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call MARK realtime hourly snapshot endpoint
+        env:
+          MARK_CRON_SECRET: ${{ secrets.MARK_CRON_SECRET }}
+        run: |
+          URL="https://mark-khaki.vercel.app/api/auto-realtime-hourly-snapshot"
+          if [ -n "$MARK_CRON_SECRET" ]; then
+            HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" --max-time 55 \
+              -H "Authorization: Bearer $MARK_CRON_SECRET" "$URL")
+          else
+            HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" --max-time 55 "$URL")
+          fi
+          echo "HTTP status: $HTTP_STATUS"
+          cat response.json
+          echo ""
+          if [ "$HTTP_STATUS" -ge 400 ]; then
+            echo "::error::MARK realtime hourly snapshot 호출 실패 (status $HTTP_STATUS)"
+            exit 1
+          fi

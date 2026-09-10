@@ -954,9 +954,29 @@ export async function backfillDailySalesForDate(data: any) {
 //   - "upsert": 키가 이미 있으면 onlyFields로 지정한 필드만 갱신(나머지 필드는 안 건드림),
 //     없으면 새로 만듦. stock-refresh는 onlyFields:["stock"], sales-refresh는
 //     onlyFields:["qty","amount"]로 보내서 서로의 값을 안 지우게 합니다.
+// MARK 2026-09: "실시간 매출이 갑자기 리셋되었다" 사고 원인 — erp-agent의 run-loop.js
+// (scrape.js+parse-and-upload.js)가 10분마다 "채널별 매출현황"을 통째로 다시 긁어서
+// mode:"replace"로 그날 행을 전부 교체하는데, 이 화면은 원래 그 시점까지의 "누적" 매출을
+// 보여줘야 정상입니다. 그런데 어느 한 사이클에서 ERP 페이지가 다 안 불러와진 채로(로딩 중,
+// 세션 끊김, 일부 채널만 렌더된 상태 등) 스크래핑되면, 그 불완전한 스냅샷이 지금까지 쌓인
+// 정상적인 누적 매출을 그대로 덮어써버립니다 — "리셋"처럼 보이는 이유. 하루 누적 매출은
+// 정상적으로는 줄어들 수 없으므로, replace 교체 직전에 그 날짜의 기존 합계와 비교해서
+// 크게(DROP_GUARD_RATIO 미만으로) 줄어드는 교체는 실수로 보고 막습니다.
+const REPLACE_DROP_GUARD_MIN_AMOUNT = 3000; // 기존 금액이 이 밑이면(하루 시작 직후 등) 가드 안 함
+const REPLACE_DROP_GUARD_RATIO = 0.6; // 새 값이 기존의 60% 미만이면 "리셋 의심"으로 막음
+
+function replaceDropGuardMessage(dateKey: string, existingAmount: number, incomingAmount: number) {
+  return (
+    `${dateKey} 기존 누적매출(${Math.round(existingAmount).toLocaleString("ko-KR")}원)보다 훨씬 적은 값` +
+    `(${Math.round(incomingAmount).toLocaleString("ko-KR")}원)으로 통째로 교체하려고 해서 막았습니다 — ` +
+    `ERP 스크래핑이 이번엔 일부만 됐을 가능성이 큽니다(세션 끊김, 페이지 로딩 중 등). ` +
+    `정말 이 값이 맞다면(예: 실제로 취소/환불이 많이 발생) mode 요청에 force:true를 추가해서 다시 보내주세요.`
+  );
+}
+
 export async function backfillFlatRows(
   newFlatRows: FlatDailyHistoryRow[],
-  options?: { mode?: "replace" | "append" | "upsert"; onlyFields?: (keyof FlatDailyHistoryRow)[]; append?: boolean }
+  options?: { mode?: "replace" | "append" | "upsert"; onlyFields?: (keyof FlatDailyHistoryRow)[]; append?: boolean; force?: boolean }
 ) {
   const spreadsheetId = getHistorySheetId();
   if (!newFlatRows.length) throw new Error("저장할 판매 데이터가 없습니다.");
@@ -974,7 +994,7 @@ export async function backfillFlatRows(
   // (여러 날짜를 한 번에 다루는 아주 드문 호출만 예전의 전체 읽기 경로로 남겨둡니다.)
   if (targetDates.size === 1) {
     const onlyFields = options?.onlyFields && options.onlyFields.length ? options.onlyFields : null;
-    return upsertFlatRowsForSingleDate(spreadsheetId, [...targetDates][0], newFlatRows, mode, onlyFields);
+    return upsertFlatRowsForSingleDate(spreadsheetId, [...targetDates][0], newFlatRows, mode, onlyFields, !!options?.force);
   }
 
   const existingRaw = await getSheetValuesById(spreadsheetId, DAILY_HISTORY_SHEET, "A:ZZ").catch(() => []);
@@ -1015,6 +1035,15 @@ export async function backfillFlatRows(
     mergedFlatRows = [...existingFlatRows, ...rowsToWrite];
   } else {
     // replace
+    if (!options?.force) {
+      for (const dateKey of targetDates) {
+        const existingAmount = existingFlatRows.filter((r) => r.date === dateKey).reduce((s, r) => s + num(r.amount), 0);
+        const incomingAmount = newFlatRows.filter((r) => r.date === dateKey).reduce((s, r) => s + num(r.amount), 0);
+        if (existingAmount >= REPLACE_DROP_GUARD_MIN_AMOUNT && incomingAmount < existingAmount * REPLACE_DROP_GUARD_RATIO) {
+          throw new Error(replaceDropGuardMessage(dateKey, existingAmount, incomingAmount));
+        }
+      }
+    }
     const keptRows = existingFlatRows.filter((r) => !targetDates.has(r.date));
     replacedRows = existingFlatRows.length - keptRows.length;
     newRowsCount = newFlatRows.length;
@@ -1044,7 +1073,8 @@ async function upsertFlatRowsForSingleDate(
   targetDate: string,
   newFlatRows: FlatDailyHistoryRow[],
   mode: "replace" | "append" | "upsert",
-  onlyFields: (keyof FlatDailyHistoryRow)[] | null
+  onlyFields: (keyof FlatDailyHistoryRow)[] | null,
+  force = false
 ) {
   await ensureSheetExistsById(spreadsheetId, DAILY_HISTORY_SHEET, DAILY_HISTORY_HEADER);
 
@@ -1057,9 +1087,11 @@ async function upsertFlatRowsForSingleDate(
     if (normalizeDateKey(raw) === targetDate) matchingRowNumbers.push(i + 1);
   }
 
+  // MARK 2026-09: replace 모드도 이제 기존 값을 읽습니다 — "리셋" 사고 이후로, 통째로
+  // 교체하기 전에 기존 합계와 비교해서 크게 줄어드는 교체를 막기 위함입니다(아래 가드 참고).
+  // 매장 수만큼(보통 20~30줄)만 읽으므로 여전히 가볍습니다.
   let existingFlatRows: FlatDailyHistoryRow[] = [];
-  if (matchingRowNumbers.length && mode !== "replace") {
-    // replace는 그날 기존 내용을 어차피 다 버리므로 안 읽어도 됩니다(더 가벼움).
+  if (matchingRowNumbers.length) {
     const ranges = toContiguousRanges(matchingRowNumbers);
     const fetched: any[][] = [];
     for (const [start, end] of ranges) {
@@ -1067,6 +1099,14 @@ async function upsertFlatRowsForSingleDate(
       fetched.push(...chunk);
     }
     existingFlatRows = expandCompactDailyHistoryRows([DAILY_HISTORY_HEADER, ...fetched]);
+  }
+
+  if (mode === "replace" && !force) {
+    const existingAmount = existingFlatRows.reduce((s, r) => s + num(r.amount), 0);
+    const incomingAmount = newFlatRows.reduce((s, r) => s + num(r.amount), 0);
+    if (existingAmount >= REPLACE_DROP_GUARD_MIN_AMOUNT && incomingAmount < existingAmount * REPLACE_DROP_GUARD_RATIO) {
+      throw new Error(replaceDropGuardMessage(targetDate, existingAmount, incomingAmount));
+    }
   }
 
   // 2) 모드별로 그날 하루치 안에서만 합칩니다 (많아야 수천 건).

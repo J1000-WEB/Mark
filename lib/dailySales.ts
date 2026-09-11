@@ -541,6 +541,29 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
   return { today, rows };
 }
 
+// MARK 2026-09-11: 스페셜오퍼위크 실적 자동갱신(auto-special-offer-actuals)이 매일 Daily_Sales_History
+// 전체(A:ZZ)를 통째로 읽어서 상세행으로 펼치고 있었습니다 — 9월 들어 시트가 계속 커지면서(특히
+// 실시간 탭용 upsert가 10~15분마다 도는 뒤로 더 빠르게) 결국 응답이 타임아웃나기 시작한 것으로
+// 보입니다(9월 5일 이후 갱신 안 됨 제보). 스페셜오퍼위크 자동갱신은 실제로는 2026-07-01부터
+// 오늘까지만 필요하므로, 그 기간에 해당하는 행만 targeted로 읽는 재사용 함수를 추가합니다
+// (findDailyHistoryRowRangesForDates/readDailyHistoryBlock을 여러 날짜에 대해 한 번에 사용).
+export async function readDailyHistoryRowsForDateRange(startDate: string, endDate?: string): Promise<FlatDailyHistoryRow[]> {
+  const historyId = getHistorySheetId();
+  const end = endDate || ymdKST();
+  if (!startDate || startDate > end) return [];
+  const dateKeys: string[] = [];
+  for (let d = new Date(`${startDate}T00:00:00`); d <= new Date(`${end}T00:00:00`); d.setDate(d.getDate() + 1)) {
+    dateKeys.push(d.toISOString().slice(0, 10));
+  }
+  const rangesMap = await findDailyHistoryRowRangesForDates(historyId, dateKeys);
+  const allRanges = Array.from(rangesMap.values()).flat();
+  const rows = await readDailyHistoryBlock(historyId, allRanges);
+  return rows.filter((r) => {
+    const k = normalizeDateKey(r.date);
+    return k >= startDate && k <= end;
+  });
+}
+
 function kstDateKeyOffset(offsetDays: number) {
   const now = new Date();
   const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));

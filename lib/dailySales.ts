@@ -548,9 +548,17 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
 // 오늘까지만 필요하므로, 그 기간에 해당하는 행만 targeted로 읽는 재사용 함수를 추가합니다
 // (findDailyHistoryRowRangesForDates/readDailyHistoryBlock을 여러 날짜에 대해 한 번에 사용).
 // MARK 2026-09-11b: 위 targeted 읽기로 바꾸자마자 실적이 전부 0으로 나오는 새 문제가
-// 생겨서(dailyFlatRows 자체가 통째로 비어버림), 어느 단계에서 비는지 바로 알 수 있게
-// 진단 정보를 같이 내는 내부 버전을 추가합니다. 원인 확정 전까지는 이 debug를
-// API 응답에도 실어서, 다음 호출 결과만 보고 바로 원인을 좁힐 수 있게 합니다.
+// 생겼고(dailyFlatRows 자체가 통째로 비어버림), 그걸 진단하려고 붙인 첫 번째 디버그
+// 버전은 오히려 500(타임아웃)을 냈습니다 — findDailyHistoryRowRangesForDates가 컬럼A를
+// 또 한 번 통째로 읽는 데다(중복 읽기), 73일치 각각 흩어진 블록마다 readDailyHistoryBlock이
+// 별도 API 호출을 했기 때문입니다(하루치는 블록 몇 개라 괜찮았지만, 73일 × 날짜마다 여러
+// 조각이면 수십~수백 번의 순차 API 호출이 되어버림). 그래서 이 함수는 컬럼A를 딱 한 번만
+// 읽고, 원하는 날짜들에 해당하는 모든 블록의 "최소 시작행~최대 끝행"만 계산해서 그 구간
+// 전체를 한 번의 API 호출로 읽습니다(사이에 낀 다른 날짜 행은 걸러내면 그만이라 상관없음).
+// API 호출을 매 실행마다 딱 2번(컬럼A 1번 + 구간 1번)으로 고정해서, 조각이 얼마나 많이
+// 흩어져 있든 호출 횟수가 늘어나지 않게 했습니다.
+const MAX_DATE_RANGE_SPAN_ROWS = 60000; // 이보다 넓은 구간을 읽어야 하면 안전하게 포기합니다.
+
 async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDate?: string) {
   const historyId = getHistorySheetId();
   const end = endDate || ymdKST();
@@ -561,6 +569,7 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
   for (let d = new Date(`${startDate}T00:00:00`); d <= new Date(`${end}T00:00:00`); d.setDate(d.getDate() + 1)) {
     dateKeys.push(d.toISOString().slice(0, 10));
   }
+  const wanted = new Set(dateKeys);
 
   const dateColRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A").catch(() => [] as any[]);
   const sample = (arr: any[]) =>
@@ -569,11 +578,43 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
       return { raw, type: typeof raw, normalized: normalizeDateKey(raw) };
     });
 
-  const rangesMap = await findDailyHistoryRowRangesForDates(historyId, dateKeys);
-  const distinctDatesFound = Array.from(rangesMap.keys());
-  const totalBlocks = Array.from(rangesMap.values()).reduce((s, arr) => s + arr.length, 0);
-  const allRanges = Array.from(rangesMap.values()).flat();
-  const rawRows = await readDailyHistoryBlock(historyId, allRanges);
+  // 컬럼A를 한 번만 훑으면서, wanted 날짜에 해당하는 블록들의 시작/끝 행 번호만 뽑습니다
+  // (findDailyHistoryRowRangesForDates와 같은 스캔 로직이지만, 컬럼A를 다시 읽지 않고
+  // 개별 블록을 따로 읽지도 않습니다 — 전체 범위만 계산).
+  const distinctDatesFound = new Set<string>();
+  let minRow = -1;
+  let maxRow = -1;
+  let blockCount = 0;
+  const noteBlock = (d: string, blockStart: number, blockEnd: number) => {
+    if (!d || !wanted.has(d) || blockStart === -1) return;
+    distinctDatesFound.add(d);
+    blockCount++;
+    if (minRow === -1 || blockStart + 1 < minRow) minRow = blockStart + 1;
+    if (maxRow === -1 || blockEnd > maxRow) maxRow = blockEnd;
+  };
+  let curDate = "";
+  let curStart = -1;
+  for (let i = 1; i < dateColRaw.length; i++) {
+    const d = normalizeDateKey(dateColRaw[i]?.[0]);
+    if (d !== curDate) {
+      noteBlock(curDate, curStart, i);
+      curDate = d;
+      curStart = i;
+    }
+  }
+  noteBlock(curDate, curStart, dateColRaw.length);
+
+  const spanRows = minRow !== -1 ? maxRow - minRow + 1 : 0;
+  let rawRows: FlatDailyHistoryRow[] = [];
+  let spanTooLarge = false;
+  if (minRow !== -1 && maxRow !== -1) {
+    if (spanRows > MAX_DATE_RANGE_SPAN_ROWS) {
+      spanTooLarge = true;
+    } else {
+      const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${minRow}:ZZ${maxRow}`).catch(() => [] as any[]);
+      rawRows = expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+    }
+  }
   const rows = rawRows.filter((r) => {
     const k = normalizeDateKey(r.date);
     return k >= startDate && k <= end;
@@ -588,9 +629,11 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
       totalRowsInColumnA: dateColRaw.length,
       sampleFirst5Raw: sample(dateColRaw.slice(1, 6)),
       sampleLast5Raw: sample(dateColRaw.slice(-5)),
-      distinctDatesFoundCount: distinctDatesFound.length,
-      distinctDatesFoundSample: distinctDatesFound.slice(0, 15),
-      totalBlocksFound: totalBlocks,
+      distinctDatesFoundCount: distinctDatesFound.size,
+      distinctDatesFoundSample: Array.from(distinctDatesFound).slice(0, 15),
+      blockCount,
+      readSpan: minRow !== -1 ? { minRow, maxRow, spanRows } : null,
+      spanTooLarge,
       rawRowsBeforeFilter: rawRows.length,
       rowsAfterFilter: rows.length,
     },

@@ -547,21 +547,64 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
 // 보입니다(9월 5일 이후 갱신 안 됨 제보). 스페셜오퍼위크 자동갱신은 실제로는 2026-07-01부터
 // 오늘까지만 필요하므로, 그 기간에 해당하는 행만 targeted로 읽는 재사용 함수를 추가합니다
 // (findDailyHistoryRowRangesForDates/readDailyHistoryBlock을 여러 날짜에 대해 한 번에 사용).
-export async function readDailyHistoryRowsForDateRange(startDate: string, endDate?: string): Promise<FlatDailyHistoryRow[]> {
+// MARK 2026-09-11b: 위 targeted 읽기로 바꾸자마자 실적이 전부 0으로 나오는 새 문제가
+// 생겨서(dailyFlatRows 자체가 통째로 비어버림), 어느 단계에서 비는지 바로 알 수 있게
+// 진단 정보를 같이 내는 내부 버전을 추가합니다. 원인 확정 전까지는 이 debug를
+// API 응답에도 실어서, 다음 호출 결과만 보고 바로 원인을 좁힐 수 있게 합니다.
+async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDate?: string) {
   const historyId = getHistorySheetId();
   const end = endDate || ymdKST();
-  if (!startDate || startDate > end) return [];
+  if (!startDate || startDate > end) {
+    return { rows: [] as FlatDailyHistoryRow[], debug: { startDate, end, skipped: true } };
+  }
   const dateKeys: string[] = [];
   for (let d = new Date(`${startDate}T00:00:00`); d <= new Date(`${end}T00:00:00`); d.setDate(d.getDate() + 1)) {
     dateKeys.push(d.toISOString().slice(0, 10));
   }
+
+  const dateColRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A").catch(() => [] as any[]);
+  const sample = (arr: any[]) =>
+    arr.map((r: any) => {
+      const raw = r?.[0];
+      return { raw, type: typeof raw, normalized: normalizeDateKey(raw) };
+    });
+
   const rangesMap = await findDailyHistoryRowRangesForDates(historyId, dateKeys);
+  const distinctDatesFound = Array.from(rangesMap.keys());
+  const totalBlocks = Array.from(rangesMap.values()).reduce((s, arr) => s + arr.length, 0);
   const allRanges = Array.from(rangesMap.values()).flat();
-  const rows = await readDailyHistoryBlock(historyId, allRanges);
-  return rows.filter((r) => {
+  const rawRows = await readDailyHistoryBlock(historyId, allRanges);
+  const rows = rawRows.filter((r) => {
     const k = normalizeDateKey(r.date);
     return k >= startDate && k <= end;
   });
+
+  return {
+    rows,
+    debug: {
+      startDate,
+      end,
+      dateKeysRequested: dateKeys.length,
+      totalRowsInColumnA: dateColRaw.length,
+      sampleFirst5Raw: sample(dateColRaw.slice(1, 6)),
+      sampleLast5Raw: sample(dateColRaw.slice(-5)),
+      distinctDatesFoundCount: distinctDatesFound.length,
+      distinctDatesFoundSample: distinctDatesFound.slice(0, 15),
+      totalBlocksFound: totalBlocks,
+      rawRowsBeforeFilter: rawRows.length,
+      rowsAfterFilter: rows.length,
+    },
+  };
+}
+
+export async function readDailyHistoryRowsForDateRange(startDate: string, endDate?: string): Promise<FlatDailyHistoryRow[]> {
+  const { rows } = await readDailyHistoryRowsForDateRangeInternal(startDate, endDate);
+  return rows;
+}
+
+// 진단용 — 위와 똑같이 동작하지만 어느 단계에서 데이터가 사라지는지 보여주는 debug를 같이 반환합니다.
+export async function readDailyHistoryRowsForDateRangeWithDebug(startDate: string, endDate?: string) {
+  return readDailyHistoryRowsForDateRangeInternal(startDate, endDate);
 }
 
 function kstDateKeyOffset(offsetDays: number) {

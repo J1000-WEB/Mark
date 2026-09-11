@@ -5,6 +5,7 @@ import {
   ensureSheetExistsById,
   getDailySourceSheetId,
   getHistorySheetId,
+  getSheetRowCountById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
   safeReplaceSheetValuesById,
@@ -543,21 +544,18 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
 
 // MARK 2026-09-11: 스페셜오퍼위크 실적 자동갱신(auto-special-offer-actuals)이 매일 Daily_Sales_History
 // 전체(A:ZZ)를 통째로 읽어서 상세행으로 펼치고 있었습니다 — 9월 들어 시트가 계속 커지면서(특히
-// 실시간 탭용 upsert가 10~15분마다 도는 뒤로 더 빠르게) 결국 응답이 타임아웃나기 시작한 것으로
-// 보입니다(9월 5일 이후 갱신 안 됨 제보). 스페셜오퍼위크 자동갱신은 실제로는 2026-07-01부터
-// 오늘까지만 필요하므로, 그 기간에 해당하는 행만 targeted로 읽는 재사용 함수를 추가합니다
-// (findDailyHistoryRowRangesForDates/readDailyHistoryBlock을 여러 날짜에 대해 한 번에 사용).
-// MARK 2026-09-11b: 위 targeted 읽기로 바꾸자마자 실적이 전부 0으로 나오는 새 문제가
-// 생겼고(dailyFlatRows 자체가 통째로 비어버림), 그걸 진단하려고 붙인 첫 번째 디버그
-// 버전은 오히려 500(타임아웃)을 냈습니다 — findDailyHistoryRowRangesForDates가 컬럼A를
-// 또 한 번 통째로 읽는 데다(중복 읽기), 73일치 각각 흩어진 블록마다 readDailyHistoryBlock이
-// 별도 API 호출을 했기 때문입니다(하루치는 블록 몇 개라 괜찮았지만, 73일 × 날짜마다 여러
-// 조각이면 수십~수백 번의 순차 API 호출이 되어버림). 그래서 이 함수는 컬럼A를 딱 한 번만
-// 읽고, 원하는 날짜들에 해당하는 모든 블록의 "최소 시작행~최대 끝행"만 계산해서 그 구간
-// 전체를 한 번의 API 호출로 읽습니다(사이에 낀 다른 날짜 행은 걸러내면 그만이라 상관없음).
-// API 호출을 매 실행마다 딱 2번(컬럼A 1번 + 구간 1번)으로 고정해서, 조각이 얼마나 많이
-// 흩어져 있든 호출 횟수가 늘어나지 않게 했습니다.
-const MAX_DATE_RANGE_SPAN_ROWS = 60000; // 이보다 넓은 구간을 읽어야 하면 안전하게 포기합니다.
+// 실시간 탭용 upsert가 10~15분마다 도는 뒤로 더 빠르게) 결국 응답이 타임아웃나기 시작했습니다
+// (9월 5일 이후 갱신 안 됨 제보). 처음엔 "필요한 날짜들의 블록을 찾아서 그 구간만 읽는"
+// 방식으로 고쳐봤는데, 그 블록 찾는 로직 자체가 컬럼A를 또 읽고 흩어진 조각마다 계산하고
+// 하느라 오히려 복잡해지고 두 번이나 사고(0으로 덮어쓰기, 타임아웃)가 났습니다.
+//
+// 훨씬 단순하게 갑니다: 시트 크기(행 수)만 메타데이터로 가볍게 확인하고(데이터를 전혀 안
+// 읽음, 항상 빠름), 그 끝에서부터 "최근 N행"만 딱 한 번에 읽습니다. Daily_Sales_History는
+// 시간순으로 계속 쌓이는 구조라 최근 몇 달치는 항상 끝쪽에 있고, N을 충분히 넉넉하게
+// (3만행) 잡아두면 흩어진 조각까지 포함해서 2026-07-01 이후는 거의 확실히 다 들어옵니다.
+// API 호출이 정확히 2번(행 수 조회 1번 + 구간 읽기 1번)으로 고정되고, 데이터가 아무리
+// 커지거나 흩어져 있어도 매번 딱 3만 행만 읽으므로 시간이 절대 늘어나지 않습니다.
+const DATE_RANGE_TAIL_WINDOW_ROWS = 30000;
 
 async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDate?: string) {
   const historyId = getHistorySheetId();
@@ -565,75 +563,42 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
   if (!startDate || startDate > end) {
     return { rows: [] as FlatDailyHistoryRow[], debug: { startDate, end, skipped: true } };
   }
-  const dateKeys: string[] = [];
-  for (let d = new Date(`${startDate}T00:00:00`); d <= new Date(`${end}T00:00:00`); d.setDate(d.getDate() + 1)) {
-    dateKeys.push(d.toISOString().slice(0, 10));
-  }
-  const wanted = new Set(dateKeys);
 
-  const dateColRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A").catch(() => [] as any[]);
-  const sample = (arr: any[]) =>
-    arr.map((r: any) => {
-      const raw = r?.[0];
-      return { raw, type: typeof raw, normalized: normalizeDateKey(raw) };
-    });
-
-  // 컬럼A를 한 번만 훑으면서, wanted 날짜에 해당하는 블록들의 시작/끝 행 번호만 뽑습니다
-  // (findDailyHistoryRowRangesForDates와 같은 스캔 로직이지만, 컬럼A를 다시 읽지 않고
-  // 개별 블록을 따로 읽지도 않습니다 — 전체 범위만 계산).
-  const distinctDatesFound = new Set<string>();
-  let minRow = -1;
-  let maxRow = -1;
-  let blockCount = 0;
-  const noteBlock = (d: string, blockStart: number, blockEnd: number) => {
-    if (!d || !wanted.has(d) || blockStart === -1) return;
-    distinctDatesFound.add(d);
-    blockCount++;
-    if (minRow === -1 || blockStart + 1 < minRow) minRow = blockStart + 1;
-    if (maxRow === -1 || blockEnd > maxRow) maxRow = blockEnd;
-  };
-  let curDate = "";
-  let curStart = -1;
-  for (let i = 1; i < dateColRaw.length; i++) {
-    const d = normalizeDateKey(dateColRaw[i]?.[0]);
-    if (d !== curDate) {
-      noteBlock(curDate, curStart, i);
-      curDate = d;
-      curStart = i;
-    }
+  const totalRows = await getSheetRowCountById(historyId, DAILY_HISTORY_SHEET).catch(() => 0);
+  if (!totalRows || totalRows < 2) {
+    return { rows: [] as FlatDailyHistoryRow[], debug: { startDate, end, totalRows, error: "시트 행 수를 못 가져왔거나 데이터가 없습니다." } };
   }
-  noteBlock(curDate, curStart, dateColRaw.length);
 
-  const spanRows = minRow !== -1 ? maxRow - minRow + 1 : 0;
-  let rawRows: FlatDailyHistoryRow[] = [];
-  let spanTooLarge = false;
-  if (minRow !== -1 && maxRow !== -1) {
-    if (spanRows > MAX_DATE_RANGE_SPAN_ROWS) {
-      spanTooLarge = true;
-    } else {
-      const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${minRow}:ZZ${maxRow}`).catch(() => [] as any[]);
-      rawRows = expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
-    }
-  }
+  const tailStart = Math.max(2, totalRows - DATE_RANGE_TAIL_WINDOW_ROWS + 1); // 2행부터(1행=헤더)
+  const tailRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${tailStart}:G${totalRows}`).catch(() => [] as any[]);
+  const rawRows = expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRaw]);
   const rows = rawRows.filter((r) => {
     const k = normalizeDateKey(r.date);
     return k >= startDate && k <= end;
   });
+
+  const sample = (arr: any[][]) =>
+    arr.map((r) => {
+      const raw = r?.[0];
+      return { raw, type: typeof raw, normalized: normalizeDateKey(raw) };
+    });
+  const earliestDateInTail = rawRows.length
+    ? rawRows.reduce((min, r) => (normalizeDateKey(r.date) < min ? normalizeDateKey(r.date) : min), normalizeDateKey(rawRows[0].date))
+    : "";
 
   return {
     rows,
     debug: {
       startDate,
       end,
-      dateKeysRequested: dateKeys.length,
-      totalRowsInColumnA: dateColRaw.length,
-      sampleFirst5Raw: sample(dateColRaw.slice(1, 6)),
-      sampleLast5Raw: sample(dateColRaw.slice(-5)),
-      distinctDatesFoundCount: distinctDatesFound.size,
-      distinctDatesFoundSample: Array.from(distinctDatesFound).slice(0, 15),
-      blockCount,
-      readSpan: minRow !== -1 ? { minRow, maxRow, spanRows } : null,
-      spanTooLarge,
+      totalRowsInSheet: totalRows,
+      tailWindowRows: DATE_RANGE_TAIL_WINDOW_ROWS,
+      tailStart,
+      tailRowsRead: tailRaw.length,
+      sampleFirst5OfTail: sample(tailRaw.slice(0, 5)),
+      sampleLast5OfTail: sample(tailRaw.slice(-5)),
+      earliestDateInTail, // 이게 startDate보다 늦으면 창을 더 넓혀야 할 수도 있음
+      windowFullyCoversStartDate: !earliestDateInTail || earliestDateInTail <= startDate,
       rawRowsBeforeFilter: rawRows.length,
       rowsAfterFilter: rows.length,
     },

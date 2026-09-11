@@ -74,6 +74,21 @@ export async function getSpreadsheetTitlesById(spreadsheetId: string) {
   return (res.data.sheets || []).map((s) => s.properties?.title || "").filter(Boolean);
 }
 
+// MARK 2026-09-11: 시트 크기(행 수)만 필요할 때 씁니다 — fields로 gridProperties만
+// 요청해서 실제 셀 데이터는 전혀 안 읽으므로, 데이터가 아무리 많아도 항상 빠릅니다.
+// (스페셜오퍼위크 실적 자동갱신이 Daily_Sales_History 전체를 읽다가 타임아웃 나던 문제를
+// 고치면서 추가 — "최근 N행만" 읽을 때 N행이 어디부터 시작하는지 계산하는 데 씁니다.)
+export async function getSheetRowCountById(spreadsheetId: string, sheetName: string): Promise<number> {
+  const sheets = await getSheetsClient();
+  const escaped = sheetName.replace(/'/g, "''");
+  const res = await sheets.spreadsheets.get({
+    spreadsheetId,
+    ranges: [`'${escaped}'`],
+    fields: "sheets.properties",
+  });
+  return res.data.sheets?.[0]?.properties?.gridProperties?.rowCount || 0;
+}
+
 export async function getSheetValuesById(spreadsheetId: string, sheetName: string, range = "A:AZ") {
   const sheets = await getSheetsClient();
   const escaped = sheetName.replace(/'/g, "''");

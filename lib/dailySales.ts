@@ -557,33 +557,46 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
 // 커지거나 흩어져 있어도 매번 딱 3만 행만 읽으므로 시간이 절대 늘어나지 않습니다.
 const DATE_RANGE_TAIL_WINDOW_ROWS = 30000;
 
+// MARK 2026-09-11c: 위 "최근 3만행만 읽기"로 API 호출은 2번으로 줄였는데도 여전히
+// 타임아웃이 났습니다. 원인은 호출 횟수가 아니라 G열(상세JSON)이었던 것으로 보입니다 —
+// 셀 하나가 최대 4만자라 3만행을 A:G로 읽으면 응답이 수십~수백MB에 달하고,
+// expandAnyDailyHistoryRows()가 그걸 전부 JSON.parse해서 품목별로 펼치는 과정
+// (행당 평균 150여 개 품목 → 최대 수백만 건)이 매우 무겁습니다.
+// 그런데 압축행 자체에 이미 "일자+점포"별 총판매금액(E열)이 계산되어 들어있고
+// (DAILY_HISTORY_HEADER 참고), 스페셜오퍼위크가 필요한 건 딱 그 값뿐입니다.
+// 그래서 G열(상세JSON)은 아예 읽지도, 펼치지도 않고 A~E열만 직접 매핑합니다.
+export type DailyAmountRow = { date: string; storeName: string; amount: number };
+
 async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDate?: string) {
   const historyId = getHistorySheetId();
   const end = endDate || ymdKST();
   if (!startDate || startDate > end) {
-    return { rows: [] as FlatDailyHistoryRow[], debug: { startDate, end, skipped: true } };
+    return { rows: [] as DailyAmountRow[], debug: { startDate, end, skipped: true } };
   }
 
   const totalRows = await getSheetRowCountById(historyId, DAILY_HISTORY_SHEET).catch(() => 0);
   if (!totalRows || totalRows < 2) {
-    return { rows: [] as FlatDailyHistoryRow[], debug: { startDate, end, totalRows, error: "시트 행 수를 못 가져왔거나 데이터가 없습니다." } };
+    return { rows: [] as DailyAmountRow[], debug: { startDate, end, totalRows, error: "시트 행 수를 못 가져왔거나 데이터가 없습니다." } };
   }
 
   const tailStart = Math.max(2, totalRows - DATE_RANGE_TAIL_WINDOW_ROWS + 1); // 2행부터(1행=헤더)
-  const tailRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${tailStart}:G${totalRows}`).catch(() => [] as any[]);
-  const rawRows = expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRaw]);
-  const rows = rawRows.filter((r) => {
-    const k = normalizeDateKey(r.date);
-    return k >= startDate && k <= end;
-  });
+  // A~E열만 읽습니다: 일자/점포/품목수/총판매수량/총판매금액. G열(상세JSON, 셀당 최대 4만자)은
+  // 아예 요청 범위에서 빠지므로 응답 크기와 파싱 비용이 크게 줄어듭니다.
+  const tailRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${tailStart}:E${totalRows}`).catch(() => [] as any[]);
 
-  const sample = (arr: any[][]) =>
-    arr.map((r) => {
-      const raw = r?.[0];
-      return { raw, type: typeof raw, normalized: normalizeDateKey(raw) };
-    });
+  const rawRows: DailyAmountRow[] = [];
+  for (const row of tailRaw) {
+    const date = normalizeDateKey(row?.[0]);
+    const storeName = text(row?.[1]);
+    if (!date || !storeName) continue;
+    rawRows.push({ date, storeName, amount: num(row?.[4]) });
+  }
+
+  const rows = rawRows.filter((r) => r.date >= startDate && r.date <= end);
+
+  const sample = (arr: DailyAmountRow[]) => arr.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
   const earliestDateInTail = rawRows.length
-    ? rawRows.reduce((min, r) => (normalizeDateKey(r.date) < min ? normalizeDateKey(r.date) : min), normalizeDateKey(rawRows[0].date))
+    ? rawRows.reduce((min, r) => (r.date < min ? r.date : min), rawRows[0].date)
     : "";
 
   return {
@@ -595,8 +608,8 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
       tailWindowRows: DATE_RANGE_TAIL_WINDOW_ROWS,
       tailStart,
       tailRowsRead: tailRaw.length,
-      sampleFirst5OfTail: sample(tailRaw.slice(0, 5)),
-      sampleLast5OfTail: sample(tailRaw.slice(-5)),
+      sampleFirst5OfTail: sample(rawRows.slice(0, 5)),
+      sampleLast5OfTail: sample(rawRows.slice(-5)),
       earliestDateInTail, // 이게 startDate보다 늦으면 창을 더 넓혀야 할 수도 있음
       windowFullyCoversStartDate: !earliestDateInTail || earliestDateInTail <= startDate,
       rawRowsBeforeFilter: rawRows.length,
@@ -605,7 +618,7 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
   };
 }
 
-export async function readDailyHistoryRowsForDateRange(startDate: string, endDate?: string): Promise<FlatDailyHistoryRow[]> {
+export async function readDailyHistoryRowsForDateRange(startDate: string, endDate?: string): Promise<DailyAmountRow[]> {
   const { rows } = await readDailyHistoryRowsForDateRangeInternal(startDate, endDate);
   return rows;
 }

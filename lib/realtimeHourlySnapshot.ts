@@ -1,6 +1,6 @@
 import { getHistorySheetId, getSheetValuesById, ensureSheetExistsById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
 import { readTodayDailyHistoryRows } from "@/lib/dailySales";
-import { getCompanyProjectionRatio } from "@/lib/hourlyPaceProfile";
+import { getCompanyProjectionRatio, getFirstStableProjectionHour } from "@/lib/hourlyPaceProfile";
 
 // MARK 2026-09: "전주 동시간대비 증감율" 추적을 위한 시간별 매출 기록. 요청 배경:
 // "실시간으로 다 기록하면 너무 양이 많으니까 정시에 기록하는 루틴으로 하고 싶고, 매장운영이
@@ -194,6 +194,8 @@ export async function readRealtimeHourlyTrend() {
     projectedEndOfDayAmount = Math.round(todayAtCurrentHour * avgRatio);
     projectionSource = "last_week_live";
   }
+  // 예측이 아직 없을 때(대부분 이른 시간대) "언제부터 뜨는지" 화면에 정확히 알려주기 위한 값.
+  const projectionAvailableFromHour = projectedEndOfDayAmount ? null : getFirstStableProjectionHour(isWeekendToday);
 
   return {
     today,
@@ -203,6 +205,7 @@ export async function readRealtimeHourlyTrend() {
     lastWeekFinalAmount: primaryLastWeekFinalAmount,
     projectedEndOfDayAmount,
     projectionSource,
+    projectionAvailableFromHour,
     weeksUsedForProjection: ratios.length,
   };
 }

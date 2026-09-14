@@ -61,6 +61,18 @@ export function getCompanyProjectionRatio(hourLabel: string, isWeekend: boolean)
   return ratio;
 }
 
+// MARK 2026-09-14: "실시간 탭에 매출예측이 어디 나오는지 모르겠다" 문의 — 이른 시간대(11~13시)는
+// 배율이 너무 불안정해서 일부러 안 보여주는 건데, "언제부터 뜨는지"를 화면에 정확히 알려주는 게
+// 훨씬 친절합니다. 배율이 안정권(MAX_STABLE_RATIO 미만)에 처음 들어오는 시각을 찾아줍니다.
+export function getFirstStableProjectionHour(isWeekend: boolean): string | null {
+  const table = isWeekend ? COMPANY_WEEKEND_PROJECTION_RATIO : COMPANY_WEEKDAY_PROJECTION_RATIO;
+  const hours = Object.keys(table).sort();
+  for (const h of hours) {
+    if (table[h] < MAX_STABLE_RATIO) return h;
+  }
+  return null;
+}
+
 // 매장별 "주말(토/일) 일평균 ÷ 평일(월~금) 일평균" 배율. buildStoreCards의 요일가중치
 // (예전엔 전 매장 공통 1.7 하나였음)를 매장별 실측치로 교체하는 데 씁니다.
 // 데이터에 없는 매장(엑셀 이후 신규 매장 등)은 DEFAULT_WEEKEND_WEIGHT로 폴백합니다.

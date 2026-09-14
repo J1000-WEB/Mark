@@ -284,11 +284,18 @@ function daysBetweenInclusive(a: string, b: string) {
 // MARK 6.24: 매장별 탭 카드 — 주간/월간 누계·예상달성, 전사 vs 점포 TOP10, 재고/RT, 진행 이벤트, 최근추이.
 export async function buildStoreCards(storeName: string, dateOverride?: string) {
   const targetDate = dateOverride || yesterdayDateKey();
-  // MARK 2026-09-14: 여기도 loadDailyFlatRows()(전체 A:ZZ) 타임아웃 문제였습니다 — 이 함수가
-  // 실제로 쓰는 범위는 이번달 누계 + 최근14일 추이/급증/회전율 + 전전주 비교 + 진행중 이벤트
-  // 기간(스페셜오퍼"위크"라 보통 며칠~1주 남짓) 정도로, 넉넉히 45일 창이면 다 커버됩니다.
-  // 그 날짜들만 targeted로 읽습니다(컬럼A 스캔 1번 + 필요한 구간만 읽기).
-  const historyWindowStart = addDays(targetDate, -45);
+  // MARK 2026-09-14: loadDailyFlatRows()(전체 A:ZZ) 제거로도 여전히 타임아웃이 났습니다 —
+  // 처음엔 45일치를 전부 품목 상세(item-level, G열 JSON 펼치기 포함)로 읽었는데, 실제로
+  // 품목 상세가 필요한 건 최근 ~21일(신상품 반응 계산)뿐이고, 주간/월간 누계나 최근추이
+  // 차트처럼 "날짜별 총액"만 있으면 되는 계산까지 전부 무겁게 펼치고 있었습니다. 게다가
+  // readDailyHistoryBlock가 흩어진 블록을 순차로 읽던 것도 병목이었습니다(별도로 병렬화함).
+  // 이제 (1) 총액만 필요한 곳은 A~E열 직접읽기(readDailyHistoryRowsForDateRange, JSON 펼치기
+  // 없음)로, (2) 품목 상세가 진짜 필요한 곳만 좁힌 21일 창으로 나눠서 읽습니다.
+  const historyAmountRows = await readDailyHistoryRowsForDateRange(addDays(targetDate, -400), targetDate);
+  const scopedHistoryAmountRows = filterAmountRowsByStore(historyAmountRows, storeName);
+  const companyHistoryAmountRows = filterAmountRowsByStore(historyAmountRows, undefined);
+
+  const historyWindowStart = addDays(targetDate, -22); // "최근 21일 이내 입고" 신상품 반응 계산이 가장 넓게 필요로 하는 범위 + 여유 1일
   const historyWindowDates: string[] = [];
   for (let d = historyWindowStart; d <= targetDate; d = addDays(d, 1)) historyWindowDates.push(d);
   const allRows = await readDailyHistoryRowsForExactDates(historyWindowDates);
@@ -304,11 +311,13 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
 
   // MARK 6.26: 이벤트(스페셜오퍼위크) 기간을 먼저 구해둡니다 — 주간 예측 계산에서
   // 이벤트 기간의 매출을 요일가중치 기준값 계산에서 빼기 위해 필요합니다.
+  // MARK 2026-09-14: 이벤트 매출 합산도 날짜별 총액만 있으면 되므로(품목 상세 불필요),
+  // 21일 창으로 좁힌 allRows 대신 훨씬 넓게(400일) 커버하는 historyAmountRows를 씁니다 —
+  // 스페셜오퍼위크가 그보다 오래 진행중이어도 정확히 계산되고, 더 가볍습니다.
   let storeEvents: any[] = [];
   try {
     const { buildSpecialOfferEvents } = await import("@/lib/specialOfferWeek");
-    const primaryForEvents = allRows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
-    const mergedForEvents = mergeStoreDailyAmounts(primaryForEvents, companyAmountRows);
+    const mergedForEvents = mergeStoreDailyAmounts(companyHistoryAmountRows, companyAmountRows);
     const flatForEvents = flattenMergedAmounts(mergedForEvents);
     const { events } = await buildSpecialOfferEvents(flatForEvents);
     storeEvents = events.filter((e: any) => normalizeStoreKey(e.storeName) === normalizeStoreKey(storeName));
@@ -333,7 +342,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   for (let d = weekStart; d <= weekEnd; d = addDays(d, 1)) weekDates.push(d);
 
   const weekAmountByDate = mergeDateTotals(
-    storeRows.filter((r) => r.date >= weekStart && r.date <= weekEnd),
+    scopedHistoryAmountRows.filter((r) => r.date >= weekStart && r.date <= weekEnd),
     scopedAmountRows.filter((r) => r.date >= weekStart && r.date <= weekEnd)
   );
 
@@ -386,7 +395,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const monthElapsedDays = Math.min(daysBetweenInclusive(monthStart, monthEnd), daysBetweenInclusive(monthStart, targetDate));
   const monthTotalDays = daysBetweenInclusive(monthStart, monthEnd);
   const monthAmountByDate = mergeDateTotals(
-    storeRows.filter((r) => r.date >= monthStart && r.date <= targetDate),
+    scopedHistoryAmountRows.filter((r) => r.date >= monthStart && r.date <= targetDate),
     scopedAmountRows.filter((r) => r.date >= monthStart && r.date <= targetDate)
   );
   const monthCumulative = Array.from(monthAmountByDate.values()).reduce((s, v) => s + v, 0);
@@ -909,8 +918,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   // ---- STEP8 최근 14일 매출 추이 (전사 비교 포함, Daily_Sales_History 우선) ----
   const trendStart = addDays(targetDate, -13);
   const inTrendRange = (r: { date: string }) => r.date >= trendStart && r.date <= targetDate;
-  const byDate = mergeDateTotals(storeRows.filter(inTrendRange), scopedAmountRows.filter(inTrendRange));
-  const companyByDate = mergeDateTotals(companyRows.filter(inTrendRange), companyAmountRows.filter(inTrendRange));
+  const byDate = mergeDateTotals(scopedHistoryAmountRows.filter(inTrendRange), scopedAmountRows.filter(inTrendRange));
+  const companyByDate = mergeDateTotals(companyHistoryAmountRows.filter(inTrendRange), companyAmountRows.filter(inTrendRange));
   const trend: { date: string; amount: number; companyAmount: number }[] = [];
   for (let d = trendStart; d <= targetDate; d = addDays(d, 1)) {
     trend.push({ date: d, amount: byDate.get(d) || 0, companyAmount: companyByDate.get(d) || 0 });

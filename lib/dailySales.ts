@@ -520,15 +520,20 @@ function mergeNearbyRanges(ranges: { start: number; end: number }[], maxGap = 30
   return merged;
 }
 
+// MARK 2026-09-14: 매장 탭(buildStoreCards)이 45일치 날짜를 한 번에 요청하면서, 여기가
+// 범위별로 순차(await 하나씩)로 읽던 게 새로운 병목이 됐습니다 — 블록이 여러 개면(과거 날짜는
+// 보통 붙어있어서 합쳐지지만, "오늘"은 흩어져 있을 수 있음) 그 개수만큼 네트워크 왕복이
+// 직렬로 쌓입니다. 병렬로 한 번에 요청하도록 바꿉니다(같은 횟수의 API 호출, 훨씬 빠름).
 async function readDailyHistoryBlock(historyId: string, ranges: { start: number; end: number }[] | undefined): Promise<FlatDailyHistoryRow[]> {
   if (!ranges || !ranges.length) return [];
   const merged = mergeNearbyRanges(ranges);
-  const all: FlatDailyHistoryRow[] = [];
-  for (const range of merged) {
-    const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
-    all.push(...expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]));
-  }
-  return all;
+  const chunks = await Promise.all(
+    merged.map(async (range) => {
+      const tailRows = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A${range.start}:ZZ${range.end}`).catch(() => [] as any[]);
+      return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+    })
+  );
+  return chunks.flat();
 }
 
 // MARK 2026-09: 시간별 매출 기록(realtimeHourlySnapshot.ts)에서도 "오늘 누적" 데이터가

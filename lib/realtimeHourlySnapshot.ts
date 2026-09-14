@@ -1,5 +1,6 @@
 import { getHistorySheetId, getSheetValuesById, ensureSheetExistsById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
 import { readTodayDailyHistoryRows } from "@/lib/dailySales";
+import { getCompanyProjectionRatio } from "@/lib/hourlyPaceProfile";
 
 // MARK 2026-09: "전주 동시간대비 증감율" 추적을 위한 시간별 매출 기록. 요청 배경:
 // "실시간으로 다 기록하면 너무 양이 많으니까 정시에 기록하는 루틴으로 하고 싶고, 매장운영이
@@ -174,10 +175,24 @@ export async function readRealtimeHourlyTrend() {
     if (atSameHour && atSameHour > 0 && finalAmount) ratios.push(finalAmount / atSameHour);
   });
 
+  // MARK 2026-09-14: "지난주 같은 시각" 라이브 비교(위 ratios)는 Realtime_Hourly_Snapshot에
+  // 최소 1주치가 쌓여야만 계산되는데, 방금 GitHub Actions 기록을 시작해서 사실상 데이터가
+  // 없었습니다("실시간 매출추이 데이터 쌓을 필요없이 내가 주차별로 해서 주면되는거였네"). 대신
+  // 소천님이 주신 6주치 평일/주말 시간대별 집계(hourlyPaceProfile.ts)로 계산한, 훨씬 안정적인
+  // 배율을 우선 사용합니다. 라이브 데이터가 쌓여서 그쪽도 계산 가능해지면 폴백으로 씁니다.
+  const todayDow = nowKST().getDay();
+  const isWeekendToday = todayDow === 0 || todayDow === 6;
+  const staticRatio = getCompanyProjectionRatio(currentHourLabel, isWeekendToday);
+
   let projectedEndOfDayAmount: number | null = null;
-  if (todayAtCurrentHour && ratios.length) {
+  let projectionSource: "historical_profile" | "last_week_live" | null = null;
+  if (todayAtCurrentHour && staticRatio) {
+    projectedEndOfDayAmount = Math.round(todayAtCurrentHour * staticRatio);
+    projectionSource = "historical_profile";
+  } else if (todayAtCurrentHour && ratios.length) {
     const avgRatio = ratios.reduce((s, r) => s + r, 0) / ratios.length;
     projectedEndOfDayAmount = Math.round(todayAtCurrentHour * avgRatio);
+    projectionSource = "last_week_live";
   }
 
   return {
@@ -187,6 +202,7 @@ export async function readRealtimeHourlyTrend() {
     hasLastWeekData: lastWeekMap.size > 0,
     lastWeekFinalAmount: primaryLastWeekFinalAmount,
     projectedEndOfDayAmount,
+    projectionSource,
     weeksUsedForProjection: ratios.length,
   };
 }

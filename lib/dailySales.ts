@@ -542,6 +542,19 @@ export async function readTodayDailyHistoryRows(): Promise<{ today: string; rows
   return { today, rows };
 }
 
+// MARK 2026-09-14: 매장 탭(daily-briefing)의 "호조/부진 상품" 계산은 딱 두 날짜(대상일/비교일)의
+// 품목 상세(품번/상품명 등)만 있으면 되는데, 여태 Daily_Sales_History 전체(A:ZZ)를 통째로 읽어서
+// 펼치고 있었습니다 — 특별오퍼위크/실시간 탭에서 이미 겪은 것과 완전히 같은 패턴(시트가 커지면서
+// 결국 타임아웃)입니다. 필요한 날짜 몇 개만 컬럼A 스캔으로 찾아서 그 구간만 읽고 펼칩니다.
+export async function readDailyHistoryRowsForExactDates(dateKeys: string[]): Promise<FlatDailyHistoryRow[]> {
+  const historyId = getHistorySheetId();
+  const uniqueDates = Array.from(new Set(dateKeys.filter(Boolean)));
+  if (!uniqueDates.length) return [];
+  const ranges = await findDailyHistoryRowRangesForDates(historyId, uniqueDates);
+  const allRanges = uniqueDates.flatMap((d) => ranges.get(d) || []);
+  return readDailyHistoryBlock(historyId, allRanges);
+}
+
 // MARK 2026-09-11: 스페셜오퍼위크 실적 자동갱신(auto-special-offer-actuals)이 매일 Daily_Sales_History
 // 전체(A:ZZ)를 통째로 읽어서 상세행으로 펼치고 있었습니다 — 9월 들어 시트가 계속 커지면서(특히
 // 실시간 탭용 upsert가 10~15분마다 도는 뒤로 더 빠르게) 결국 응답이 타임아웃나기 시작했습니다
@@ -713,7 +726,9 @@ export async function readRealtimeOverview() {
       return map;
     }, new Map()).values()
   ).map((x: any) => ({ ...x, skuCount: x.skuCount.size }))
-   .sort((a: any, b: any) => b.dailySales - a.dailySales)
+   // MARK 2026-09-12: "매장별 순위가 수량 기준으로 되어있는데 금액 기준으로" 요청 —
+   // 실시간 탭의 "매장별 오늘 매출 순위"는 매출금액(dailyAmount) 기준으로 정렬합니다.
+   .sort((a: any, b: any) => b.dailyAmount - a.dailyAmount)
    .slice(0, 30);
 
   // MARK: "오늘 잘 팔리는 상품 TOP10" — 재고 이슈 자리에 있던 걸 여기로 옮기면서 추가.

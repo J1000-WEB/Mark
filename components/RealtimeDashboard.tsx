@@ -64,9 +64,10 @@ function HourlyTrendChart({ trend }: { trend: any }) {
             오늘 예상 마감 매출 {won(projected)}
           </span>
         ) : (
-          <span className="text-xs font-semibold text-slate-400">
-            {trend?.hasLastWeekData ? "예상치 계산 중" : "지난주 데이터가 쌓이면 예상 마감 매출도 계산됩니다"}
-          </span>
+          // MARK 2026-09-14: 예상 마감 매출이 이제 과거 6주 평일/주말 실측 배율(hourlyPaceProfile.ts)로
+          // 계산돼서 "지난주 데이터가 쌓이면" 문구가 더 이상 정확하지 않습니다 — 지금 못 뜨는 이유는
+          // 대부분 "아직 이른 시간대라 배율이 불안정해서"입니다.
+          <span className="text-xs font-semibold text-slate-400">이른 시간대라 아직 예측이 안정적이지 않아요</span>
         )
       }
     >

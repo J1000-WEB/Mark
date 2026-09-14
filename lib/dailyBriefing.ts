@@ -1,9 +1,10 @@
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { readDailyHistoryRowsForExactDates, readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
 import { getWeatherForStoreOnDate, weatherActionTip } from "@/lib/storeRegion";
 import { loadStyleLaunchMap } from "@/lib/styleLaunchMaster";
 import { mergeDateTotals, getComparisonDateForDaily, mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
+import { getStoreWeekendWeight } from "@/lib/hourlyPaceProfile";
 
 // MARK 6.27: "스타일별 채널별 입고/판매/재고현황"(→Daily_Sales_History, qty×Style_Price_History 단가로
 // 금액을 역산) 은 수량은 정확하지만 금액에 오차가 있을 수 있습니다. 그래서 "매출 총액/누계/추이"처럼
@@ -64,12 +65,6 @@ function yesterdayDateKey() {
   return ymd(d);
 }
 
-async function loadDailyFlatRows() {
-  const historyId = getHistorySheetId();
-  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
-  return expandAnyDailyHistoryRows(raw || []);
-}
-
 type FlatRow = { date: string; storeName: string; styleCode: string; productName: string; qty: number; amount: number; stock: number; size?: string };
 
 function filterByStore(rows: FlatRow[], storeName?: string) {
@@ -112,13 +107,18 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   const targetDate = dateOverride || yesterdayDateKey();
   const { compareDate, compareLabel } = getComparisonDateForDaily(targetDate);
 
-  const allRows = await loadDailyFlatRows();
-  const scoped = filterByStore(allRows, storeName);
+  // MARK 2026-09-14: loadDailyFlatRows()(Daily_Sales_History 전체 A:ZZ 읽기+펼치기)가 시트가
+  // 커지면서 타임아웃의 원인이 됐습니다(특별오퍼위크/실시간 탭에서 이미 겪은 것과 같은 패턴 —
+  // "매장탭 가동이 안된다" 제보의 원인). 실제로 필요한 건 (1) 날짜별 매출 총액(byDateAmount —
+  // 최근 며칠~한 달 남짓이면 충분)과 (2) 딱 두 날짜(대상일/비교일)의 품목 상세(호조/부진
+  // 상품)뿐이라, 각각 훨씬 가벼운 방식으로 나눠서 읽습니다.
+  const historyAmountRows = await readDailyHistoryRowsForDateRange(addDays(targetDate, -400), targetDate);
+  const scopedAmountFromHistory = filterAmountRowsByStore(historyAmountRows, storeName);
 
   // MARK 6.40: 일간 탭과 매장 탭이 같은 병합 로직(lib/storeDailyAmount.ts)을 공유합니다.
   const amountRows = await loadStoreAmountRows();
   const scopedAmountRows = filterAmountRowsByStore(amountRows, storeName);
-  const byDateAmount = mergeDateTotals(scoped, scopedAmountRows);
+  const byDateAmount = mergeDateTotals(scopedAmountFromHistory, scopedAmountRows);
 
   function amountForDate(dateKey: string) {
     return byDateAmount.get(dateKey) || 0;
@@ -136,7 +136,9 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
     ? ((targetAmount - sameWeekdayLastWeekAmount) / sameWeekdayLastWeekAmount) * 100
     : targetAmount ? 100 : 0;
 
-  const { best, worst } = topProductMovers(scoped, targetDate, compareDate);
+  const itemRows = await readDailyHistoryRowsForExactDates([targetDate, compareDate]);
+  const scopedItemRows = filterByStore(itemRows, storeName);
+  const { best, worst } = topProductMovers(scopedItemRows, targetDate, compareDate);
 
   const lines: string[] = [];
   const scopeLabel = storeName ? storeName : "전사";
@@ -246,11 +248,16 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   };
 }
 
+// MARK 2026-09-14: 이 함수는 매장 "이름 목록"만 있으면 되는데(품목 상세 필요 없음), 여태
+// loadDailyFlatRows()로 전체 JSON까지 펼쳐서 이름만 꺼내 쓰고 있었습니다. 점포 열(B)만 읽으면
+// 충분해서 G열(상세JSON) 파싱 자체를 건너뜁니다.
 export async function listCoreStoreNames(): Promise<string[]> {
-  const rows = await loadDailyFlatRows();
+  const historyId = getHistorySheetId();
+  const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "B:B").catch(() => [] as any[]);
   const names = new Set<string>();
-  for (const r of rows) {
-    if (isCoreOfflineSalesStore(r.storeName)) names.add(r.storeName);
+  for (let i = 1; i < raw.length; i++) {
+    const name = String(raw[i]?.[0] ?? "").trim();
+    if (name && isCoreOfflineSalesStore(name)) names.add(name);
   }
   return Array.from(names).sort((a, b) => a.localeCompare(b, "ko"));
 }
@@ -277,7 +284,14 @@ function daysBetweenInclusive(a: string, b: string) {
 // MARK 6.24: 매장별 탭 카드 — 주간/월간 누계·예상달성, 전사 vs 점포 TOP10, 재고/RT, 진행 이벤트, 최근추이.
 export async function buildStoreCards(storeName: string, dateOverride?: string) {
   const targetDate = dateOverride || yesterdayDateKey();
-  const allRows = await loadDailyFlatRows();
+  // MARK 2026-09-14: 여기도 loadDailyFlatRows()(전체 A:ZZ) 타임아웃 문제였습니다 — 이 함수가
+  // 실제로 쓰는 범위는 이번달 누계 + 최근14일 추이/급증/회전율 + 전전주 비교 + 진행중 이벤트
+  // 기간(스페셜오퍼"위크"라 보통 며칠~1주 남짓) 정도로, 넉넉히 45일 창이면 다 커버됩니다.
+  // 그 날짜들만 targeted로 읽습니다(컬럼A 스캔 1번 + 필요한 구간만 읽기).
+  const historyWindowStart = addDays(targetDate, -45);
+  const historyWindowDates: string[] = [];
+  for (let d = historyWindowStart; d <= targetDate; d = addDays(d, 1)) historyWindowDates.push(d);
+  const allRows = await readDailyHistoryRowsForExactDates(historyWindowDates);
   const storeRows = filterByStore(allRows, storeName);
   const companyRows = filterByStore(allRows, undefined);
 
@@ -303,8 +317,14 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   }
   const isEventDate = (dateKey: string) => storeEvents.some((e: any) => dateKey >= e.startDate && dateKey <= e.endDate);
 
-  // 요일별 가중치: 평일(월~목)=1.0, 금=1.4, 토/일=1.7 (주말이 평일보다 매출이 더 나오는 걸 반영)
-  const WEEKDAY_WEIGHT: Record<number, number> = { 0: 1.7, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.4, 6: 1.7 };
+  // MARK 2026-09-14: 예전엔 전 매장 공통으로 "평일(월~목)=1.0, 금=1.4, 토/일=1.7"을 하드코딩해서
+  // 썼는데, 소천님이 주신 매장별 6주치 평일/주말 시간대별 실측 엑셀(hourlyPaceProfile.ts)로
+  // 매장마다 실제 주말 배율이 얼마나 다른지 알 수 있게 됐습니다(예: 롯데아울렛 김해점은 주말이
+  // 평일의 4배 넘게 나오는데, 한남 플래그십은 1.3배 정도뿐). 그 엑셀은 평일을 월~금 하나로
+  // 묶어서 집계했기 때문에 금요일도 다른 평일과 동일하게 1.0으로 둡니다(예전처럼 금요일만
+  // 따로 1.4 얹는 임의 보정은 제거 — 실측 데이터 기준으로 더 정확합니다).
+  const weekendWeight = getStoreWeekendWeight(storeName);
+  const WEEKDAY_WEIGHT: Record<number, number> = { 0: weekendWeight, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: weekendWeight };
 
   // ---- STEP1 이번주 누계/예상달성 (요일가중치 + 이벤트기간 제외 반영) ----
   const weekStart = getMondayOf(targetDate);

@@ -3,6 +3,7 @@ import { appendValues, appendValuesById, ensureSheetExists, ensureSheetExistsByI
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 const RESULT_SHEET = "RT_Result";
 const RESULT_HEADER = ["보낼채널코드", "받을채널코드", "스타일", "칼라", "사이즈", "수량", "제안날짜", "다운로드날짜"];
@@ -328,7 +329,11 @@ export async function POST(req: Request) {
     const titles = await getSpreadsheetTitles();
     const productSheet = pickProductSheet(titles);
     const channelSheet = pickChannelSheet(titles);
-    const values = await getManySheetValues([productSheet, channelSheet], "A:AZ");
+    // MARK 2026-09-14: "금주/전주" 시트가 원래 예상(매주 새로 쓰는 작은 시트)과 달리
+    // 121,197행까지 자라있던 걸 dataBuilder.ts 쪽에서 이미 발견해서 그쪽은 A1:AZ5000으로
+    // 캡을 걸어뒀는데, 여기(RT 승인 시 칼라/사이즈 배분)는 같은 시트를 여전히 무제한("A:AZ")
+    // 으로 읽고 있었습니다. 헤더는 항상 위쪽 20행 안에 있으므로 같은 캡을 동일하게 적용합니다.
+    const values = await getManySheetValues([productSheet, channelSheet], "A1:AZ5000");
 
     const productRows = values[productSheet] || [];
     const channels = channelCodeMap(values[channelSheet] || []);

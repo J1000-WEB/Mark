@@ -1,20 +1,32 @@
 import { NextResponse } from "next/server";
-import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { buildPeriodSalesFromDailyHistory } from "@/lib/salesDataUpload";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 // MARK 6.17.3: 기간판매 파일을 안 올렸을 때, Daily_Sales_History 기반으로 계산한
 // 품번별 기간판매(수량/금액)를 작은 JSON으로 반환합니다 (브라우저에서 리포트 조립에 사용).
+//
+// MARK 2026-09-14: "전체적으로 무거워짐" 점검 — buildPeriodSalesFromDailyHistory가 실제로
+// 보는 기간은 today 기준 최근 28일뿐인데(period1~4, 각 7일씩), 매번 전체("A:ZZ", 수십만 행)를
+// 읽고 행당 JSON까지 펼치고 있었습니다. 필요한 날짜만 targeted하게 읽도록 바꿨습니다.
+function recentKstDateKeys(days: number, fromKey: string): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(`${fromKey}T00:00:00`);
+    d.setDate(d.getDate() - i);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return keys;
+}
+
 export async function GET() {
   try {
-    const historyId = getHistorySheetId();
-    const dailyRaw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
-    const dailyFlatRows = expandAnyDailyHistoryRows(dailyRaw || []);
     const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+    const dailyFlatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(28, todayKey));
 
     const mondayOf = (dateKey: string) => {
       const d = new Date(`${dateKey}T00:00:00`);

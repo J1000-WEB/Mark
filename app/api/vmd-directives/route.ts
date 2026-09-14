@@ -3,6 +3,7 @@ import { buildMarkStockMap, lookupMarkStock, isStockDiscrepant } from "@/lib/vmd
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 const GI_BOARD_BASE = "https://gi-board.vercel.app/api/archive";
 

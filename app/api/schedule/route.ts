@@ -1,13 +1,24 @@
 import { NextResponse } from "next/server";
-import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById, getHistorySheetId } from "@/lib/googleSheets";
+import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
 import { isCoreOfflineSalesStore } from "@/lib/dataBuilder";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
 import { buildSpecialOfferEvents } from "@/lib/specialOfferWeek";
 import { loadStoreAmountRows } from "@/lib/dailyBriefing";
 import { mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
+
+function todayKstKey() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+}
+
+function addDaysKey(dateKey: string, days: number) {
+  const d = new Date(`${dateKey}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -48,8 +59,6 @@ function categoryOf(largeCategory: string, group: string, content: string) {
   if (/휴무|스케줄|근무|연차|반차/.test(s)) return "schedule";
   return "general";
 }
-
-const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 
 // MARK 6.10: 날짜별 핵심 오프라인 매장 전체 매출 + 전주 동요일 대비 신장률.
 function buildDailyRevenueSeries(dailyFlatRows: { date: string; storeName: string; amount: number }[]) {
@@ -108,11 +117,15 @@ export async function GET() {
 
     // MARK 6.10: Daily_Sales_History를 한 번 읽어서 스페셜오퍼위크 매장별 매출 매칭 + 일별 매출 시리즈에 같이 사용합니다.
     // MARK 6.57: 일간/매장 탭과 동일하게, Daily_Sales_History가 없는 날짜는 일간매출(26년)으로 보완합니다.
+    // MARK 2026-09-14: "전체적으로 무거워짐" 점검 — 여기서 필요한 건 일자/점포/매출금액뿐이라
+    // (품번 단위 상세는 안 씀), 다른 곳에서 이미 쓰고 있는 "금액만 targeted하게 읽는" 방식
+    // (A:E열만, G열 JSON 펼치기 없음, 최근 30,000행 tail-window)으로 바꿨습니다. 예전엔 매번
+    // 전체("A:ZZ")를 읽고 행당 JSON까지 펼쳐서 훨씬 무거웠습니다.
     let dailyFlatRows: { date: string; storeName: string; amount: number }[] = [];
     try {
-      const historyId = getHistorySheetId();
-      const dailyRaw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ");
-      const primaryRows = expandAnyDailyHistoryRows(dailyRaw || []).map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+      const today = todayKstKey();
+      const sinceDate = addDaysKey(today, -400);
+      const primaryRows = await readDailyHistoryRowsForDateRange(sinceDate, today);
       const fallbackRows = await loadStoreAmountRows().catch(() => []);
       const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
       dailyFlatRows = flattenMergedAmounts(merged);

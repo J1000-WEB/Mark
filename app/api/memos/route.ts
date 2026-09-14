@@ -25,10 +25,15 @@ async function ensureMemoHeader(values: any[][]) {
   }
 }
 
+// MARK 2026-09-14: 다른 데이터 라우트들과 동일하게 no-store 명시 (auto-realtime-hourly-snapshot
+// 라우트에서 이 헤더가 빠지면 Vercel 엣지가 GET 응답을 캐시해버리는 걸 확인했습니다 — 여기서는
+// 메모를 저장(POST)해도 화면이 캐시된 옛날 메모를 계속 보여줄 수 있는 문제로 이어집니다).
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
 export async function GET(req: NextRequest) {
   try {
     const store = req.nextUrl.searchParams.get("store") || "";
-    if (!store) return NextResponse.json({ memo: "", updatedAt: "" });
+    if (!store) return NextResponse.json({ memo: "", updatedAt: "" }, { headers: NO_STORE_HEADERS });
 
     const values = await getSheetValues(MEMO_SHEET, "A:C");
     await ensureMemoHeader(values);
@@ -38,10 +43,10 @@ export async function GET(req: NextRequest) {
       store,
       memo: found?.[1] || "",
       updatedAt: found?.[2] || "",
-    });
+    }, { headers: NO_STORE_HEADERS });
   } catch (error: any) {
     console.error("memo GET failed:", error);
-    return NextResponse.json({ memo: "", updatedAt: "", error: error?.message || "memo GET failed" }, { status: 200 });
+    return NextResponse.json({ memo: "", updatedAt: "", error: error?.message || "memo GET failed" }, { status: 200, headers: NO_STORE_HEADERS });
   }
 }
 

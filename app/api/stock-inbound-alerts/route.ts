@@ -11,6 +11,10 @@ const ACTIVE_ALERTS_SHEET = "재고입고알림_활성";
 // 이미 다 처리해서 "재고입고알림_활성" 시트에 저장해두기 때문에, 여기서는 그 목록을
 // 그대로 읽어서 보여주기만 합니다 — 그래서 "한번 뜬 알림이 확인 전에 사라지는" 문제가
 // 없고, 실제로 재고가 줄어들 때까지(투입될 때까지) 계속 남아있습니다.
+// MARK 2026-09-14: 다른 데이터 라우트들과 동일하게 no-store 명시 (auto-realtime-hourly-snapshot
+// 라우트에서 이 헤더가 빠지면 Vercel 엣지가 GET 응답을 캐시해버리는 걸 확인했습니다).
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
 export async function GET() {
   try {
     const spreadsheetId = getDbSheetId();
@@ -32,9 +36,9 @@ export async function GET() {
       })
       .sort((a, b) => b.increase - a.increase);
 
-    return NextResponse.json({ ok: true, alerts });
+    return NextResponse.json({ ok: true, alerts }, { headers: NO_STORE_HEADERS });
   } catch (error: any) {
     console.error("stock-inbound-alerts failed:", error);
-    return NextResponse.json({ ok: false, error: error?.message || "조회 실패" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error?.message || "조회 실패" }, { status: 500, headers: NO_STORE_HEADERS });
   }
 }

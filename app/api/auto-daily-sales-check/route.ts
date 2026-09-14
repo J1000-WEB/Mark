@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getHistorySheetId, getSheetValuesById, ensureSheetExistsById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { normalizeDateKey } from "@/lib/storeDailyAmount";
 import { sendEmailAlert } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 const DAILY_HISTORY_SHEET = "Daily_Sales_History";
 const ALERT_STATE_SHEET = "Daily_Sales_Alert_State";
@@ -41,10 +42,14 @@ export async function GET(req: Request) {
       }
     }
 
+    // MARK 2026-09-14: "전체적으로 무거워짐" 점검 — 이 크론은 "어떤 날짜에 데이터가 있는지"만
+    // 확인하면 되는데, 매번 전체("A:ZZ", 수십만 행)를 읽고 행당 JSON까지 펼치고 있었습니다
+    // (다른 곳에서 이미 겪고 고친 것과 동일한 패턴). A열(날짜)만 읽으면 충분합니다.
     const historyId = getHistorySheetId();
-    const raw = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:ZZ");
-    const flatRows = expandAnyDailyHistoryRows(raw || []);
-    const dates = new Set(flatRows.map((r) => r.date).filter(Boolean));
+    const dateCol = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, "A:A");
+    const dates = new Set(
+      dateCol.slice(1).map((row: any) => normalizeDateKey(row?.[0])).filter(Boolean)
+    );
 
     const today = todayDateKey();
     const checkDate = addDaysKey(today, -2); // 그저께
@@ -113,9 +118,9 @@ export async function GET(req: Request) {
       newlyFlagged: newRows.length,
       resolved: updates.length,
       notes,
-    });
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("Daily sales snapshot check failed:", error);
-    return NextResponse.json({ ok: false, error: error?.message || "일간매출 스냅샷 확인 실패" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error?.message || "일간매출 스냅샷 확인 실패" }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 }

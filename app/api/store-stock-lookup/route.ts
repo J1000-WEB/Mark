@@ -1,11 +1,28 @@
 import { NextResponse } from "next/server";
-import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { normalizeStoreKey } from "@/lib/dataBuilder";
 import { normalizeDateKey } from "@/lib/storeDailyAmount";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
+
+// MARK 2026-09-14: 매장 직원이 하루에도 여러 번 스캔하는 화면인데, 매번 Daily_Sales_History
+// 전체("A:ZZ", 수십만 행)를 읽고 행당 JSON을 펼쳐서 찾고 있었습니다 — dataBuilder.ts 등
+// 다른 곳에서 이미 겪고 고친 것과 동일한 문제입니다. 이 화면이 실제로 보는 건 "가장 최근
+// 재고 스냅샷"뿐이라(매일 새벽 반영), 최근 N일치만 targeted하게 읽으면 충분합니다.
+const RECENT_DAYS_WINDOW = 21;
+
+function recentKstDateKeys(days: number): string[] {
+  const kst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const keys: string[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(kst);
+    d.setDate(d.getDate() - i);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return keys;
+}
 
 const GI_BOARD_BASE = "https://gi-board.vercel.app/api/archive";
 
@@ -49,9 +66,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "매장과 품번(또는 바코드)을 입력해주세요." }, { status: 400 });
     }
 
-    const historyId = getHistorySheetId();
-    const raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
-    const flatRows = expandAnyDailyHistoryRows(raw || []);
+    const flatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(RECENT_DAYS_WINDOW));
 
     const storeKey = normalizeStoreKey(store);
     const storeRows = flatRows.filter((r) => normalizeStoreKey(r.storeName) === storeKey);

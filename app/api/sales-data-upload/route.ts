@@ -16,12 +16,26 @@ import {
 } from "@/lib/salesDataUpload";
 import { saveReportSnapshot } from "@/lib/salesDataSnapshot";
 import { recordUpload } from "@/lib/uploadAlertState";
-import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { expandAnyDailyHistoryRows } from "@/lib/dailySales";
+import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
+
+// MARK 2026-09-14: "전체적으로 무거워짐" 점검 — buildPeriodSalesFromDailyHistory가 실제로
+// 보는 기간은 today 기준 최근 28일뿐인데(daily-history-period-sales/route.ts와 동일 함수),
+// 매번 전체("A:ZZ", 수십만 행)를 읽고 행당 JSON까지 펼치고 있었습니다. 필요한 날짜만
+// targeted하게 읽도록 바꿨습니다.
+function recentKstDateKeys(days: number, fromKey: string): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(`${fromKey}T00:00:00`);
+    d.setDate(d.getDate() - i);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return keys;
+}
 
 async function readWorkbooks(form: FormData, field: string) {
   const files = form.getAll(field).filter((f): f is File => f instanceof File && f.size > 0);
@@ -64,10 +78,8 @@ export async function POST(req: Request) {
       periodA = mergePeriodSalesAggs(periodAWbs.map((wb) => parsePeriodSalesSheet(wb)));
       if (periodBWbs.length) periodB = mergePeriodSalesAggs(periodBWbs.map((wb) => parsePeriodSalesSheet(wb)));
     } else {
-      const historyId = getHistorySheetId();
-      const dailyRaw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
-      const dailyFlatRows = expandAnyDailyHistoryRows(dailyRaw || []);
       const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+      const dailyFlatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(28, todayKey));
 
       // 날짜별로 다시 조회하면 API 호출이 너무 많아지므로, "주(월요일)" 단위로 묶어서 한 번씩만 조회합니다.
       const mondayOf = (dateKey: string) => {

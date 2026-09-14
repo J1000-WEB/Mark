@@ -3,6 +3,7 @@ import { buildPerformanceAnalysis } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 function clean(value: string | null) {
   return String(value || "").trim();

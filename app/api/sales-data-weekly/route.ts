@@ -56,12 +56,17 @@ export async function POST(req: Request) {
   }
 }
 
+// MARK 2026-09-14: 다른 데이터 라우트들과 동일하게 no-store 명시 (auto-realtime-hourly-snapshot
+// 라우트에서 이 헤더가 빠지면 Vercel 엣지가 GET 응답을 캐시해버리는 걸 확인했습니다 — 여기서는
+// 새로 업로드(POST)해도 탭을 열 때 캐시된 지난주 데이터가 계속 보일 수 있는 문제로 이어집니다).
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
 export async function GET() {
   try {
     const spreadsheetId = getDbSheetId();
     const rows = await getSheetValuesById(spreadsheetId, SHEET_NAME, "A:D").catch(() => []);
     const data = rows.slice(1).filter((r) => r?.[0]);
-    if (!data.length) return NextResponse.json({ ok: true, data: null });
+    if (!data.length) return NextResponse.json({ ok: true, data: null }, { headers: NO_STORE_HEADERS });
 
     const weekLabel = String(data[0][0]);
     const savedAt = String(data[0][1]);
@@ -83,9 +88,9 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ ok: true, data: { weekLabel, savedAt, styles, suggestions, priceSuggestions } });
+    return NextResponse.json({ ok: true, data: { weekLabel, savedAt, styles, suggestions, priceSuggestions } }, { headers: NO_STORE_HEADERS });
   } catch (error: any) {
     console.error("sales-data-weekly GET failed:", error);
-    return NextResponse.json({ ok: false, error: error?.message || "조회 실패" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error?.message || "조회 실패" }, { status: 500, headers: NO_STORE_HEADERS });
   }
 }

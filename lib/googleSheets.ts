@@ -11,7 +11,7 @@ export function getSheetId() {
   return id;
 }
 
-export async function getSheetsClient() {
+async function createSheetsClient() {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -26,6 +26,33 @@ export async function getSheetsClient() {
 
   await auth.authorize();
   return google.sheets({ version: "v4", auth });
+}
+
+// MARK 2026-09-14: "전체적으로 무거워졌다" 점검 — getSheetsClient()가 호출될 때마다 매번
+// 새 JWT 클라이언트를 만들고 authorize()를 호출하고 있었습니다. 화면 하나(/api/data 등)를
+// 불러올 때 시트를 10~20번씩 읽는데, 그때마다 실제 데이터 요청과 별개로 구글 인증 왕복이
+// 새로 발생한 셈입니다. 워밍된 서버리스 인스턴스 안에서는 인증된 클라이언트를 재사용해도
+// 안전합니다(googleapis 라이브러리가 내부적으로 토큰 만료를 감지해서 요청 시점에 자동으로
+// 갱신해줌) — 그래서 모듈 스코프에 캐시해두고 재사용합니다. 동시에 여러 호출이 몰려도 인증을
+// 중복으로 타지 않도록 진행 중인 Promise도 함께 캐시하고, 실패하면 다음 호출에서 다시
+// 시도할 수 있게 캐시를 비웁니다.
+let cachedSheetsClient: ReturnType<typeof google.sheets> | null = null;
+let cachedSheetsClientPromise: Promise<ReturnType<typeof google.sheets>> | null = null;
+
+export async function getSheetsClient() {
+  if (cachedSheetsClient) return cachedSheetsClient;
+  if (!cachedSheetsClientPromise) {
+    cachedSheetsClientPromise = createSheetsClient()
+      .then((client) => {
+        cachedSheetsClient = client;
+        return client;
+      })
+      .catch((error) => {
+        cachedSheetsClientPromise = null;
+        throw error;
+      });
+  }
+  return cachedSheetsClientPromise;
 }
 
 

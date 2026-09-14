@@ -2663,7 +2663,16 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     // 위에서 구한 performanceRows들의 before/during 기간뿐이므로, 그 중 가장 이른 날짜부터만
     // 읽습니다. sheetName이 확정된 압축 포맷("Daily_Sales_History")일 때만 이 지름길을 쓰고,
     // 다른 후보 이름으로 폴백된 경우엔 포맷이 보장되지 않으므로 전체 읽기로 안전하게 폴백합니다.
-    const neededSinceDate = earliestNeededDailyHistoryDate(performanceRows, override);
+    //
+    // MARK 2026-09-14: "RT 성과분석 들어가면 가끔 안 불러와진다" 문의 — 원인을 찾아보니
+    // performanceRows가 비어있거나(RT/프로모션 실적이 아직 없는 카테고리/날짜를 골랐을 때)
+    // earliestNeededDailyHistoryDate가 빈 문자열을 반환하면 neededSinceDate가 falsy가 되어
+    // 아래 "전체 읽기" 폴백(A:AZ, 수십만 행 + 행당 JSON 펼치기)으로 빠지고 있었습니다.
+    // 그래서 항상 최근 60일치를 기본 하한으로 둬서 neededSinceDate가 절대 비지 않게 합니다.
+    const DEFAULT_PERFORMANCE_LOOKBACK_DAYS = 60;
+    const neededSinceDate =
+      earliestNeededDailyHistoryDate(performanceRows, override) ||
+      dateAddDays(todayDateKey(), -DEFAULT_PERFORMANCE_LOOKBACK_DAYS);
 
     let dailyValues: any[][] = [];
     let dailySource = "NOT_FOUND";
@@ -2676,7 +2685,13 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
           const tailRows = await getSheetValuesById(historyId, dailySheetName, `A${startRow}:AZ`).catch(() => [] as any[]);
           dailyValues = [DAILY_HISTORY_HEADER, ...tailRows];
         } else {
-          dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);
+          // MARK 2026-09-14: startRow를 못 찾은 건(=neededSinceDate 이후 날짜가 A열에 없음)
+          // "그 기간엔 매칭될 데이터가 아직 없다"는 뜻이지 "다시 전체를 읽어야 한다"는 뜻이
+          // 아닙니다. 예전엔 여기서도 전체("A:AZ")를 다시 읽었는데, 이게 바로 RT탭 성과분석이
+          // 가끔 멈추거나 안 불러와지던 실제 원인이었습니다(수십만 행 + 행당 JSON 펼치기).
+          // 빈 결과로 안전하게 넘어갑니다 — 실제로 해당 기간에 판매 실적이 없다면 결과도
+          // 어차피 0이라 화면상 차이가 없습니다.
+          dailyValues = [DAILY_HISTORY_HEADER];
         }
       } else {
         dailyValues = await getSheetValuesById(historyId, dailySheetName, "A:AZ").catch(() => []);

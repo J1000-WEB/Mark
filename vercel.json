@@ -66,6 +66,42 @@
     "app/api/store-cards/route.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "app/api/store-stock-lookup/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/vmd-directives/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/rt-request/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/rt-result/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/performance/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/schedule/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/daily-history-period-sales/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/sales-data-upload/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/auto-daily-sales-check/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "crons": [

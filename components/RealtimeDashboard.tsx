@@ -66,8 +66,12 @@ function HourlyTrendChart({ trend }: { trend: any }) {
         ) : (
           // MARK 2026-09-14: 예상 마감 매출이 이제 과거 6주 평일/주말 실측 배율(hourlyPaceProfile.ts)로
           // 계산돼서 "지난주 데이터가 쌓이면" 문구가 더 이상 정확하지 않습니다 — 지금 못 뜨는 이유는
-          // 대부분 "아직 이른 시간대라 배율이 불안정해서"입니다.
-          <span className="text-xs font-semibold text-slate-400">이른 시간대라 아직 예측이 안정적이지 않아요</span>
+          // 대부분 "아직 이른 시간대라 배율이 불안정해서"라, 정확히 몇 시부터 뜨는지 알려줍니다.
+          <span className="text-xs font-semibold text-slate-400">
+            {trend?.projectionAvailableFromHour
+              ? `${trend.projectionAvailableFromHour}부터 예상 마감 매출이 표시돼요`
+              : "이른 시간대라 아직 예측이 안정적이지 않아요"}
+          </span>
         )
       }
     >
@@ -283,11 +287,25 @@ export default function RealtimeDashboard() {
           </section>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-4">
+            <section className="grid gap-4 md:grid-cols-5">
               <Kpi title="오늘 진행중 매출" value={won(data.totalDailyAmount || 0)} tone="blue" />
               <Kpi title="오늘 판매수량" value={`${fmtNum(data.totalDailySales || 0)}개`} tone="green" />
               <Kpi title="매출 발생 매장" value={`${fmtNum(data.activeChannels || 0)}개`} tone="purple" />
               <Kpi title="판매 상품" value={`${fmtNum(data.activeProducts || 0)}개`} tone="orange" />
+              {/* MARK 2026-09-14: "예상 마감 매출은 어디 나오는지 모르겠다" — 차트 카드 구석의 작은
+                  뱃지 하나뿐이라 눈에 잘 안 띄었습니다. 다른 KPI들과 나란히 카드로 하나 더 둡니다. */}
+              <Kpi
+                title="오늘 예상 마감 매출"
+                value={data.trend?.projectedEndOfDayAmount ? won(data.trend.projectedEndOfDayAmount) : "—"}
+                sub={
+                  data.trend?.projectedEndOfDayAmount
+                    ? undefined
+                    : data.trend?.projectionAvailableFromHour
+                    ? `${data.trend.projectionAvailableFromHour}부터 표시`
+                    : "이른 시간대"
+                }
+                tone="plain"
+              />
             </section>
 
             <section className="grid gap-6 lg:grid-cols-2">

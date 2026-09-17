@@ -457,6 +457,12 @@ function MoveTypeBadge({ value }: { value?: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${color}`}>{label}</span>;
 }
 
+// MARK 2026-09-17: 출고점이 안전재고 없이 전량 이동 대상(최근 판매 사실상 없음+재고 소량)일 때
+// 한눈에 보이도록 배지를 추가합니다.
+function FullClearBadge() {
+  return <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-black text-rose-700">📦 전량이동</span>;
+}
+
 function Briefing({ lines }: { lines: string[] }) {
   return (
     <Card title="💡 재고CTRL 브리핑" tone="purple">
@@ -528,6 +534,7 @@ function RTCard({
             <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusBadge(status)}`}>{statusLabel(status)}</span>
             <MoveTypeBadge value={it.moveType} />
             <PriorityBadge value={it.priority || "C"} />
+            {it.fromFullClear ? <FullClearBadge /> : null}
           </div>
           <div className="mt-1 flex items-center gap-2">
             <ProductThumb styleCode={it.styleCode} size={36} />
@@ -575,7 +582,7 @@ function RTCard({
         <div className="mt-3 max-h-72 overflow-y-auto rounded-2xl bg-white p-4 text-sm font-semibold leading-7 text-slate-700">
           <pre className="whitespace-pre-wrap break-words font-sans">{reason}</pre>
         </div>
-        <p className="mt-2 text-xs font-semibold text-slate-500">승인 시 RT_Result에 자동 저장됩니다. RT 판단은 스타일 단위, 출고는 칼라/사이즈 실재고 기준입니다.</p>
+        <p className="mt-2 text-xs font-semibold text-slate-500">승인 시 RT_Result에 자동 저장됩니다. RT 판단(이동 매장·수량)은 스타일 단위, 실제 출고 시 칼라/사이즈 배분은 받는점포의 사이즈별 부족량을 우선 반영하고(부족 정보가 없으면 출고점 재고비율로 대체) 승인 시점의 실재고 기준으로 계산합니다.</p>
       </details>
     </div>
   );
@@ -1715,6 +1722,221 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
   );
 }
 
+// MARK 2026-09-17: "재고컨트롤 탭안에 판매분 배분이라는 탭" 요청 — 기간을 고르면 그 기간에
+// 매장별로 팔린 수량만큼(배분율 적용) 물류(창고)에서 얼마를 보충하면 되는지 계산해서 보여주고,
+// ERP 업로드용 엑셀로 바로 내려받을 수 있게 합니다. "너무 무거워지지 않을까" 걱정하셔서
+// 기간은 최대 90일, 품번은 전사 판매량 TOP50까지만 다루도록 서버 쪽(buildSalesAllocationPlan)에서
+// 이미 제한해뒀고, 화면에도 그 제한을 안내 문구로 보여줍니다.
+const SALES_ALLOCATION_RATIOS = [50, 100, 150, 200];
+
+function SalesAllocationSection() {
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date(`${todayKSTInputValue()}T00:00:00`);
+    d.setDate(d.getDate() - 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [endDate, setEndDate] = useState(() => todayKSTInputValue());
+  const [ratio, setRatio] = useState(100);
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
+  const [plan, setPlan] = useState<any>(null);
+  const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
+
+  async function fetchPlan() {
+    if (!startDate || !endDate) {
+      setError("기간을 선택해주세요.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setPlan(null);
+    try {
+      const params = new URLSearchParams({ start: startDate, end: endDate, ratio: String(ratio) });
+      const res = await fetch(`/api/sales-allocation?${params.toString()}`, { cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "판매분 배분 계산에 실패했습니다.");
+      setPlan(body);
+    } catch (e: any) {
+      setError(e?.message || "판매분 배분 계산에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadExcel() {
+    if (!plan) return;
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ start: startDate, end: endDate, ratio: String(ratio), download: "1" });
+      const res = await fetch(`/api/sales-allocation?${params.toString()}`, { cache: "no-store" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "엑셀 다운로드에 실패했습니다.");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename\*=UTF-8''([^;]+)/);
+      const fileName = match ? decodeURIComponent(match[1]) : `판매분배분_${startDate}_${endDate}.xls`;
+      const a = document.createElement("a");
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e: any) {
+      alert(e?.message || "엑셀 다운로드에 실패했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  // 스타일별로 묶어서 보여줍니다(매장×컬러×사이즈 행이 많아지므로, 기본은 접어두고 펼쳐볼 수 있게).
+  const groupedByStyle = (() => {
+    if (!plan?.rows?.length) return [] as any[];
+    const map = new Map<string, { styleCode: string; productName: string; companyPeriodQty: number; rows: any[] }>();
+    for (const r of plan.rows) {
+      if (!map.has(r.styleCode)) {
+        map.set(r.styleCode, { styleCode: r.styleCode, productName: r.productName, companyPeriodQty: r.companyPeriodQty, rows: [] });
+      }
+      map.get(r.styleCode)!.rows.push(r);
+    }
+    return Array.from(map.values());
+  })();
+
+  return (
+    <Card
+      title="📦 판매분 배분"
+      tone="white"
+      right={plan ? (
+        <button
+          type="button"
+          onClick={downloadExcel}
+          disabled={downloading}
+          className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {downloading ? "다운로드 중..." : "⬇ ERP 엑셀 다운로드"}
+        </button>
+      ) : undefined}
+    >
+      <p className="mb-4 text-xs font-semibold text-slate-500">
+        선택한 기간에 매장별로 팔린 수량만큼 물류(창고)에서 매장으로 보충할 지시수량을 계산해요. 배분율 100%면 판매된 만큼 그대로, 200%면 두 배로 투입 제안을 줘요.
+        너무 무거워지지 않도록 기간은 최대 90일, 품번은 전사 판매량 기준 TOP50까지만 계산해요.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          시작일
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          종료일
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
+          배분율
+          <select
+            value={ratio}
+            onChange={(e) => setRatio(Number(e.target.value))}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+          >
+            {SALES_ALLOCATION_RATIOS.map((r) => (
+              <option key={r} value={r}>{r}%</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={fetchPlan}
+          disabled={loading}
+          className="h-10 rounded-full bg-blue-600 px-5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "계산 중..." : "조회"}
+        </button>
+      </div>
+
+      {error && <p className="mt-3 text-xs font-black text-red-600">⚠ {error}</p>}
+
+      {plan && (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs font-bold text-slate-500">
+            {plan.startDate} ~ {plan.endDate} · 배분율 {plan.ratioPercent}% · 대상 품번 {plan.styleCount}개
+            {plan.skuInventoryAvailable === false && " · ⚠ 컬러/사이즈별 물류재고를 찾지 못해 스타일 전체 재고로 대체 표시했어요."}
+          </p>
+          {!groupedByStyle.length ? (
+            <Empty />
+          ) : (
+            groupedByStyle.map((g) => {
+              const expanded = !!expandedStyles[g.styleCode];
+              return (
+                <div key={g.styleCode} className="rounded-2xl border border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedStyles((prev) => ({ ...prev, [g.styleCode]: !prev[g.styleCode] }))}
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left"
+                  >
+                    <span className="text-sm font-black text-slate-900">
+                      {g.productName} ({g.styleCode})
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">
+                      전사 누계판매 {fmtNum(g.companyPeriodQty)}개 · {g.rows.length}건 {expanded ? "▲" : "▼"}
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="overflow-x-auto border-t border-slate-100 px-4 pb-4">
+                      <table className="mt-3 w-full min-w-[720px] text-xs font-semibold text-slate-600">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-left text-[11px] font-black text-slate-400">
+                            <th className="py-2 pr-3">매장</th>
+                            <th className="py-2 pr-3">컬러</th>
+                            <th className="py-2 pr-3">사이즈</th>
+                            <th className="py-2 pr-3">기간판매</th>
+                            <th className="py-2 pr-3">매장재고</th>
+                            <th className="py-2 pr-3">물류가용재고</th>
+                            <th className="py-2 pr-3">지시수량</th>
+                            <th className="py-2 pr-3">지시후매장재고</th>
+                            <th className="py-2 pr-3">지시후물류재고</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.rows.map((r: any, i: number) => (
+                            <tr key={`${r.storeName}__${r.color}__${r.size}__${i}`} className="border-b border-slate-50">
+                              <td className="py-2 pr-3">{r.storeName}</td>
+                              <td className="py-2 pr-3">{r.colorName || r.color}</td>
+                              <td className="py-2 pr-3">{r.size}</td>
+                              <td className="py-2 pr-3">{fmtNum(r.periodQty)}</td>
+                              <td className="py-2 pr-3">{fmtNum(r.storeStock)}</td>
+                              <td className="py-2 pr-3">{r.warehouseStock === null ? "-" : fmtNum(r.warehouseStock)}</td>
+                              <td className="py-2 pr-3 font-black text-blue-600">{fmtNum(r.orderQty)}</td>
+                              <td className="py-2 pr-3">{fmtNum(r.storeStockAfter)}</td>
+                              <td className="py-2 pr-3">{fmtNum(r.warehouseStockAfter)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function StoreRequestRtSection() {
   const [styleCode, setStyleCode] = useState("");
   const [color, setColor] = useState("");
@@ -2251,6 +2473,8 @@ export default function InventoryDashboard() {
         )}
 
         <StoreRequestRtSection />
+
+        <SalesAllocationSection />
 
         <RTSuggestionSection
           items={data.rtSuggestions || []}

@@ -497,6 +497,48 @@ function parseInventory(rows: any[][]) {
   return Array.from(grouped.values());
 }
 
+// MARK 2026-09-17: "판매분 배분" 탭 — 위 parseInventory()는 이 시트가 컬러/사이즈별 행인 걸
+// 알면서도 스타일 단위로 바로 합산해버립니다(그것만으로 충분했던 기존 용도엔 문제 없음).
+// 판매분 배분은 컬러/사이즈별 물류가용재고가 필요해서, 같은 시트를 컬러/사이즈 컬럼까지
+// 찾아서 SKU 단위로 남겨두는 버전을 별도로 둡니다. 헤더에서 컬러/사이즈 라벨을 못 찾으면
+// (fallback 없이 -1) SKU 단위는 포기하고 스타일 단위만 있다는 뜻으로 skuLevel:false를
+// 돌려줍니다 — 엉뚱한 열을 컬러/사이즈로 잘못 읽어서 조용히 틀린 값을 주는 것보다 안전합니다.
+function parseInventorySkuLevel(rows: any[][]) {
+  if (!rows.length) return { skuLevel: false, rows: [] as any[] };
+
+  const headerRow = findHeaderRow(rows, ["스타일", "가용(온)"]);
+  const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
+
+  const styleCol = findCol(header, ["스타일"], 5);
+  const productCol = findCol(header, ["스타일명"], 6);
+  const colorCol = findCol(header, ["컬러코드", "칼라코드", "컬러", "칼라"]);
+  const sizeCol = findCol(header, ["사이즈코드", "사이즈"]);
+  const offlineStockCol = findCol(header, ["가용(오프)", "가용오프"], 18);
+
+  if (colorCol < 0 || sizeCol < 0) return { skuLevel: false, rows: [] as any[] };
+
+  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
+  const grouped = new Map<string, { styleCode: string; productName: string; color: string; size: string; offlineStock: number }>();
+
+  for (let r = startRow; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const styleCode = text(row[styleCol]);
+    if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
+    const color = text(row[colorCol]);
+    const size = text(row[sizeCol]);
+    const offlineStock = num(row[offlineStockCol]);
+    if (!color || !size) continue;
+
+    const key = `${styleCode}__${color}__${size}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, { styleCode, productName: text(row[productCol]), color, size, offlineStock: 0 });
+    }
+    grouped.get(key)!.offlineStock += offlineStock;
+  }
+
+  return { skuLevel: true, rows: Array.from(grouped.values()) };
+}
+
 export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
   const map = new Map<string, any>();
   for (const r of rows) {
@@ -1034,6 +1076,36 @@ function buildOnlineTransferSuggestions(offlineRows: any[], onlineRows: any[], i
 }
 
 
+// MARK 2026-09-17: "RT 제안은 품번 단위인데, 실제 지시서(RT_Result)는 컬러/사이즈로 쪼개서
+// 나간다" 개선 — 지금까지는 승인 시점에 출고점이 "갖고 있는 재고 비율"대로만 컬러/사이즈를
+// 나눴어서(allocateByStock), 받는점포가 실제로 어떤 사이즈가 부족한지는 전혀 반영이 안
+// 됐습니다(예: 출고점에 비인기 사이즈가 많으면 그 사이즈 위주로 채워짐). 제안을 만드는 이
+// 단계에서 받는점포의 사이즈(컬러+사이즈)별 목표재고 대비 부족량을 같이 계산해서
+// suggestQty와 함께 실어두고, 승인 시(app/api/rt-result/route.ts)에는 이 값으로 실제
+// 출고점 재고를 "부족한 사이즈 우선"으로 나누도록 합니다. skuRows(컬러+사이즈별 재고/판매)는
+// buildProductRowsFromDailyHistory가 이미 만들어서 각 점포×품번 row에 갖고 있습니다.
+function computeSkuNeedWeights(receiverSkuRows: any[], targetWeeks: number) {
+  return (receiverSkuRows || [])
+    .filter((s: any) => s.color && s.size)
+    .map((s: any) => {
+      const stock = Math.max(0, Number(s.stock || 0));
+      const weekNet = Math.max(0, Number(s.weekNet || 0));
+      // 그 사이즈가 이번 기간 판매가 없으면(weekNet=0) 목표재고를 0으로 둬서 "부족 없음"으로
+      // 봅니다 — 안 팔리는 사이즈까지 부족으로 잡아 억지로 채우지 않기 위함입니다.
+      const targetStock = weekNet > 0 ? Math.ceil(weekNet * targetWeeks) : 0;
+      const need = Math.max(0, targetStock - stock);
+      return { color: s.color, colorName: s.colorName || "", size: s.size, stock, weekNet, targetStock, need };
+    });
+}
+
+function summarizeSkuNeeds(weights: any[], limit = 3) {
+  const withNeed = weights.filter((w) => w.need > 0).sort((a, b) => b.need - a.need);
+  if (!withNeed.length) return "";
+  const parts = withNeed.slice(0, limit).map((w) => `${w.size}${w.colorName ? `(${w.colorName})` : ""} ${Math.round(w.need).toLocaleString("ko-KR")}장`);
+  const rest = withNeed.length > limit ? ` 외 ${withNeed.length - limit}건` : "";
+  return `사이즈별로 보면 ${parts.join(", ")}${rest} 부족합니다.`;
+}
+
 async function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
@@ -1083,6 +1155,13 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
   // MARK 6.7: 호조상품 RT의 입고점 목표재고를 2주 → 3주로 늘립니다.
   // (시뮬레이션 결과 이 값이 이동물량을 가장 크게 좌우하는 레버였습니다.)
   const RT_TARGET_STOCK_WEEKS = 3;
+  // MARK 2026-09-17: "판매가 사실상 없는 매장은 안전재고 없이 전량 이동" — 안전재고는
+  // 원래 "앞으로도 팔릴 것"을 전제로 품절 방지용으로 남겨두는 완충재고인데, 최근 2주
+  // (금주+전주) 합산 판매가 사실상 없으면 지킬 판매 자체가 없어서 의미가 없습니다. 재고도
+  // 소량일 때만(대량 재고는 별도 검토가 필요하므로 자동으로 전량 이동시키지 않음) 적용하고,
+  // 우수매장/플래그십은 구색 유지가 필요할 수 있어 예외로 항상 안전재고를 남깁니다.
+  const RT_FULL_CLEAR_RECENT_SALES_MAX = 1; // 최근 2주 합산 판매가 이 이하
+  const RT_FULL_CLEAR_STOCK_CAP = 5; // 재고가 이 이하일 때만 전량이동 후보
   const byStyle = new Map<string, any[]>();
   const storeAmountMap = new Map<string, number>();
 
@@ -1151,6 +1230,14 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
       if (prevNet > 0 && salesChangeRate <= -40) rtScore -= 10;
       rtScore = Math.max(0, Math.min(100, rtScore));
 
+      const isFullClearCandidate =
+        !priorityStore &&
+        (weekNet + prevNet) <= RT_FULL_CLEAR_RECENT_SALES_MAX &&
+        stock <= RT_FULL_CLEAR_STOCK_CAP;
+      const senderSafeStock = isFullClearCandidate
+        ? 0
+        : Math.max(3, Math.ceil(targetStock), Math.ceil(weekNet * 2));
+
       return {
         ...r,
         stock,
@@ -1163,15 +1250,9 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
         salesChangeRate,
         isNewProduct,
         priorityStore,
-        senderSafeStock: Math.max(
-          3,
-          Math.ceil(targetStock),
-          Math.ceil(weekNet * 2)
-        ),
-        transferableQty: Math.max(
-          0,
-          Math.floor(stock - Math.max(3, Math.ceil(targetStock), Math.ceil(weekNet * 2)))
-        ),
+        isFullClearCandidate,
+        senderSafeStock,
+        transferableQty: Math.max(0, Math.floor(stock - senderSafeStock)),
       };
     });
 
@@ -1242,6 +1323,9 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
           to.rtScore >= 65 && companyRank <= 50 ? "B" :
           "C";
 
+        const skuNeedWeights = computeSkuNeedWeights(to.skuRows, RT_TARGET_STOCK_WEEKS);
+        const skuNeedSummary = summarizeSkuNeeds(skuNeedWeights);
+
         rtSuggestions.push({
           moveType: "호조",
           styleCode,
@@ -1266,11 +1350,18 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
           salesChangeRate: Number(to.salesChangeRate.toFixed(1)),
           isNewProduct: to.isNewProduct,
           priorityStore: to.priorityStore,
+          fromFullClear: !!from.isFullClearCandidate,
+          // MARK 2026-09-17: 승인 시(rt-result/route.ts)에 출고점 재고를 컬러/사이즈로 나눌 때
+          // 이 값을 우선 씁니다 — 받는점포가 실제로 부족한 사이즈 비중대로 배분됩니다.
+          skuNeedWeights,
           reason: [
             `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`} 상품입니다.`,
             `${to.storeName}은 금주 판매 ${Math.round(to.weekNet || 0).toLocaleString("ko-KR")}개, 금주매출 ${Math.round(to.weekAmount || 0).toLocaleString("ko-KR")}원 기준으로 상품판매력 ${to.productPowerScore.toFixed(1)}점입니다.`,
             `현재 ${to.storeName} 재고는 ${Math.round(to.stock).toLocaleString("ko-KR")}개, 재고주수 ${to.stockWeeks >= 999 ? "판매없음" : `${to.stockWeeks.toFixed(1)}주`}로 목표재고 ${Math.round(to.targetStock).toLocaleString("ko-KR")}개 대비 부족하여 재고부족도 ${to.shortageScore.toFixed(1)}점으로 계산되었습니다.`,
-            `${from.storeName}은 현재 재고 ${Math.round(from.stock).toLocaleString("ko-KR")}개 중 안전재고 ${Math.round(fromSafeStock).toLocaleString("ko-KR")}개를 남기고 최대 ${Math.round(fromAllow).toLocaleString("ko-KR")}개까지 출고 가능하며, 이번 제안은 ${Math.round(suggestQty).toLocaleString("ko-KR")}개입니다.`,
+            skuNeedSummary,
+            from.isFullClearCandidate
+              ? `${from.storeName}은 이 상품 최근 2주 판매가 합산 ${Math.round(Number(from.weekNet || 0) + Number(from.prevNet || 0))}개로 사실상 없고 재고도 ${Math.round(from.stock).toLocaleString("ko-KR")}개로 소량이라, 안전재고 없이 전량(최대 ${Math.round(fromAllow).toLocaleString("ko-KR")}개) 이동 후보로 계산했습니다. 이번 제안은 ${Math.round(suggestQty).toLocaleString("ko-KR")}개입니다.`
+              : `${from.storeName}은 현재 재고 ${Math.round(from.stock).toLocaleString("ko-KR")}개 중 안전재고 ${Math.round(fromSafeStock).toLocaleString("ko-KR")}개를 남기고 최대 ${Math.round(fromAllow).toLocaleString("ko-KR")}개까지 출고 가능하며, 이번 제안은 ${Math.round(suggestQty).toLocaleString("ko-KR")}개입니다.`,
             `동일 상품 부족수량은 여러 출고점으로 분산 보충하도록 계산하여 특정 점포 재고를 전량 이동하지 않도록 했습니다.`,
             to.isNewProduct ? "신상품 4주 이내 판매 발생 상품으로 판매력 가중치가 반영되었습니다." : "",
             to.priorityStore && to.stock <= 0 ? "우수매장/플래그십 결품 상태라 판매기회 손실 방지를 위해 우선순위가 상승했습니다." : "",
@@ -1297,9 +1388,17 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
 
       const rowsEnriched = rows.map((r: any) => {
         const weekNet = Number(r.weekNet || 0);
+        const prevNet = Number(r.prevNet || 0);
         const stock = Number(r.storeStock || 0);
         const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
-        return { ...r, weekNet, stock, stockWeeks };
+        const priorityStore = isPriorityStore(r.storeName);
+        // 위 호조 엔진과 같은 기준(RT_FULL_CLEAR_RECENT_SALES_MAX/RT_FULL_CLEAR_STOCK_CAP) —
+        // 최근 2주 판매가 사실상 없고 재고도 소량이면 최소 보유수량 없이 전량 이동 후보입니다.
+        const isFullClearCandidate =
+          !priorityStore &&
+          (weekNet + prevNet) <= RT_FULL_CLEAR_RECENT_SALES_MAX &&
+          stock <= RT_FULL_CLEAR_STOCK_CAP;
+        return { ...r, weekNet, prevNet, stock, stockWeeks, priorityStore, isFullClearCandidate };
       });
 
       // 받는점포 후보: 그 품번을 실제로 팔고 있는 매장들 중,
@@ -1316,15 +1415,16 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
         .filter((r) => r.stockWeeks <= cutoffWeeks)
         .sort((a, b) => a.stockWeeks - b.stockWeeks);
 
-      // 보내는점포: 재고주수가 절대적으로 높은(=정체된) 매장. 진열 유지를 위해 최소수량은 남겨둡니다.
+      // 보내는점포: 재고주수가 절대적으로 높은(=정체된) 매장. 진열 유지를 위해 최소수량은
+      // 남겨두되, isFullClearCandidate(최근 판매 사실상 없음+재고 소량)면 0까지 남깁니다.
       const senders = rowsEnriched
-        .filter((r) => r.stock > RT_UNDERPERFORM_SENDER_KEEP_UNITS && r.stockWeeks >= RT_UNDERPERFORM_SENDER_STOCK_WEEKS_MIN)
+        .filter((r) => r.stock > (r.isFullClearCandidate ? 0 : RT_UNDERPERFORM_SENDER_KEEP_UNITS) && r.stockWeeks >= RT_UNDERPERFORM_SENDER_STOCK_WEEKS_MIN)
         .sort((a, b) => b.stockWeeks - a.stockWeeks);
 
       if (!receivers.length || !senders.length) continue;
 
       const remainingSend = new Map<string, number>();
-      for (const s of senders) remainingSend.set(s.storeName, Math.max(0, s.stock - RT_UNDERPERFORM_SENDER_KEEP_UNITS));
+      for (const s of senders) remainingSend.set(s.storeName, Math.max(0, s.stock - (s.isFullClearCandidate ? 0 : RT_UNDERPERFORM_SENDER_KEEP_UNITS)));
 
       for (const to of receivers) {
         const targetStock = Math.max(1, Math.ceil(to.weekNet * RT_UNDERPERFORM_FILL_TARGET_WEEKS));
@@ -1352,6 +1452,9 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
 
           const priority = from.stockWeeks >= 20 ? "A" : from.stockWeeks >= 12 ? "B" : "C";
 
+          const skuNeedWeights = computeSkuNeedWeights(to.skuRows, RT_UNDERPERFORM_FILL_TARGET_WEEKS);
+          const skuNeedSummary = summarizeSkuNeeds(skuNeedWeights);
+
           rtSuggestions.push({
             moveType: "부진",
             styleCode,
@@ -1372,12 +1475,17 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
             companyRank,
             isNewProduct: false,
             priorityStore: isPriorityStore(to.storeName),
+            fromFullClear: !!from.isFullClearCandidate,
+            skuNeedWeights,
             reason: [
               `전사 판매순위 ${companyRank === 9999 ? "권외" : `${companyRank}위`}로 TOP${RT_ELIGIBLE_RANK} 밖 부진상품입니다.`,
               `${from.storeName}은 이 상품 재고주수 ${from.stockWeeks >= 999 ? "판매없음(장기체화)" : `${from.stockWeeks.toFixed(1)}주`}로 과잉재고 상태입니다 (현재 재고 ${Math.round(from.stock).toLocaleString("ko-KR")}개).`,
               `${to.storeName}은 이 상품 기준 재고주수 ${to.stockWeeks.toFixed(1)}주로, 같은 상품을 파는 다른 매장들 대비 상대적으로 회전이 빠른(하위 ${Math.round(RT_UNDERPERFORM_RECEIVER_PERCENTILE * 100)}% 이내) 매장입니다.`,
+              skuNeedSummary,
               `과잉재고 매장에서 소화 가능한 매장으로 이동해 재고 소진과 판매 기회를 함께 노립니다. 이번 제안 수량은 ${Math.round(suggestQty).toLocaleString("ko-KR")}개입니다.`,
-              `출고점은 진열 유지를 위해 최소 ${RT_UNDERPERFORM_SENDER_KEEP_UNITS}개는 남겨두고 계산했습니다.`,
+              from.isFullClearCandidate
+                ? `${from.storeName}은 이 상품 최근 2주 판매가 합산 ${Math.round(Number(from.weekNet || 0) + Number(from.prevNet || 0))}개로 사실상 없고 재고도 소량이라, 최소 보유수량 없이 전량 이동 대상으로 계산했습니다.`
+                : `출고점은 진열 유지를 위해 최소 ${RT_UNDERPERFORM_SENDER_KEEP_UNITS}개는 남겨두고 계산했습니다.`,
             ].filter(Boolean).join("\n"),
           });
         }
@@ -2509,6 +2617,183 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
   }
 
   return Array.from(grouped.values());
+}
+
+// MARK 2026-09-17: "재고컨트롤 > 판매분 배분" 탭 — 사용자가 고른 기간에 매장별로 팔린
+// 수량만큼(배분율 적용) 물류(창고)에서 매장으로 보충 지시수량을 계산합니다.
+// Daily_Sales_History를 이 세션에서 이미 여러 번 겪은 OOM 문제와 같은 방식(시작행+끝행만
+// 찾아서 딱 그 구간만 읽기)으로 읽고, 전사 TOP50(기간 내 판매량 기준) 품번까지만 다룹니다.
+const SALES_ALLOCATION_MAX_RANGE_DAYS = 90;
+const SALES_ALLOCATION_STYLE_LIMIT = 50;
+
+async function readSalesAllocationFlatRows(startDate: string, endDate: string) {
+  const historyId = getHistorySheetId();
+  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", startDate, endDate);
+  let raw: any[][];
+  if (range) {
+    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
+    raw = [DAILY_HISTORY_HEADER, ...tailRows];
+  } else {
+    // 그 기간엔 데이터가 없다는 뜻 — 예전처럼 전체를 다시 읽지 않고 빈 결과로 넘어갑니다.
+    raw = [DAILY_HISTORY_HEADER];
+  }
+  return expandAnyDailyHistoryRows(raw || []);
+}
+
+export async function buildSalesAllocationPlan(startDateInput: string, endDateInput: string, ratioPercentInput?: number) {
+  const startDate = normalizeDateKey(startDateInput);
+  const endDate = normalizeDateKey(endDateInput) || startDate;
+  if (!startDate || !endDate) throw new Error("기간을 올바르게 선택해주세요.");
+  if (startDate > endDate) throw new Error("시작일이 종료일보다 늦을 수 없습니다.");
+
+  const spanDays = Math.round(((parseDate(endDate) as Date).getTime() - (parseDate(startDate) as Date).getTime()) / 86400000) + 1;
+  if (spanDays > SALES_ALLOCATION_MAX_RANGE_DAYS) {
+    throw new Error(`기간은 최대 ${SALES_ALLOCATION_MAX_RANGE_DAYS}일까지 선택할 수 있습니다(지금 ${spanDays}일).`);
+  }
+
+  const ratioPercent = [50, 100, 150, 200].includes(Number(ratioPercentInput)) ? Number(ratioPercentInput) : 100;
+
+  const flatRows = await readSalesAllocationFlatRows(startDate, endDate);
+
+  // 1) 전사(핵심 오프라인 매장 전체) 기준 스타일별 기간 판매량 — TOP50 선정 + "전매장누계판매" 값으로 재사용.
+  const companyStyleTotals = new Map<string, { productName: string; qty: number }>();
+  // 2) 매장×스타일 집계(기간판매량, 매장재고는 그 기간 중 가장 최근 스냅샷) + 매장×스타일×컬러×사이즈 집계.
+  const byStoreStyle = new Map<string, any>();
+  const latestStockByKey = new Map<string, string>();
+  const latestStockBySku = new Map<string, string>();
+
+  for (const r of flatRows) {
+    if (r.date < startDate || r.date > endDate) continue;
+    if (!isCoreOfflineSalesStore(r.storeName)) continue;
+    const qty = Number(r.qty || 0);
+
+    const companyTotal = companyStyleTotals.get(r.styleCode) || { productName: r.productName, qty: 0 };
+    companyTotal.qty += qty;
+    if (!companyTotal.productName && r.productName) companyTotal.productName = r.productName;
+    companyStyleTotals.set(r.styleCode, companyTotal);
+
+    const storeKey = normalizeStoreKey(r.storeName);
+    const key = `${storeKey}__${r.styleCode}`;
+    if (!byStoreStyle.has(key)) {
+      byStoreStyle.set(key, {
+        storeName: r.storeName,
+        storeKey,
+        styleCode: r.styleCode,
+        productName: r.productName,
+        periodQty: 0,
+        storeStock: 0,
+        skuRows: [] as any[],
+      });
+    }
+    const item = byStoreStyle.get(key);
+    item.periodQty += qty;
+    if (!item.productName && r.productName) item.productName = r.productName;
+
+    const lastStyleDate = latestStockByKey.get(key);
+    if (!lastStyleDate || r.date > lastStyleDate) {
+      latestStockByKey.set(key, r.date);
+      item.storeStock = Number(r.stock || 0);
+    }
+
+    let sku = item.skuRows.find((s: any) => s.color === r.colorCode && s.size === r.size);
+    if (!sku) {
+      sku = { color: r.colorCode, colorName: r.colorName, size: r.size, periodQty: 0, stock: 0 };
+      item.skuRows.push(sku);
+    }
+    sku.periodQty += qty;
+    const skuKey = `${key}__${r.colorCode}__${r.size}`;
+    const lastSkuDate = latestStockBySku.get(skuKey);
+    if (!lastSkuDate || r.date > lastSkuDate) {
+      latestStockBySku.set(skuKey, r.date);
+      sku.stock = Number(r.stock || 0);
+    }
+  }
+
+  // 전사 판매량 기준 TOP50만 남깁니다 — 기간을 아무리 길게 잡아도 화면/엑셀이 무거워지지 않도록.
+  const topStyleCodes = new Set(
+    Array.from(companyStyleTotals.entries())
+      .sort((a, b) => b[1].qty - a[1].qty)
+      .slice(0, SALES_ALLOCATION_STYLE_LIMIT)
+      .map(([styleCode]) => styleCode)
+  );
+
+  // 물류(창고) 가용재고 — "온오프재고현황" 시트에서 가져옵니다(현재 스냅샷 1회 조회라 가볍습니다).
+  const titles = await getSpreadsheetTitles();
+  const inventorySheetName = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
+  const inventoryValues = (await getManySheetValues([inventorySheetName], "A:AZ").catch(() => ({})))[inventorySheetName] || [];
+  const styleLevelInventory = parseInventory(inventoryValues);
+  const styleLevelStockMap = new Map(styleLevelInventory.map((r: any) => [r.styleCode, Number(r.offlineStock || 0)]));
+  const skuInventory = parseInventorySkuLevel(inventoryValues);
+  const skuStockMap = new Map(skuInventory.rows.map((r) => [`${r.styleCode}__${r.color}__${r.size}`, r.offlineStock]));
+
+  const rows = Array.from(byStoreStyle.values()).filter((r) => topStyleCodes.has(r.styleCode));
+
+  // "지시후물류유효재고"는 같은 스타일×컬러×사이즈를 여러 매장이 함께 나눠 쓰는 공용 창고
+  // 재고이므로, 그 SKU에 걸린 모든 매장의 지시수량을 합산해서 한 번만 차감해야 정확합니다.
+  const skuOrderedTotal = new Map<string, number>();
+  const styleOrderedTotal = new Map<string, number>();
+
+  const planRows: any[] = [];
+  for (const r of rows) {
+    const companyQty = companyStyleTotals.get(r.styleCode)?.qty || 0;
+    const styleWarehouseStock = styleLevelStockMap.get(r.styleCode) || 0;
+
+    for (const sku of r.skuRows) {
+      const orderQty = Math.max(0, Math.round(sku.periodQty * (ratioPercent / 100)));
+      const skuKey = `${r.styleCode}__${sku.color}__${sku.size}`;
+      const skuWarehouseStock = skuInventory.skuLevel ? (skuStockMap.get(skuKey) ?? 0) : null;
+
+      skuOrderedTotal.set(skuKey, (skuOrderedTotal.get(skuKey) || 0) + orderQty);
+      styleOrderedTotal.set(r.styleCode, (styleOrderedTotal.get(r.styleCode) || 0) + orderQty);
+
+      planRows.push({
+        storeName: r.storeName,
+        styleCode: r.styleCode,
+        productName: r.productName,
+        color: sku.color,
+        colorName: sku.colorName,
+        size: sku.size,
+        periodQty: sku.periodQty,
+        companyPeriodQty: companyQty,
+        storePeriodQty: r.periodQty,
+        storeStock: sku.stock,
+        warehouseStock: skuInventory.skuLevel ? skuWarehouseStock : styleWarehouseStock,
+        warehouseStockIsEstimate: !skuInventory.skuLevel,
+        orderQty,
+        skuKey,
+      });
+    }
+  }
+
+  // 최종 "지시후" 값들을 채웁니다(같은 SKU/스타일의 다른 매장 지시수량까지 다 합산된 뒤).
+  for (const row of planRows) {
+    row.storeStockAfter = row.storeStock + row.orderQty;
+    if (skuInventory.skuLevel) {
+      const totalOrdered = skuOrderedTotal.get(row.skuKey) || 0;
+      row.warehouseStockAfter = (skuStockMap.get(row.skuKey) ?? 0) - totalOrdered;
+    } else {
+      const totalOrdered = styleOrderedTotal.get(row.styleCode) || 0;
+      row.warehouseStockAfter = (styleLevelStockMap.get(row.styleCode) || 0) - totalOrdered;
+    }
+    delete row.skuKey;
+  }
+
+  planRows.sort((a, b) => {
+    const rankDiff = (companyStyleTotals.get(b.styleCode)?.qty || 0) - (companyStyleTotals.get(a.styleCode)?.qty || 0);
+    if (rankDiff) return rankDiff;
+    if (a.styleCode !== b.styleCode) return a.styleCode < b.styleCode ? -1 : 1;
+    if (a.storeName !== b.storeName) return a.storeName.localeCompare(b.storeName, "ko");
+    return a.size.localeCompare(b.size);
+  });
+
+  return {
+    startDate,
+    endDate,
+    ratioPercent,
+    styleCount: topStyleCodes.size,
+    skuInventoryAvailable: skuInventory.skuLevel,
+    rows: planRows,
+  };
 }
 
 export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number, colorInput?: string) {

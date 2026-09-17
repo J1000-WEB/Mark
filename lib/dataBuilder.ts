@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
@@ -2427,13 +2427,16 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
   // (prevWeekStart~weekEnd, 보통 2주)만 읽습니다. 시트 이름이 고정된 "Daily_Sales_History"라
   // 포맷(압축)이 항상 보장되므로 바로 지름길을 씁니다.
   const historyId = getHistorySheetId();
-  const startRow = await findDailyHistoryStartRowIn(historyId, "Daily_Sales_History", prevWeekStart);
+  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", prevWeekStart, weekEnd);
   let raw: any[][];
-  if (startRow && startRow > 2) {
-    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as any[]);
+  if (range) {
+    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
     raw = [DAILY_HISTORY_HEADER, ...tailRows];
   } else {
-    raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => []);
+    // MARK 2026-09-15: startRow를 못 찾은 건 "그 기간엔 데이터가 없다"는 뜻이라, 예전처럼
+    // 전체("A:ZZ")를 다시 읽지 않고 빈 결과로 안전하게 넘어갑니다(findDailyHistoryRowRangeIn
+    // 참고 — 최근 3만 행 안에서도 못 찾았다면 실제로 데이터가 없는 것과 같습니다).
+    raw = [DAILY_HISTORY_HEADER];
   }
   const flatRows = expandAnyDailyHistoryRows(raw || []);
   const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
@@ -2680,9 +2683,9 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
 
     if (dailySheetName && historyTitles.includes(dailySheetName)) {
       if (dailySheetName === "Daily_Sales_History" && neededSinceDate) {
-        const startRow = await findDailyHistoryStartRowIn(historyId, dailySheetName, neededSinceDate);
-        if (startRow && startRow > 2) {
-          const tailRows = await getSheetValuesById(historyId, dailySheetName, `A${startRow}:AZ`).catch(() => [] as any[]);
+        const range = await findDailyHistoryRowRangeIn(historyId, dailySheetName, neededSinceDate, todayDateKey());
+        if (range) {
+          const tailRows = await getSheetValuesById(historyId, dailySheetName, `A${range.startRow}:AZ${range.endRow}`).catch(() => [] as any[]);
           dailyValues = [DAILY_HISTORY_HEADER, ...tailRows];
         } else {
           // MARK 2026-09-14: startRow를 못 찾은 건(=neededSinceDate 이후 날짜가 A열에 없음)
@@ -2946,22 +2949,59 @@ function buildHistoryProductRows(rows: any[], currentDate: string) {
 // HTML을 뱉던 원인). weeklyDataProvider.ts에서 이미 겪고 고친 것과 완전히 같은 문제라 같은
 // 패턴을 씁니다: A열(날짜)만 먼저 가볍게 읽어서 필요한 구간이 시작되는 행을 찾고, 그 아래만
 // 읽습니다. 쓰기 쪽이 항상 날짜 오름차순으로 저장하므로 안전하고, 못 찾으면 전체 읽기로 폴백합니다.
-async function findDailyHistoryStartRowIn(historyId: string, sheetName: string, sinceDateKey: string): Promise<number | null> {
+//
+// MARK 2026-09-15: "주간탭 목표/실적이 업데이트 안 된다" 점검 — 위 설명의 "A열만 가볍게
+// 읽는다"는 부분이 사실은 안 가벼워졌습니다. Daily_Sales_History가 계속 쌓이면서(지금은
+// 수십만 행) A열 "전체"를 매번 읽는 것 자체가 무거워졌습니다(한 열이어도 행이 수십만 개면
+// 응답이 커지고 느려짐) — dailySales.ts의 readDailyHistoryRowsForDateRange가 이미 겪고
+// 고친 문제와 똑같습니다("행 수 조회 → 최근 N행만 읽기", getSheetRowCountById는 셀 데이터를
+// 전혀 안 읽는 메타데이터 조회라 시트가 아무리 커져도 항상 빠름). 여기서도 A열 전체 스캔
+// 대신 "행 수만 가볍게 확인 → 최근 3만 행만" 방식으로 바꿔서, 시트가 앞으로 계속 커져도
+// 이 함수의 속도가 절대 느려지지 않도록 했습니다.
+const FIND_START_ROW_TAIL_WINDOW_ROWS = 30000;
+
+// MARK 2026-09-17: "RT 엔진이 새 품번 제안을 안 해준다" 점검 — startRow를 찾는 것까지는
+// 가벼워졌는데(위 설명), 그 다음 실제 데이터를 읽는 부분(`A${startRow}:ZZ`, 끝행 지정 없음)이
+// 여전히 "시작행부터 시트 끝까지 전부"를 읽고 있었습니다. 시트가 계속 커지면서 이 구간 자체가
+// 최대 3만 행(+행마다 최대 4만자 JSON)까지 커질 수 있는데, 호출부가 실제로 필요한 기간은
+// 보통 2~6주치뿐이라 나머지는 읽고 펼쳤다가 버려지는 낭비입니다 — 프로덕션에서 /api/data가
+// 500(OOM 추정)로 죽는 걸 직접 확인했습니다. 그래서 시작행뿐 아니라 끝행(요청한 기간의
+// 마지막 날짜)까지 같은 A열 스캔 한 번으로 같이 찾아서, 실제 데이터 읽기를 필요한 구간으로만
+// 좁힙니다.
+async function findDailyHistoryRowRangeIn(
+  historyId: string,
+  sheetName: string,
+  sinceDateKey: string,
+  untilDateKey: string
+): Promise<{ startRow: number; endRow: number } | null> {
   try {
-    const dateCol = await getSheetValuesById(historyId, sheetName, "A:A");
+    const totalRows = await getSheetRowCountById(historyId, sheetName);
+    if (!totalRows || totalRows < 2) return null;
+
+    const tailStart = Math.max(2, totalRows - FIND_START_ROW_TAIL_WINDOW_ROWS + 1); // 2행부터(1행=헤더)
+    const dateCol = await getSheetValuesById(historyId, sheetName, `A${tailStart}:A${totalRows}`).catch(() => [] as any[]);
     if (!dateCol.length) return null;
-    let startRow = 1; // 0-based index into dateCol; 헤더(0번) 다음부터
-    let found = false;
-    for (let i = 1; i < dateCol.length; i++) {
+
+    let startIdx = -1;
+    let endIdx = -1;
+    for (let i = 0; i < dateCol.length; i++) {
       const d = normalizeDateKey(dateCol[i]?.[0]);
-      if (d && d >= sinceDateKey) {
-        startRow = i;
-        found = true;
-        break;
+      if (!d) continue;
+      if (startIdx === -1) {
+        if (d < sinceDateKey) continue;
+        startIdx = i;
+      }
+      if (d <= untilDateKey) {
+        endIdx = i;
+      } else {
+        break; // 날짜 오름차순 저장이라, 여기서부턴 전부 범위 밖입니다.
       }
     }
-    if (!found) return null;
-    return startRow + 1; // 1-based 시트 행 번호
+    // 최근 3만 행 안에서도 sinceDateKey 이후 날짜를 못 찾았다면(=요청한 기간이 그만큼도 안
+    // 된 데이터), 실제로 그 기간엔 데이터가 없는 것과 같습니다. 호출부가 "못 찾음"으로
+    // 안전하게 처리하도록 null을 돌려줍니다(예전처럼 전체 재읽기로 폴백하지 않음).
+    if (startIdx === -1) return null;
+    return { startRow: tailStart + startIdx, endRow: tailStart + (endIdx === -1 ? startIdx : endIdx) };
   } catch {
     return null;
   }
@@ -2984,12 +3024,14 @@ async function loadDashboardDailyHistory() {
   // 씁니다. 다른 후보 이름으로 폴백된 경우 포맷이 보장되지 않으므로 원래의 전체 읽기로 갑니다.
   let values: any[][];
   if (sheetName === "Daily_Sales_History") {
-    const startRow = await findDailyHistoryStartRowIn(historyId, sheetName, bufferedSinceDate);
-    if (startRow && startRow > 2) {
-      const tailRows = await getSheetValuesById(historyId, sheetName, `A${startRow}:AZ`).catch(() => [] as any[]);
+    const range = await findDailyHistoryRowRangeIn(historyId, sheetName, bufferedSinceDate, todayKST());
+    if (range) {
+      const tailRows = await getSheetValuesById(historyId, sheetName, `A${range.startRow}:AZ${range.endRow}`).catch(() => [] as any[]);
       values = [DAILY_HISTORY_HEADER, ...tailRows];
     } else {
-      values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);
+      // MARK 2026-09-15: startRow를 못 찾은 건 "그 기간엔 데이터가 없다"는 뜻이라, 예전처럼
+      // 전체("A:AZ")를 다시 읽지 않고 빈 결과로 안전하게 넘어갑니다.
+      values = [DAILY_HISTORY_HEADER];
     }
   } else {
     values = await getSheetValuesById(historyId, sheetName, "A:AZ").catch(() => []);

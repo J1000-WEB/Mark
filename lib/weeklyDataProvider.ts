@@ -7,6 +7,7 @@ import {
   getWeeklyHistorySheetId,
   getSheetId,
   getSheetValuesById,
+  getSheetRowCountById,
   replaceSheetValuesById,
   updateValuesById,
   appendValuesById,
@@ -569,22 +570,52 @@ function aggregateWeeklyPriceSheet(rows: Row[], type: SalesType) {
 // 찾은 다음 그 아래(최근 데이터)만 읽습니다. 쓰기 쪽(dailySales.ts의
 // buildCompactDailyHistoryRows)이 항상 날짜 오름차순으로 정렬해서 저장하므로 안전합니다
 // — 혹시 못 찾으면(형식이 예상과 다르면) 안전하게 전체를 읽는 이전 방식으로 폴백합니다.
-async function findDailyHistoryStartRow(historyId: string, sinceDateKey: string): Promise<number | null> {
+// MARK 2026-09-15: "주간탭 목표/실적이 업데이트 안 된다" 점검 — 위 주석의 "A열만 가볍게
+// 읽는다"는 부분이 Daily_Sales_History가 계속 쌓이면서(지금은 수십만 행) 더 이상 안
+// 가볍습니다 — 한 열이어도 행이 수십만 개면 응답이 커지고 느려집니다(실제로 이 경로가
+// /api/weekly-history?dashboard=1 타임아웃/500의 원인으로 의심됨). dailySales.ts의
+// readDailyHistoryRowsForDateRange가 이미 겪고 고친 문제와 똑같은 패턴이라 같은 해법을
+// 씁니다: getSheetRowCountById(셀 데이터를 전혀 안 읽는 메타데이터 조회라 시트가 아무리
+// 커져도 항상 빠름)로 행 수만 먼저 확인하고, 최근 3만 행만 읽어서 그 안에서 찾습니다.
+const FIND_START_ROW_TAIL_WINDOW_ROWS = 30000;
+
+// MARK 2026-09-17: "RT 엔진이 새 품번 제안을 안 해준다" 점검 중 발견 — 시작행을 찾는 것까지는
+// 가벼워졌는데, 그 다음 실제 데이터를 읽는 부분(`A${startRow}:ZZ`, 끝행 지정 없음)이 여전히
+// "시작행부터 시트 끝까지 전부"(최대 3만 행 + 행마다 최대 4만자 JSON)를 읽고 있었습니다.
+// dataBuilder.ts와 똑같이, 시작행뿐 아니라 끝행(요청한 기간의 마지막 날짜)까지 같은 A열 스캔
+// 한 번으로 같이 찾아서 실제 데이터 읽기를 필요한 구간으로만 좁힙니다.
+async function findDailyHistoryRowRange(
+  historyId: string,
+  sinceDateKey: string,
+  untilDateKey: string
+): Promise<{ startRow: number; endRow: number } | null> {
   try {
-    const dateCol = await getSheetValuesById(historyId, "Daily_Sales_History", "A:A");
+    const totalRows = await getSheetRowCountById(historyId, "Daily_Sales_History");
+    if (!totalRows || totalRows < 2) return null;
+
+    const tailStart = Math.max(2, totalRows - FIND_START_ROW_TAIL_WINDOW_ROWS + 1); // 2행부터(1행=헤더)
+    const dateCol = await getSheetValuesById(historyId, "Daily_Sales_History", `A${tailStart}:A${totalRows}`).catch(() => [] as Row[]);
     if (!dateCol.length) return null;
-    let startRow = 1; // 0-based index into dateCol; 헤더(0번) 다음부터
-    let found = false;
-    for (let i = 1; i < dateCol.length; i++) {
+
+    let startIdx = -1;
+    let endIdx = -1;
+    for (let i = 0; i < dateCol.length; i++) {
       const d = normalizeDateKey(dateCol[i]?.[0]);
-      if (d && d >= sinceDateKey) {
-        startRow = i;
-        found = true;
-        break;
+      if (!d) continue;
+      if (startIdx === -1) {
+        if (d < sinceDateKey) continue;
+        startIdx = i;
+      }
+      if (d <= untilDateKey) {
+        endIdx = i;
+      } else {
+        break; // 날짜 오름차순 저장이라, 여기서부턴 전부 범위 밖입니다.
       }
     }
-    if (!found) return null; // 최근 데이터를 못 찾으면(형식이 다르거나 비어있으면) 전체 읽기로 폴백
-    return startRow + 1; // 1-based 시트 행 번호
+    // 최근 3만 행 안에서도 못 찾았다면 그 기간엔 실제로 데이터가 없는 것과 같습니다.
+    // 예전처럼 전체 재읽기로 폴백하지 않고 "못 찾음"으로 안전하게 처리합니다.
+    if (startIdx === -1) return null;
+    return { startRow: tailStart + startIdx, endRow: tailStart + (endIdx === -1 ? startIdx : endIdx) };
   } catch {
     return null;
   }
@@ -602,8 +633,8 @@ const dailyHistoryFlatRowsCache = new Map<string, { expiresAt: number; value: Fl
 const dailyHistoryFlatRowsInflight = new Map<string, Promise<FlatDailyHistoryRow[]>>();
 const DAILY_HISTORY_FLAT_ROWS_TTL_MS = 60_000;
 
-async function getDailyHistoryFlatRowsCached(historyId: string, bufferedSinceDate: string) {
-  const key = `${historyId}::${bufferedSinceDate}`;
+async function getDailyHistoryFlatRowsCached(historyId: string, bufferedSinceDate: string, bufferedUntilDate: string) {
+  const key = `${historyId}::${bufferedSinceDate}::${bufferedUntilDate}`;
   const now = Date.now();
   const cached = dailyHistoryFlatRowsCache.get(key);
   if (cached && cached.expiresAt > now) return cached.value;
@@ -612,16 +643,19 @@ async function getDailyHistoryFlatRowsCached(historyId: string, bufferedSinceDat
   if (pending) return pending;
 
   const load = (async () => {
-    const startRow = await findDailyHistoryStartRow(historyId, bufferedSinceDate);
+    const range = await findDailyHistoryRowRange(historyId, bufferedSinceDate, bufferedUntilDate);
     let raw: Row[];
-    if (startRow && startRow > 2) {
+    if (range) {
       // 헤더(1행)는 expandAnyDailyHistoryRows가 컬럼 위치를 이름으로 찾는 데 반드시 필요합니다.
       // dailySales.ts의 upsertFlatRowsForSingleDate(날짜별 targeted 쓰기 경로)와 똑같이,
       // 실제 헤더 상수(DAILY_HISTORY_HEADER)를 그대로 재사용해서 별도 네트워크 왕복 없이 붙입니다.
-      const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${startRow}:ZZ`).catch(() => [] as Row[]);
+      const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as Row[]);
       raw = [DAILY_HISTORY_HEADER, ...tailRows];
     } else {
-      raw = await getSheetValuesById(historyId, "Daily_Sales_History", "A:ZZ").catch(() => [] as Row[]);
+      // MARK 2026-09-15: startRow를 못 찾은 건 "그 기간엔 데이터가 없다"는 뜻이라, 예전처럼
+      // 전체("A:ZZ")를 다시 읽지 않고 빈 결과로 안전하게 넘어갑니다(findDailyHistoryRowRange
+      // 참고 — 최근 3만 행 안에서도 못 찾았다면 실제로 데이터가 없는 것과 같습니다).
+      raw = [DAILY_HISTORY_HEADER];
     }
     const flatRows = expandAnyDailyHistoryRows(raw || []);
     dailyHistoryFlatRowsCache.set(key, { expiresAt: Date.now() + DAILY_HISTORY_FLAT_ROWS_TTL_MS, value: flatRows });
@@ -662,9 +696,16 @@ async function aggregateWeeklyFromDailyHistory(type: SalesType, weekStart: strin
     d.setDate(d.getDate() - 5);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
+  // MARK 2026-09-17: 끝 구간도 weekEnd보다 며칠 여유를 둬서(주 진행 중 오늘 데이터 포함 등)
+  // 실제 필요 범위를 놓치지 않으면서, 그 이후 데이터까지 다 읽는 낭비는 하지 않습니다.
+  const bufferedUntilDate = (() => {
+    const d = new Date(`${weekEnd}T00:00:00`);
+    d.setDate(d.getDate() + 5);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
 
   const historyId = getHistorySheetId();
-  const flatRows = await getDailyHistoryFlatRowsCached(historyId, bufferedSinceDate);
+  const flatRows = await getDailyHistoryFlatRowsCached(historyId, bufferedSinceDate, bufferedUntilDate);
 
   // 1차: 각 (key+매장)별로 이번주/전주 범위 안에서 가장 최근 날짜가 언제인지 파악합니다.
   const latestCurDate = new Map<string, string>();

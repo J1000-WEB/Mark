@@ -82,6 +82,71 @@ function excelEscape(value: any) {
     .replace(/"/g, "&quot;");
 }
 
+async function buildExportXls(rows: any[], ratioPercent: number, startDate: string, endDate: string) {
+  // ERP 업로드 양식(사용자 제공 이미지 기준): 채널코드,채널명,스타일,컬러,사이즈,기간판매,
+  // 전매장누계판매,스타일,컬러,사이즈,매장재고,물류가용재고,지시수량,지시후매장재고,
+  // 지시후물류유효재고,배분배수 — 스타일/컬러/사이즈 열이 두 번 반복되는 것도 ERP 원본 그대로.
+  const titles = await getSpreadsheetTitles();
+  const channelSheet = pickChannelSheet(titles);
+  const channelValues = (await getManySheetValues([channelSheet], "A1:AZ5000").catch(() => ({})))[channelSheet] || [];
+  const channels = channelCodeMap(channelValues);
+
+  const exportHeader = [
+    "채널코드", "채널명", "스타일", "컬러", "사이즈", "기간판매", "전매장누계판매",
+    "스타일", "컬러", "사이즈", "매장재고", "물류가용재고", "지시수량",
+    "지시후매장재고", "지시후물류유효재고", "배분배수",
+  ];
+  const ratioLabel = `${ratioPercent}%`;
+  const exportRows = rows.map((r: any) => {
+    const storeName = displayStoreName(r.storeName);
+    const channelCode = channels.get(r.storeName) || channels.get(storeName) || channels.get(normalizeStoreKey(r.storeName)) || "";
+    return [
+      channelCode,
+      storeName,
+      r.styleCode,
+      r.color,
+      r.size,
+      r.periodQty,
+      r.companyPeriodQty,
+      r.styleCode,
+      r.color,
+      r.size,
+      r.storeStock,
+      r.warehouseStock ?? "",
+      r.orderQty,
+      r.storeStockAfter,
+      r.warehouseStockAfter,
+      ratioLabel,
+    ];
+  });
+
+  const tableRows = [exportHeader, ...exportRows]
+    .map((row) => `<tr>${row.map((cell) => `<td style="mso-number-format:'\\@';">${excelEscape(cell)}</td>`).join("")}</tr>`)
+    .join("\n");
+
+  const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+</head>
+<body>
+<table border="1">
+${tableRows}
+</table>
+</body>
+</html>`;
+
+  const fileName = `판매분배분_${startDate}_${endDate}_${ratioPercent}%_${todayKST()}.xls`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -100,70 +165,30 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, ...plan }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
-    // ERP 업로드 양식(사용자 제공 이미지 기준): 채널코드,채널명,스타일,컬러,사이즈,기간판매,
-    // 전매장누계판매,스타일,컬러,사이즈,매장재고,물류가용재고,지시수량,지시후매장재고,
-    // 지시후물류유효재고,배분배수 — 스타일/컬러/사이즈 열이 두 번 반복되는 것도 ERP 원본 그대로.
-    const titles = await getSpreadsheetTitles();
-    const channelSheet = pickChannelSheet(titles);
-    const channelValues = (await getManySheetValues([channelSheet], "A1:AZ5000").catch(() => ({})))[channelSheet] || [];
-    const channels = channelCodeMap(channelValues);
-
-    const exportHeader = [
-      "채널코드", "채널명", "스타일", "컬러", "사이즈", "기간판매", "전매장누계판매",
-      "스타일", "컬러", "사이즈", "매장재고", "물류가용재고", "지시수량",
-      "지시후매장재고", "지시후물류유효재고", "배분배수",
-    ];
-    const ratioLabel = `${plan.ratioPercent}%`;
-    const exportRows = plan.rows.map((r: any) => {
-      const storeName = displayStoreName(r.storeName);
-      const channelCode = channels.get(r.storeName) || channels.get(storeName) || channels.get(normalizeStoreKey(r.storeName)) || "";
-      return [
-        channelCode,
-        storeName,
-        r.styleCode,
-        r.color,
-        r.size,
-        r.periodQty,
-        r.companyPeriodQty,
-        r.styleCode,
-        r.color,
-        r.size,
-        r.storeStock,
-        r.warehouseStock ?? "",
-        r.orderQty,
-        r.storeStockAfter,
-        r.warehouseStockAfter,
-        ratioLabel,
-      ];
-    });
-
-    const tableRows = [exportHeader, ...exportRows]
-      .map((row) => `<tr>${row.map((cell) => `<td style="mso-number-format:'\\@';">${excelEscape(cell)}</td>`).join("")}</tr>`)
-      .join("\n");
-
-    const html = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-</head>
-<body>
-<table border="1">
-${tableRows}
-</table>
-</body>
-</html>`;
-
-    const fileName = `판매분배분_${plan.startDate}_${plan.endDate}_${plan.ratioPercent}%_${todayKST()}.xls`;
-    return new Response(html, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.ms-excel; charset=utf-8",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-        "Cache-Control": "no-store",
-      },
-    });
+    return await buildExportXls(plan.rows, plan.ratioPercent, plan.startDate, plan.endDate);
   } catch (error: any) {
     console.error("sales-allocation failed:", error);
     return NextResponse.json({ ok: false, error: error?.message || "판매분 배분 계산 실패" }, { status: 500 });
+  }
+}
+
+// MARK 2026-09-17: "지시수량을 확인해서 수정할 수 있게 해달라"는 요청 — 화면에서 담당자가
+// 지시수량을 직접 고치면(그리고 지시후 재고들도 화면에서 같이 재계산되면), 다운로드는 그
+// 수정된 값 그대로 반영돼야 합니다. GET처럼 서버에서 다시 계산하면 수정 내용이 사라지므로,
+// 화면이 가진 "현재 상태(수정 반영됨)" 그대로를 받아서 엑셀만 만들어줍니다.
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const rows = Array.isArray(body?.rows) ? body.rows : null;
+    const ratioPercent = num(body?.ratioPercent ?? 100);
+    const startDate = text(body?.startDate);
+    const endDate = text(body?.endDate);
+    if (!rows || !rows.length) {
+      return NextResponse.json({ ok: false, error: "다운로드할 데이터가 없습니다." }, { status: 400 });
+    }
+    return await buildExportXls(rows, ratioPercent, startDate, endDate);
+  } catch (error: any) {
+    console.error("sales-allocation export failed:", error);
+    return NextResponse.json({ ok: false, error: error?.message || "엑셀 생성 실패" }, { status: 500 });
   }
 }

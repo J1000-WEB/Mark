@@ -1729,6 +1729,68 @@ function StoreRiskList({ items, type }: { items: any[]; type: "stockout" | "over
 // 이미 제한해뒀고, 화면에도 그 제한을 안내 문구로 보여줍니다.
 const SALES_ALLOCATION_RATIOS = [50, 100, 150, 200];
 
+// MARK 2026-09-17: 물류가용재고 정확도 개선 — "온오프재고현황" 엑셀(원본 17,000행대 × 24열)을
+// 그대로 올리면 무겁기도 하고, S열 "가용(오프)"가 실제로 어디 있는지도 파일마다 흔들릴 수
+// 있어서, 헤더 텍스트로 찾되 못 찾으면 알려진 열 위치(F/H/J/S)로 fallback — 서버 쪽
+// parseInventorySkuLevel(이번에 스냅샷 방식으로 대체됨)과 같은 이중 확인 방식입니다.
+function findWarehouseCol(header: any[], labels: string[], fallback: number) {
+  const normalized = (header || []).map((v: any) => String(v ?? "").trim().replace(/\s/g, ""));
+  for (const label of labels) {
+    const target = label.replace(/\s/g, "");
+    const idx = normalized.findIndex((v: string) => v === target || v.includes(target));
+    if (idx >= 0) return idx;
+  }
+  return fallback;
+}
+
+function parseWarehouseStockWorkbook(rows: any[][]): any[][] {
+  let headerRowIdx = -1;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const joined = (rows[r] || []).map((v) => String(v ?? "").trim()).join("|");
+    if (joined.includes("스타일") && joined.includes("가용(오프)")) {
+      headerRowIdx = r;
+      break;
+    }
+  }
+  const header = headerRowIdx >= 0 ? rows[headerRowIdx] : rows[0] || [];
+  const styleCol = findWarehouseCol(header, ["스타일"], 5);
+  const colorCol = findWarehouseCol(header, ["컬러코드", "칼라코드", "컬러", "칼라"], 7);
+  const sizeCol = findWarehouseCol(header, ["사이즈코드", "사이즈"], 9);
+  const offlineCol = findWarehouseCol(header, ["가용(오프)", "가용오프"], 18);
+  const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
+
+  const out: any[][] = [];
+  for (let r = startRow; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const styleCode = String(row[styleCol] ?? "").trim();
+    if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
+    const color = String(row[colorCol] ?? "").trim();
+    const size = String(row[sizeCol] ?? "").trim();
+    if (!color || !size) continue;
+    const offlineStock = Number(row[offlineCol] ?? 0) || 0;
+    out.push([styleCode, color, size, offlineStock]);
+  }
+  return out;
+}
+
+// SKU(스타일+컬러+사이즈)당 물류재고는 여러 매장이 나눠 쓰므로, 지시수량을 수정할 때마다
+// 같은 SKU를 쓰는 모든 행의 "지시후" 값을 다시 계산해줍니다(서버의 buildSalesAllocationPlan과
+// 동일한 로직 — 이 함수는 화면에서 직접 수정한 값을 반영하기 위한 클라이언트 쪽 재계산입니다).
+function recomputeAfterValues(rows: any[]) {
+  const skuOrderedTotal = new Map<string, number>();
+  for (const r of rows) {
+    const key = `${r.styleCode}__${r.color}__${r.size}`;
+    skuOrderedTotal.set(key, (skuOrderedTotal.get(key) || 0) + (Number(r.orderQty) || 0));
+  }
+  for (const r of rows) {
+    const key = `${r.styleCode}__${r.color}__${r.size}`;
+    r.storeStockAfter = (Number(r.storeStock) || 0) + (Number(r.orderQty) || 0);
+    r.warehouseStockAfter = r.warehouseStock === null || r.warehouseStock === undefined
+      ? null
+      : r.warehouseStock - (skuOrderedTotal.get(key) || 0);
+  }
+}
+
 function SalesAllocationSection() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(`${todayKSTInputValue()}T00:00:00`);
@@ -1741,7 +1803,50 @@ function SalesAllocationSection() {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const [plan, setPlan] = useState<any>(null);
+  const [planRows, setPlanRows] = useState<any[]>([]);
   const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
+
+  const [warehouseMeta, setWarehouseMeta] = useState<any>(null);
+  const [warehouseFile, setWarehouseFile] = useState<File | null>(null);
+  const [warehouseUploading, setWarehouseUploading] = useState(false);
+  const [warehouseStatus, setWarehouseStatus] = useState("");
+
+  useEffect(() => {
+    fetch("/api/warehouse-stock-upload", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((body) => { if (body?.ok) setWarehouseMeta(body.meta); })
+      .catch(() => {});
+  }, []);
+
+  async function runWarehouseStockUpload() {
+    if (!warehouseFile) return;
+    setWarehouseUploading(true);
+    setWarehouseStatus("파일 읽는 중...");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await warehouseFile.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+      const compact = parseWarehouseStockWorkbook(rawRows);
+      if (!compact.length) throw new Error("스타일/칼라/사이즈/가용(오프) 열을 찾지 못했어요. 온오프재고현황 원본 파일이 맞는지 확인해주세요.");
+
+      setWarehouseStatus(`업로드 중... (${compact.length.toLocaleString("ko-KR")}건)`);
+      const res = await fetch("/api/warehouse-stock-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: compact, fileName: warehouseFile.name }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "업로드에 실패했습니다.");
+      setWarehouseStatus(`완료! ${body.rowCount.toLocaleString("ko-KR")}건 반영됐어요.`);
+      setWarehouseMeta({ uploadedAt: body.uploadedAt, rowCount: body.rowCount, fileName: warehouseFile.name });
+    } catch (e: any) {
+      setWarehouseStatus(e?.message || "업로드에 실패했습니다.");
+    } finally {
+      setWarehouseUploading(false);
+    }
+  }
 
   async function fetchPlan() {
     if (!startDate || !endDate) {
@@ -1751,12 +1856,14 @@ function SalesAllocationSection() {
     setLoading(true);
     setError("");
     setPlan(null);
+    setPlanRows([]);
     try {
       const params = new URLSearchParams({ start: startDate, end: endDate, ratio: String(ratio) });
       const res = await fetch(`/api/sales-allocation?${params.toString()}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body?.ok) throw new Error(body?.error || "판매분 배분 계산에 실패했습니다.");
       setPlan(body);
+      setPlanRows((body.rows || []).map((r: any, i: number) => ({ ...r, _rowId: i })));
     } catch (e: any) {
       setError(e?.message || "판매분 배분 계산에 실패했습니다.");
     } finally {
@@ -1764,12 +1871,32 @@ function SalesAllocationSection() {
     }
   }
 
+  // 담당자가 지시수량을 직접 확인해서 고칠 수 있게 — 수정하면 지시후매장재고/지시후물류재고도
+  // 같이 재계산돼요(같은 SKU를 다른 매장 행도 같이 쓰고 있으면 그것까지 반영).
+  function updateOrderQty(rowId: number, value: string) {
+    setPlanRows((prev) => {
+      const next = prev.map((r) => (r._rowId === rowId ? { ...r, orderQty: Math.max(0, Math.round(Number(value) || 0)) } : r));
+      recomputeAfterValues(next);
+      return next;
+    });
+  }
+
   async function downloadExcel() {
-    if (!plan) return;
+    if (!plan || !planRows.length) return;
     setDownloading(true);
     try {
-      const params = new URLSearchParams({ start: startDate, end: endDate, ratio: String(ratio), download: "1" });
-      const res = await fetch(`/api/sales-allocation?${params.toString()}`, { cache: "no-store" });
+      // MARK: 화면에서 지시수량을 수정했을 수 있으므로, 다시 계산하는 GET이 아니라 지금
+      // 화면이 갖고 있는 (수정 반영된) planRows를 그대로 서버에 보내서 엑셀만 만들게 합니다.
+      const res = await fetch(`/api/sales-allocation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: planRows.map(({ _rowId, ...r }) => r),
+          ratioPercent: plan.ratioPercent,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+        }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || "엑셀 다운로드에 실패했습니다.");
@@ -1795,13 +1922,22 @@ function SalesAllocationSection() {
 
   // 스타일별로 묶어서 보여줍니다(매장×컬러×사이즈 행이 많아지므로, 기본은 접어두고 펼쳐볼 수 있게).
   const groupedByStyle = (() => {
-    if (!plan?.rows?.length) return [] as any[];
-    const map = new Map<string, { styleCode: string; productName: string; companyPeriodQty: number; rows: any[] }>();
-    for (const r of plan.rows) {
+    if (!planRows.length) return [] as any[];
+    const map = new Map<string, { styleCode: string; productName: string; companyPeriodQty: number; cumulativeSalesQty: number | null; hasUnknownSize: boolean; rows: any[] }>();
+    for (const r of planRows) {
       if (!map.has(r.styleCode)) {
-        map.set(r.styleCode, { styleCode: r.styleCode, productName: r.productName, companyPeriodQty: r.companyPeriodQty, rows: [] });
+        map.set(r.styleCode, {
+          styleCode: r.styleCode,
+          productName: r.productName,
+          companyPeriodQty: r.companyPeriodQty,
+          cumulativeSalesQty: r.cumulativeSalesQty ?? null,
+          hasUnknownSize: false,
+          rows: [],
+        });
       }
-      map.get(r.styleCode)!.rows.push(r);
+      const g = map.get(r.styleCode)!;
+      if (r.size === "??") g.hasUnknownSize = true;
+      g.rows.push(r);
     }
     return Array.from(map.values());
   })();
@@ -1810,7 +1946,7 @@ function SalesAllocationSection() {
     <Card
       title="📦 판매분 배분"
       tone="white"
-      right={plan ? (
+      right={planRows.length ? (
         <button
           type="button"
           onClick={downloadExcel}
@@ -1823,8 +1959,38 @@ function SalesAllocationSection() {
     >
       <p className="mb-4 text-xs font-semibold text-slate-500">
         선택한 기간에 매장별로 팔린 수량만큼 물류(창고)에서 매장으로 보충할 지시수량을 계산해요. 배분율 100%면 판매된 만큼 그대로, 200%면 두 배로 투입 제안을 줘요.
-        너무 무거워지지 않도록 기간은 최대 90일, 품번은 전사 판매량 기준 TOP50까지만 계산해요.
+        너무 무거워지지 않도록 기간은 최대 90일, 품번은 전사 판매량 기준 TOP50까지만 계산해요. 지시수량은 아래에서 직접 확인하고 고칠 수 있어요.
       </p>
+
+      <div className="mb-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-black text-slate-700">📥 온오프재고현황 업로드 (물류가용재고 정확도용)</p>
+        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+          ERP에서 내려받은 "온오프재고현황" 원본 엑셀을 그대로 올리면, 스타일/칼라/사이즈/가용(오프)만 뽑아서 저장해두고 판매분 배분이 그걸 읽어요(온+오프 합계가 아니라 오프라인 가용재고만 정확히 반영).
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => setWarehouseFile(e.target.files?.[0] || null)}
+            className="text-xs"
+          />
+          <button
+            type="button"
+            onClick={runWarehouseStockUpload}
+            disabled={warehouseUploading || !warehouseFile}
+            className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-black text-white disabled:opacity-50"
+          >
+            {warehouseUploading ? "업로드 중..." : "업로드"}
+          </button>
+        </div>
+        {warehouseStatus && <p className="mt-2 text-[11px] font-bold text-blue-600">{warehouseStatus}</p>}
+        <p className="mt-2 text-[11px] font-bold text-slate-500">
+          {warehouseMeta
+            ? `마지막 업데이트: ${warehouseMeta.uploadedAt} · ${fmtNum(warehouseMeta.rowCount)}건${warehouseMeta.fileName ? ` · ${warehouseMeta.fileName}` : ""}`
+            : "아직 업로드된 재고 스냅샷이 없어요 — 업로드 전에는 물류가용재고가 비어있어요."}
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600">
           시작일
@@ -1871,8 +2037,9 @@ function SalesAllocationSection() {
       {plan && (
         <div className="mt-4 space-y-2">
           <p className="text-xs font-bold text-slate-500">
-            {plan.startDate} ~ {plan.endDate} · 배분율 {plan.ratioPercent}% · 대상 품번 {plan.styleCount}개
-            {plan.skuInventoryAvailable === false && " · ⚠ 컬러/사이즈별 물류재고를 찾지 못해 스타일 전체 재고로 대체 표시했어요."}
+            {plan.startDate} ~ {plan.endDate} · 배분율 {plan.ratioPercent}% · 대상 품번 {plan.styleCount}개 · 기간판매 0건은 제외했어요
+            {plan.warehouseSnapshotAvailable === false && " · ⚠ 아직 온오프재고현황을 업로드하지 않아 물류가용재고가 비어있어요(위 업로드 참고)"}
+            {plan.sizeUnknownStyleCount > 0 && ` · ⚠ 사이즈가 "??"로 표시되는 품번이 ${plan.sizeUnknownStyleCount}개 있어요(ERP 스냅샷에서 아직 이름이 확정 안 된 사이즈 슬롯 표시예요, 이 탭의 오류가 아니에요)`}
           </p>
           {!groupedByStyle.length ? (
             <Empty />
@@ -1887,15 +2054,17 @@ function SalesAllocationSection() {
                     className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left"
                   >
                     <span className="text-sm font-black text-slate-900">
-                      {g.productName} ({g.styleCode})
+                      {g.productName} ({g.styleCode}){g.hasUnknownSize && <span className="ml-1 text-amber-600">※사이즈미확인</span>}
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      전사 누계판매 {fmtNum(g.companyPeriodQty)}개 · {g.rows.length}건 {expanded ? "▲" : "▼"}
+                      기간 누계판매 {fmtNum(g.companyPeriodQty)}개
+                      {g.cumulativeSalesQty !== null && ` · 전체기간 누적판매 ${fmtNum(g.cumulativeSalesQty)}개`}
+                      {" · "}{g.rows.length}건 {expanded ? "▲" : "▼"}
                     </span>
                   </button>
                   {expanded && (
                     <div className="overflow-x-auto border-t border-slate-100 px-4 pb-4">
-                      <table className="mt-3 w-full min-w-[720px] text-xs font-semibold text-slate-600">
+                      <table className="mt-3 w-full min-w-[760px] text-xs font-semibold text-slate-600">
                         <thead>
                           <tr className="border-b border-slate-100 text-left text-[11px] font-black text-slate-400">
                             <th className="py-2 pr-3">매장</th>
@@ -1910,17 +2079,25 @@ function SalesAllocationSection() {
                           </tr>
                         </thead>
                         <tbody>
-                          {g.rows.map((r: any, i: number) => (
-                            <tr key={`${r.storeName}__${r.color}__${r.size}__${i}`} className="border-b border-slate-50">
+                          {g.rows.map((r: any) => (
+                            <tr key={r._rowId} className="border-b border-slate-50">
                               <td className="py-2 pr-3">{r.storeName}</td>
                               <td className="py-2 pr-3">{r.colorName || r.color}</td>
                               <td className="py-2 pr-3">{r.size}</td>
                               <td className="py-2 pr-3">{fmtNum(r.periodQty)}</td>
                               <td className="py-2 pr-3">{fmtNum(r.storeStock)}</td>
                               <td className="py-2 pr-3">{r.warehouseStock === null ? "-" : fmtNum(r.warehouseStock)}</td>
-                              <td className="py-2 pr-3 font-black text-blue-600">{fmtNum(r.orderQty)}</td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={r.orderQty}
+                                  onChange={(e) => updateOrderQty(r._rowId, e.target.value)}
+                                  className="w-20 rounded-lg border border-blue-200 px-2 py-1 text-xs font-black text-blue-700"
+                                />
+                              </td>
                               <td className="py-2 pr-3">{fmtNum(r.storeStockAfter)}</td>
-                              <td className="py-2 pr-3">{fmtNum(r.warehouseStockAfter)}</td>
+                              <td className="py-2 pr-3">{r.warehouseStockAfter === null ? "-" : fmtNum(r.warehouseStockAfter)}</td>
                             </tr>
                           ))}
                         </tbody>

@@ -336,7 +336,9 @@ function addAggValue(map: Map<string, SalesAgg>, key: string, patch: Partial<Sal
   map.set(key, agg);
 }
 
-function buildProductMaster(rows: Row[]) {
+// MARK 2026-09-17: "판매분 배분" 탭에서 스타일의 전체기간 누적판매수량("스타일별 채널별"
+// 업로드 파일의 마스터 컬럼, 기간 필터와 무관한 값)을 같이 보여주기 위해 export합니다.
+export function buildProductMaster(rows: Row[]) {
   const byStyle = new Map<string, ProductMaster>();
   const byColor = new Map<string, ProductMaster>();
   if (!rows?.length) return { byStyle, byColor };
@@ -975,7 +977,9 @@ type SheetReadOptions = { refresh?: boolean; ttlMs?: number };
 const weeklySheetReadCache = new Map<string, { expiresAt: number; value: SheetReadResult }>();
 const weeklySheetReadInflight = new Map<string, Promise<SheetReadResult>>();
 
-async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string, options: SheetReadOptions = {}): Promise<SheetReadResult> {
+// MARK 2026-09-17: 판매분 배분 탭에서도 같은 "여러 스프레드시트 중 먼저 찾아지는 걸로,
+// 45초 캐시+in-flight 공유로" 패턴이 필요해서 export합니다.
+export async function readFirstAvailableSheet(ids: string[], candidates: string[], range: string, options: SheetReadOptions = {}): Promise<SheetReadResult> {
   const normalizedIds = [...new Set(ids.filter(Boolean))];
   const key = `${normalizedIds.join("|")}::${candidates.join("|")}::${range}`;
   const ttlMs = options.ttlMs ?? 45_000;

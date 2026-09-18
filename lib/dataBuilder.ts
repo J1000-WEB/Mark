@@ -1,9 +1,11 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, ensureSheetExistsById, safeReplaceSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
+import { readFirstAvailableSheet, buildProductMaster } from "./weeklyDataProvider";
+import { expandStyleChannelRows } from "./styleChannelCompact";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -497,46 +499,73 @@ function parseInventory(rows: any[][]) {
   return Array.from(grouped.values());
 }
 
-// MARK 2026-09-17: "판매분 배분" 탭 — 위 parseInventory()는 이 시트가 컬러/사이즈별 행인 걸
-// 알면서도 스타일 단위로 바로 합산해버립니다(그것만으로 충분했던 기존 용도엔 문제 없음).
-// 판매분 배분은 컬러/사이즈별 물류가용재고가 필요해서, 같은 시트를 컬러/사이즈 컬럼까지
-// 찾아서 SKU 단위로 남겨두는 버전을 별도로 둡니다. 헤더에서 컬러/사이즈 라벨을 못 찾으면
-// (fallback 없이 -1) SKU 단위는 포기하고 스타일 단위만 있다는 뜻으로 skuLevel:false를
-// 돌려줍니다 — 엉뚱한 열을 컬러/사이즈로 잘못 읽어서 조용히 틀린 값을 주는 것보다 안전합니다.
-function parseInventorySkuLevel(rows: any[][]) {
-  if (!rows.length) return { skuLevel: false, rows: [] as any[] };
+// MARK 2026-09-17: "판매분 배분" 탭의 물류가용재고가 부정확하다는 피드백 — 원인은 두 가지:
+// (1) parseInventory()류가 읽던 라이브 "온오프재고현황" 시트는 17,000행 넘게 매번 통째로
+//     읽어야 해서(이 세션에서 여러 번 고친 OOM 패턴과 동일) 무겁고, 갱신 시점도 이 탭과
+//     안 맞을 수 있었습니다.
+// (2) 그래서 담당자가 ERP에서 내려받은 "온오프재고현황" 엑셀을 직접 업로드하면, 필요한
+//     4열(스타일/칼라/사이즈/가용(오프))만 압축해서 이 전용 스냅샷 시트에 저장해두고,
+//     판매분 배분은 항상 이 가벼운 스냅샷만 읽습니다. 업데이트 일시도 같이 저장해서
+//     화면에 "마지막 업데이트: ..."로 보여줄 수 있게 합니다.
+const WAREHOUSE_SNAPSHOT_SHEET = "물류가용재고_스냅샷";
+const WAREHOUSE_SNAPSHOT_META_SHEET = "물류가용재고_스냅샷_메타";
+const WAREHOUSE_SNAPSHOT_HEADER = ["스타일", "칼라", "사이즈", "가용재고(오프)"];
+const WAREHOUSE_SNAPSHOT_META_HEADER = ["업로드일시", "행수", "원본파일명"];
 
-  const headerRow = findHeaderRow(rows, ["스타일", "가용(온)"]);
-  const header = headerRow >= 0 ? rows[headerRow] || [] : rows[0] || [];
+function nowKSTDateTime() {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-  const styleCol = findCol(header, ["스타일"], 5);
-  const productCol = findCol(header, ["스타일명"], 6);
-  const colorCol = findCol(header, ["컬러코드", "칼라코드", "컬러", "칼라"]);
-  const sizeCol = findCol(header, ["사이즈코드", "사이즈"]);
-  const offlineStockCol = findCol(header, ["가용(오프)", "가용오프"], 18);
-
-  if (colorCol < 0 || sizeCol < 0) return { skuLevel: false, rows: [] as any[] };
-
-  const startRow = headerRow >= 0 ? headerRow + 1 : 1;
-  const grouped = new Map<string, { styleCode: string; productName: string; color: string; size: string; offlineStock: number }>();
-
-  for (let r = startRow; r < rows.length; r++) {
-    const row = rows[r] || [];
-    const styleCode = text(row[styleCol]);
-    if (!styleCode || styleCode.includes("스타일") || styleCode.includes("합계")) continue;
-    const color = text(row[colorCol]);
-    const size = text(row[sizeCol]);
-    const offlineStock = num(row[offlineStockCol]);
-    if (!color || !size) continue;
-
-    const key = `${styleCode}__${color}__${size}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, { styleCode, productName: text(row[productCol]), color, size, offlineStock: 0 });
-    }
-    grouped.get(key)!.offlineStock += offlineStock;
+// 업로드(app/api/warehouse-stock-upload)에서 호출합니다. rows는 클라이언트에서 이미
+// [스타일,칼라,사이즈,가용(오프)]로 압축해서 보낸 값입니다(헤더/열 위치를 둘 다 확인해서
+// 뽑은 값 — 클라이언트 쪽 parseWarehouseStockWorkbook 참고).
+export async function saveWarehouseStockSnapshot(rows: any[][], fileName?: string) {
+  const clean = (rows || [])
+    .map((r) => [text(r[0]), text(r[1]), text(r[2]), num(r[3])])
+    .filter((r) => r[0] && r[1] && r[2]);
+  if (!clean.length) {
+    throw new Error("업로드할 재고 데이터를 찾지 못했습니다. 스타일/칼라/사이즈 열을 확인해주세요.");
   }
 
-  return { skuLevel: true, rows: Array.from(grouped.values()) };
+  const dbId = getDbSheetId();
+  await ensureSheetExistsById(dbId, WAREHOUSE_SNAPSHOT_SHEET, WAREHOUSE_SNAPSHOT_HEADER);
+  await ensureSheetExistsById(dbId, WAREHOUSE_SNAPSHOT_META_SHEET, WAREHOUSE_SNAPSHOT_META_HEADER);
+
+  await safeReplaceSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_SHEET, [WAREHOUSE_SNAPSHOT_HEADER, ...clean]);
+
+  const uploadedAt = nowKSTDateTime();
+  await safeReplaceSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_META_SHEET, [
+    WAREHOUSE_SNAPSHOT_META_HEADER,
+    [uploadedAt, clean.length, text(fileName)],
+  ]);
+
+  return { ok: true, rowCount: clean.length, uploadedAt };
+}
+
+export async function getWarehouseStockSnapshotMeta() {
+  const dbId = getDbSheetId();
+  const rows = await getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_META_SHEET, "A2:C2").catch(() => [] as any[]);
+  const row = rows[0];
+  if (!row || !text(row[0])) return null;
+  return { uploadedAt: text(row[0]), rowCount: num(row[1]), fileName: text(row[2]) };
+}
+
+async function readWarehouseStockSnapshot() {
+  const dbId = getDbSheetId();
+  const [dataRows, metaRows] = await Promise.all([
+    getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_SHEET, "A2:D200000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_META_SHEET, "A2:C2").catch(() => [] as any[]),
+  ]);
+  const rows = dataRows
+    .filter((r) => r && text(r[0]))
+    .map((r) => ({ styleCode: text(r[0]), color: text(r[1]), size: text(r[2]), offlineStock: num(r[3]) }));
+  const metaRow = metaRows[0];
+  const meta = metaRow && text(metaRow[0])
+    ? { uploadedAt: text(metaRow[0]), rowCount: num(metaRow[1]), fileName: text(metaRow[2]) }
+    : null;
+  return { rows, meta };
 }
 
 export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
@@ -2717,34 +2746,46 @@ export async function buildSalesAllocationPlan(startDateInput: string, endDateIn
       .map(([styleCode]) => styleCode)
   );
 
-  // 물류(창고) 가용재고 — "온오프재고현황" 시트에서 가져옵니다(현재 스냅샷 1회 조회라 가볍습니다).
-  const titles = await getSpreadsheetTitles();
-  const inventorySheetName = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
-  const inventoryValues = (await getManySheetValues([inventorySheetName], "A:AZ").catch(() => ({})))[inventorySheetName] || [];
-  const styleLevelInventory = parseInventory(inventoryValues);
-  const styleLevelStockMap = new Map(styleLevelInventory.map((r: any) => [r.styleCode, Number(r.offlineStock || 0)]));
-  const skuInventory = parseInventorySkuLevel(inventoryValues);
-  const skuStockMap = new Map(skuInventory.rows.map((r) => [`${r.styleCode}__${r.color}__${r.size}`, r.offlineStock]));
+  // 물류(창고) 가용재고 — 담당자가 업로드해둔 "온오프재고현황" 압축 스냅샷에서 가져옵니다
+  // (라이브 시트를 매번 통째로 읽지 않아 가볍고, 온/오프 합계가 아니라 가용(오프)만 정확히 읽습니다).
+  // 스타일 누적판매(전체기간, 기간 필터와 무관)는 "스타일별 채널별" 업로드 마스터 시트에서 가져옵니다.
+  const [warehouseSnapshot, productRaw] = await Promise.all([
+    readWarehouseStockSnapshot(),
+    readFirstAvailableSheet(
+      [getDailySourceSheetId(), getDbSheetId(), getSheetId()],
+      ["스타일별 채널별 입고판매재고현황"],
+      "A:AZ"
+    ).catch(() => ({ rows: [] as any[] })),
+  ]);
+  const skuStockMap = new Map(
+    warehouseSnapshot.rows.map((r) => [`${r.styleCode}__${r.color}__${r.size}`, r.offlineStock])
+  );
+  const warehouseSnapshotAvailable = warehouseSnapshot.rows.length > 0;
+
+  const productMaster = buildProductMaster(expandStyleChannelRows(productRaw.rows || []));
+  const cumulativeSalesAvailable = productMaster.byStyle.size > 0;
 
   const rows = Array.from(byStoreStyle.values()).filter((r) => topStyleCodes.has(r.styleCode));
 
   // "지시후물류유효재고"는 같은 스타일×컬러×사이즈를 여러 매장이 함께 나눠 쓰는 공용 창고
   // 재고이므로, 그 SKU에 걸린 모든 매장의 지시수량을 합산해서 한 번만 차감해야 정확합니다.
   const skuOrderedTotal = new Map<string, number>();
-  const styleOrderedTotal = new Map<string, number>();
 
   const planRows: any[] = [];
   for (const r of rows) {
     const companyQty = companyStyleTotals.get(r.styleCode)?.qty || 0;
-    const styleWarehouseStock = styleLevelStockMap.get(r.styleCode) || 0;
+    const cumulativeQty = productMaster.byStyle.get(r.styleCode)?.cumulativeSalesQty;
 
     for (const sku of r.skuRows) {
+      // "기간판매가 0인건 제외해달라" 요청 — 재고 스냅샷만 있고 그 기간엔 안 팔린 SKU는 뺍니다.
+      if (!sku.periodQty) continue;
+
       const orderQty = Math.max(0, Math.round(sku.periodQty * (ratioPercent / 100)));
       const skuKey = `${r.styleCode}__${sku.color}__${sku.size}`;
-      const skuWarehouseStock = skuInventory.skuLevel ? (skuStockMap.get(skuKey) ?? 0) : null;
+      const hasWarehouseStock = skuStockMap.has(skuKey);
+      const skuWarehouseStock = hasWarehouseStock ? skuStockMap.get(skuKey)! : null;
 
       skuOrderedTotal.set(skuKey, (skuOrderedTotal.get(skuKey) || 0) + orderQty);
-      styleOrderedTotal.set(r.styleCode, (styleOrderedTotal.get(r.styleCode) || 0) + orderQty);
 
       planRows.push({
         storeName: r.storeName,
@@ -2755,25 +2796,24 @@ export async function buildSalesAllocationPlan(startDateInput: string, endDateIn
         size: sku.size,
         periodQty: sku.periodQty,
         companyPeriodQty: companyQty,
+        cumulativeSalesQty: cumulativeQty ?? null,
         storePeriodQty: r.periodQty,
         storeStock: sku.stock,
-        warehouseStock: skuInventory.skuLevel ? skuWarehouseStock : styleWarehouseStock,
-        warehouseStockIsEstimate: !skuInventory.skuLevel,
+        warehouseStock: skuWarehouseStock,
         orderQty,
         skuKey,
       });
     }
   }
 
-  // 최종 "지시후" 값들을 채웁니다(같은 SKU/스타일의 다른 매장 지시수량까지 다 합산된 뒤).
+  // 최종 "지시후" 값들을 채웁니다(같은 SKU의 다른 매장 지시수량까지 다 합산된 뒤).
   for (const row of planRows) {
     row.storeStockAfter = row.storeStock + row.orderQty;
-    if (skuInventory.skuLevel) {
-      const totalOrdered = skuOrderedTotal.get(row.skuKey) || 0;
-      row.warehouseStockAfter = (skuStockMap.get(row.skuKey) ?? 0) - totalOrdered;
+    if (row.warehouseStock === null) {
+      row.warehouseStockAfter = null;
     } else {
-      const totalOrdered = styleOrderedTotal.get(row.styleCode) || 0;
-      row.warehouseStockAfter = (styleLevelStockMap.get(row.styleCode) || 0) - totalOrdered;
+      const totalOrdered = skuOrderedTotal.get(row.skuKey) || 0;
+      row.warehouseStockAfter = row.warehouseStock - totalOrdered;
     }
     delete row.skuKey;
   }
@@ -2786,12 +2826,22 @@ export async function buildSalesAllocationPlan(startDateInput: string, endDateIn
     return a.size.localeCompare(b.size);
   });
 
+  // MARK 2026-09-17: "??"는 daily-snapshot.js가 아직 이름을 확정 못한 사이즈 슬롯(SIZE_6 이상)
+  // 표시입니다(store-stock-lookup/route.ts의 같은 문구 참고) — 이 탭의 버그가 아니라 상위 ERP
+  // 스냅샷 단계의 기존 데이터 이슈라, 조용히 숨기지 않고 화면에 안내 문구로 알려줍니다.
+  // 실제로 화면에 나온(TOP50 + 기간판매>0 필터를 통과한) 품번만 셉니다.
+  const sizeUnknownStyleCount = new Set(planRows.filter((r) => r.size === "??").map((r) => r.styleCode)).size;
+
   return {
     startDate,
     endDate,
     ratioPercent,
     styleCount: topStyleCodes.size,
-    skuInventoryAvailable: skuInventory.skuLevel,
+    warehouseSnapshotAvailable,
+    warehouseUpdatedAt: warehouseSnapshot.meta?.uploadedAt || null,
+    warehouseRowCount: warehouseSnapshot.meta?.rowCount || 0,
+    cumulativeSalesAvailable,
+    sizeUnknownStyleCount,
     rows: planRows,
   };
 }

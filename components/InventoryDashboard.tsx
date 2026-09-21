@@ -2229,7 +2229,7 @@ function StoreRequestRtSection() {
             </p>
             {result.toStockConfirmed === false && (
               <p className="mt-2 text-xs font-black text-amber-600">
-                ⚠ {result.toStore}은 최근 45일간 이 품번(칼라) 판매 이력이 없어서 "현재 재고 0"은 확인된 값이 아니에요 — 실제 재고는 매장에 다시 확인해주세요.
+                ⚠ {result.toStore}은 최근 21일간 이 품번(칼라) 판매 이력이 없어서 "현재 재고 0"은 확인된 값이 아니에요 — 실제 재고는 매장에 다시 확인해주세요.
               </p>
             )}
           </div>

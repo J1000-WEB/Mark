@@ -2554,17 +2554,35 @@ function addDaysKST(dateKey: string, days: number) {
 // 실제 판매금액 포함)를 직접 집계해서 RT제안/재고이관/프로모션제안이 쓰는 것과 같은 모양의
 // productRows를 만듭니다. 재고(storeStock)는 합산이 아니라 "그 기간 중 가장 최근 날짜의 값"을
 // 씁니다(재고는 누적이 아니라 스냅샷이라서). 입고일은 Style_Launch_Master에서 보완합니다.
+//
+// MARK 2026-09-21: "점포요청 RT — 재고가 있는데 0장이라고 나와" 버그 조사 — Daily_Sales_History는
+// "그날 팔린 것만" 한 줄로 남기는 판매이력 시트라서(하루도 안 팔린 컬러/사이즈는 그 날짜엔
+// 아예 행 자체가 없음), 예전처럼 weekNet 계산 창(기본 2주)과 똑같은 기간만 읽으면 최근에
+// 딱 안 팔린 재고는 "데이터가 없어서" 0으로 보였습니다(실제 창고엔 있는데도). 두 가지를
+// 고쳤습니다:
+//  1) 재고 조회용 읽기 구간은 STOCK_LOOKBACK_DAYS(45일)까지 넓혀서, 최근엔 안 팔렸어도 그
+//     안에 한 번이라도 스캔된 적 있는 SKU는 마지막 재고값을 찾아옵니다(weekNet/prevNet
+//     집계 창은 그대로 유지 — 판매 추이 계산에는 영향 없음).
+//  2) 스타일 단위 storeStock을 "그 스타일의 아무 SKU나 마지막에 스캔된 값 하나"로 덮어쓰던
+//     버그를 고쳐서, 실제로는 skuRows(컬러+사이즈별로 정확히 추적된 재고)의 합계를 쓰도록
+//     했습니다 — 한 스타일에 컬러/사이즈가 여럿이면 예전엔 그중 하나만 반영되고 나머지는
+//     무시되고 있었습니다.
+const STOCK_LOOKBACK_DAYS = 45;
+
 export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7) {
   const weekEnd = anchorDate;
   const weekStart = addDaysKST(weekEnd, -(windowDays - 1));
   const prevWeekEnd = addDaysKST(weekStart, -1);
   const prevWeekStart = addDaysKST(prevWeekEnd, -(windowDays - 1));
+  // 재고 조회는 prevWeekStart보다 더 과거까지 봐서, 최근엔 안 팔렸어도 재고가 있는 SKU를 놓치지 않습니다.
+  const stockLookbackStart = addDaysKST(weekEnd, -(STOCK_LOOKBACK_DAYS - 1));
+  const readSince = stockLookbackStart < prevWeekStart ? stockLookbackStart : prevWeekStart;
 
   // loadDashboardDailyHistory와 같은 이유(전체 읽기 OOM)로, 이 함수가 실제로 쓰는 구간
-  // (prevWeekStart~weekEnd, 보통 2주)만 읽습니다. 시트 이름이 고정된 "Daily_Sales_History"라
+  // (readSince~weekEnd)만 읽습니다. 시트 이름이 고정된 "Daily_Sales_History"라
   // 포맷(압축)이 항상 보장되므로 바로 지름길을 씁니다.
   const historyId = getHistorySheetId();
-  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", prevWeekStart, weekEnd);
+  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", readSince, weekEnd);
   let raw: any[][];
   if (range) {
     const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
@@ -2579,11 +2597,10 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
   const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
 
   const grouped = new Map<string, any>();
-  const latestStockDateByStyle = new Map<string, string>();
   const latestStockDateBySku = new Map<string, string>();
 
   for (const r of flatRows) {
-    if (r.date < prevWeekStart || r.date > weekEnd) continue;
+    if (r.date < readSince || r.date > weekEnd) continue;
     if (!isCoreOfflineSalesStore(r.storeName)) continue;
 
     const storeKey = normalizeStoreKey(r.storeName);
@@ -2616,13 +2633,6 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
       item.prevAmount += Number(r.amount || 0);
     }
 
-    // 재고는 "가장 최근 날짜"의 값만 사용 (합산 금지 — 스냅샷 성격)
-    const lastStyleDate = latestStockDateByStyle.get(key);
-    if (!lastStyleDate || r.date > lastStyleDate) {
-      latestStockDateByStyle.set(key, r.date);
-      item.storeStock = Number(r.stock || 0);
-    }
-
     // 컬러/사이즈별 상세 (skuRows) — RT 컬러 지정 이관에 쓰임 (기존 parseProducts와 같은 필드명 사용)
     let sku = item.skuRows.find((s: any) => s.color === r.colorCode && s.size === r.size);
     if (!sku) {
@@ -2637,6 +2647,9 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
       sku.prevAmount += Number(r.amount || 0);
     }
 
+    // 재고는 "가장 최근 날짜"의 값만 사용 (합산 금지 — 스냅샷 성격). SKU(컬러+사이즈) 단위로
+    // 정확히 추적하고, 스타일 전체 재고(storeStock)는 아래 루프 종료 후 skuRows 합계로 구합니다
+    // (스타일 하나에 컬러/사이즈가 여럿인데 "마지막으로 스캔된 SKU 하나"만 반영되던 버그 수정).
     const skuKey = `${key}__${r.colorCode}__${r.size}`;
     const lastSkuDate = latestStockDateBySku.get(skuKey);
     if (!lastSkuDate || r.date > lastSkuDate) {
@@ -2645,7 +2658,11 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
     }
   }
 
-  return Array.from(grouped.values());
+  const result = Array.from(grouped.values());
+  for (const item of result) {
+    item.storeStock = item.skuRows.reduce((sum: number, sku: any) => sum + Number(sku.stock || 0), 0);
+  }
+  return result;
 }
 
 // MARK 2026-09-17: "재고컨트롤 > 판매분 배분" 탭 — 사용자가 고른 기간에 매장별로 팔린
@@ -2857,7 +2874,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
   );
   if (!coreRows.length) {
-    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 2주 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
+    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 ${STOCK_LOOKBACK_DAYS}일 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
   }
 
   const colorCode = text(colorInput).toUpperCase();
@@ -2878,6 +2895,11 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   const toWeekNet = useColor ? (toColorStats?.weekNet || 0) : Number(toRow?.weekNet || 0);
   const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;
   const resolvedColorName = useColor ? (toColorStats?.colorName || coreRows.map((r: any) => colorLevelStats(r, colorCode).colorName).find(Boolean) || "") : "";
+  // MARK 2026-09-21: "재고가 있는데 0장이라고 나와" 버그 조사 결과 — Daily_Sales_History는
+  // "그날 팔린 것만" 기록되는 판매이력이라, 이 매장이 최근 STOCK_LOOKBACK_DAYS일 안에 해당
+  // 품번(칼라)을 한 번도 안 팔았으면 재고 데이터 자체가 없어서 0으로 나옵니다(실제 재고가
+  // 있어도 0처럼 보일 수 있음). 이걸 화면에서 "확인된 재고 0"과 구분해서 보여주기 위한 플래그.
+  const toStockConfirmed = useColor ? !!toColorStats?.found : !!toRow;
 
   // 호조 엔진과 동일한 "목표재고 3주" 기준을 기본값으로 사용하되, 사용자가 수량을 직접 지정하면 그걸 우선합니다.
   const RT_TARGET_STOCK_WEEKS = 3;
@@ -2926,7 +2948,8 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
         `${toStoreName} 매장에서 품번 ${styleCode}${useColor ? `(칼라 ${colorCode}${resolvedColorName ? " " + resolvedColorName : ""})` : ""} 이동을 직접 요청했습니다.`,
         `목표 수량은 ${desiredQty}개이며, 이 중 ${qty}개를 ${s.storeName}에서 이동하는 안입니다.`,
         `${s.storeName}의 현재 재고는 ${Math.round(s.stock).toLocaleString("ko-KR")}개(재고주수 ${s.stockWeeks >= 999 ? "판매없음" : `${s.stockWeeks.toFixed(1)}주`})로, 자체 안전재고를 제외한 이동 가능 여유분입니다.`,
-      ].join("\n"),
+        toStockConfirmed ? "" : `⚠ ${toStoreName}은 최근 ${STOCK_LOOKBACK_DAYS}일간 이 품번(칼라) 판매 이력이 없어 재고 데이터를 찾지 못했습니다 — 목표수량 계산에 쓰인 "현재 재고 0"은 확인된 값이 아니니, 실제 재고를 매장에 다시 확인해주세요.`,
+      ].filter(Boolean).join("\n"),
     });
     remaining -= qty;
   }
@@ -2940,6 +2963,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     toStore: toStoreName,
     toStock,
     toStockWeeks,
+    toStockConfirmed,
     desiredQty,
     fulfilledQty: desiredQty - remaining,
     shortfall: Math.max(0, remaining),

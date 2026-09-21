@@ -2879,7 +2879,19 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
   if (!text(toStoreInput)) return { ok: false, error: "요청 점포를 입력해주세요." };
 
-  const productRowsRaw = await buildProductRowsFromDailyHistory(todayKST(), 7, RT_REQUEST_STOCK_LOOKBACK_DAYS);
+  // MARK 2026-09-21: "21030이 성수 플래그십인데 성수를 아예 인식 못하는 것 같아" — 요청 점포에
+  // 매장명 대신 ERP 채널코드("21030" 등)를 입력하는 경우가 있는데, 이 함수는 productRowsRaw의
+  // storeName(매장명 문자열)과 직접 normalizeStoreKey 비교만 하고 있어서 코드로 입력하면 그
+  // 매장을 전혀 못 찾고 있었습니다(RT_Result 저장 때 쓰는 rt-result/route.ts의
+  // channelCodeMap과 동일한 문제). getStoreCodeNameMap()이 이미 "객_전주" 시트 기준 코드→매장명
+  // 매핑을 제공하고(21030→성수 플래그십 등 자주 쓰는 코드는 fallback까지 갖춰둠) 있으므로,
+  // 코드로 입력된 경우 먼저 매장명으로 변환해서 나머지 로직은 그대로 매장명 기준으로 동작하게 합니다.
+  const [productRowsRaw, storeCodeNameMap] = await Promise.all([
+    buildProductRowsFromDailyHistory(todayKST(), 7, RT_REQUEST_STOCK_LOOKBACK_DAYS),
+    getStoreCodeNameMap().catch(() => new Map<string, string>()),
+  ]);
+  const resolvedToStoreInput =
+    storeCodeNameMap.get(text(toStoreInput)) || storeCodeNameMap.get(normalizeStoreKey(toStoreInput)) || toStoreInput;
 
   const coreRows = productRowsRaw.filter(
     (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
@@ -2897,11 +2909,11 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     }
   }
 
-  const toKey = normalizeStoreKey(toStoreInput);
+  const toKey = normalizeStoreKey(resolvedToStoreInput);
   const toRow = coreRows.find((r: any) => normalizeStoreKey(r.storeName) === toKey);
   const toColorStats = toRow && useColor ? colorLevelStats(toRow, colorCode) : null;
   const productName = coreRows[0]?.productName || "";
-  const toStoreName = toRow?.storeName || toStoreInput;
+  const toStoreName = toRow?.storeName || resolvedToStoreInput;
   const toStock = useColor ? (toColorStats?.stock || 0) : Number(toRow?.storeStock || 0);
   const toWeekNet = useColor ? (toColorStats?.weekNet || 0) : Number(toRow?.weekNet || 0);
   const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;

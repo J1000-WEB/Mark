@@ -2557,25 +2557,31 @@ function addDaysKST(dateKey: string, days: number) {
 //
 // MARK 2026-09-21: "점포요청 RT — 재고가 있는데 0장이라고 나와" 버그 조사 — Daily_Sales_History는
 // "그날 팔린 것만" 한 줄로 남기는 판매이력 시트라서(하루도 안 팔린 컬러/사이즈는 그 날짜엔
-// 아예 행 자체가 없음), 예전처럼 weekNet 계산 창(기본 2주)과 똑같은 기간만 읽으면 최근에
-// 딱 안 팔린 재고는 "데이터가 없어서" 0으로 보였습니다(실제 창고엔 있는데도). 두 가지를
-// 고쳤습니다:
-//  1) 재고 조회용 읽기 구간은 STOCK_LOOKBACK_DAYS(45일)까지 넓혀서, 최근엔 안 팔렸어도 그
-//     안에 한 번이라도 스캔된 적 있는 SKU는 마지막 재고값을 찾아옵니다(weekNet/prevNet
-//     집계 창은 그대로 유지 — 판매 추이 계산에는 영향 없음).
-//  2) 스타일 단위 storeStock을 "그 스타일의 아무 SKU나 마지막에 스캔된 값 하나"로 덮어쓰던
-//     버그를 고쳐서, 실제로는 skuRows(컬러+사이즈별로 정확히 추적된 재고)의 합계를 쓰도록
-//     했습니다 — 한 스타일에 컬러/사이즈가 여럿이면 예전엔 그중 하나만 반영되고 나머지는
-//     무시되고 있었습니다.
-const STOCK_LOOKBACK_DAYS = 45;
-
-export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7) {
+// 아예 행 자체가 없음), weekNet 계산 창(기본 2주)과 똑같은 기간만 읽으면 최근에 딱 안 팔린
+// 재고는 "데이터가 없어서" 0으로 보였습니다(실제 창고엔 있는데도).
+//
+// 처음엔 이 함수 전체의 읽기 구간을 45일로 넓혔는데, 이 함수는 호조/부진 RT 엔진과 전사지시
+// (여기는 원래도 회사 전체 23개 매장 데이터를 한 번에 읽는 무거운 호출)에서도 공용으로
+// 쓰이는 함수라, 모든 호출부가 다 같이 45일치를 읽게 되면서 오히려 /api/data와 다른 RT
+// 탭까지 같이 느려지고 타임아웃(500)이 나는 부작용이 있었습니다(소천님이 실제로 겪으신
+// "제안 계산 실패" + "너무 많아서 500 뜨는 것 같다"가 바로 이것이었습니다). 그래서 기본
+// 동작은 원래대로(windowDays 기준, 보통 2주)로 되돌리고, 재고 조회 구간을 넓히는 건
+// stockLookbackDays 파라미터로 옵션화해서 실제로 필요한 곳(점포요청 RT 하나)에서만,
+// 그것도 45일이 아니라 21일(store-stock-lookup에서 이미 검증된 폭)로 좁혀서 켭니다 —
+// 나머지 호출부(호조/부진/전사지시/추이)는 예전과 완전히 동일한 속도를 유지합니다.
+//
+// 스타일 단위 storeStock을 "그 스타일의 아무 SKU나 마지막에 스캔된 값 하나"로 덮어쓰던
+// 버그도 고쳐서, 실제로는 skuRows(컬러+사이즈별로 정확히 추적된 재고)의 합계를 쓰도록
+// 했습니다 — 한 스타일에 컬러/사이즈가 여럿이면 예전엔 그중 하나만 반영되고 나머지는
+// 무시되고 있었습니다. 이건 읽는 데이터량과 무관한 순수 계산 버그라 항상 켜둡니다.
+export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7, stockLookbackDays?: number) {
   const weekEnd = anchorDate;
   const weekStart = addDaysKST(weekEnd, -(windowDays - 1));
   const prevWeekEnd = addDaysKST(weekStart, -1);
   const prevWeekStart = addDaysKST(prevWeekEnd, -(windowDays - 1));
-  // 재고 조회는 prevWeekStart보다 더 과거까지 봐서, 최근엔 안 팔렸어도 재고가 있는 SKU를 놓치지 않습니다.
-  const stockLookbackStart = addDaysKST(weekEnd, -(STOCK_LOOKBACK_DAYS - 1));
+  // stockLookbackDays가 주어진 호출부만 재고 조회 구간을 prevWeekStart보다 더 과거까지 넓힙니다
+  // (기본값 없음 = 예전과 동일한 동작, 다른 호출부에 영향 없음).
+  const stockLookbackStart = stockLookbackDays ? addDaysKST(weekEnd, -(stockLookbackDays - 1)) : prevWeekStart;
   const readSince = stockLookbackStart < prevWeekStart ? stockLookbackStart : prevWeekStart;
 
   // loadDashboardDailyHistory와 같은 이유(전체 읽기 OOM)로, 이 함수가 실제로 쓰는 구간
@@ -2863,18 +2869,23 @@ export async function buildSalesAllocationPlan(startDateInput: string, endDateIn
   };
 }
 
+// MARK 2026-09-21: store-stock-lookup/route.ts가 이미 21일 폭으로 검증해서 쓰고 있는 것과
+// 같은 값입니다 — 45일까지 넓혔다가 회사 전체(23개 매장) 데이터량이 너무 커져서 실제로
+// "제안 계산 실패"(타임아웃/500)가 나는 걸 확인하고 21일로 되돌렸습니다.
+const RT_REQUEST_STOCK_LOOKBACK_DAYS = 21;
+
 export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number, colorInput?: string) {
   const styleCode = text(styleCodeInput).toUpperCase();
   if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
   if (!text(toStoreInput)) return { ok: false, error: "요청 점포를 입력해주세요." };
 
-  const productRowsRaw = await buildProductRowsFromDailyHistory();
+  const productRowsRaw = await buildProductRowsFromDailyHistory(todayKST(), 7, RT_REQUEST_STOCK_LOOKBACK_DAYS);
 
   const coreRows = productRowsRaw.filter(
     (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
   );
   if (!coreRows.length) {
-    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 ${STOCK_LOOKBACK_DAYS}일 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
+    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 ${RT_REQUEST_STOCK_LOOKBACK_DAYS}일 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
   }
 
   const colorCode = text(colorInput).toUpperCase();
@@ -2896,7 +2907,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;
   const resolvedColorName = useColor ? (toColorStats?.colorName || coreRows.map((r: any) => colorLevelStats(r, colorCode).colorName).find(Boolean) || "") : "";
   // MARK 2026-09-21: "재고가 있는데 0장이라고 나와" 버그 조사 결과 — Daily_Sales_History는
-  // "그날 팔린 것만" 기록되는 판매이력이라, 이 매장이 최근 STOCK_LOOKBACK_DAYS일 안에 해당
+  // "그날 팔린 것만" 기록되는 판매이력이라, 이 매장이 최근 RT_REQUEST_STOCK_LOOKBACK_DAYS(21)일 안에 해당
   // 품번(칼라)을 한 번도 안 팔았으면 재고 데이터 자체가 없어서 0으로 나옵니다(실제 재고가
   // 있어도 0처럼 보일 수 있음). 이걸 화면에서 "확인된 재고 0"과 구분해서 보여주기 위한 플래그.
   const toStockConfirmed = useColor ? !!toColorStats?.found : !!toRow;
@@ -2948,7 +2959,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
         `${toStoreName} 매장에서 품번 ${styleCode}${useColor ? `(칼라 ${colorCode}${resolvedColorName ? " " + resolvedColorName : ""})` : ""} 이동을 직접 요청했습니다.`,
         `목표 수량은 ${desiredQty}개이며, 이 중 ${qty}개를 ${s.storeName}에서 이동하는 안입니다.`,
         `${s.storeName}의 현재 재고는 ${Math.round(s.stock).toLocaleString("ko-KR")}개(재고주수 ${s.stockWeeks >= 999 ? "판매없음" : `${s.stockWeeks.toFixed(1)}주`})로, 자체 안전재고를 제외한 이동 가능 여유분입니다.`,
-        toStockConfirmed ? "" : `⚠ ${toStoreName}은 최근 ${STOCK_LOOKBACK_DAYS}일간 이 품번(칼라) 판매 이력이 없어 재고 데이터를 찾지 못했습니다 — 목표수량 계산에 쓰인 "현재 재고 0"은 확인된 값이 아니니, 실제 재고를 매장에 다시 확인해주세요.`,
+        toStockConfirmed ? "" : `⚠ ${toStoreName}은 최근 ${RT_REQUEST_STOCK_LOOKBACK_DAYS}일간 이 품번(칼라) 판매 이력이 없어 재고 데이터를 찾지 못했습니다 — 목표수량 계산에 쓰인 "현재 재고 0"은 확인된 값이 아니니, 실제 재고를 매장에 다시 확인해주세요.`,
       ].filter(Boolean).join("\n"),
     });
     remaining -= qty;

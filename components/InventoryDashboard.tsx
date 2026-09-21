@@ -2224,9 +2224,14 @@ function StoreRequestRtSection() {
           <div className="rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-600">
             <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode}{result.colorCode ? ` / ${result.colorCode}${result.colorName ? " " + result.colorName : ""}` : ""})</p>
             <p className="mt-1">
-              {result.toStore} 현재 재고 {fmtNum(result.toStock)}개 · 재고주수 {result.toStockWeeks >= 999 ? "판매없음" : `${Number(result.toStockWeeks).toFixed(1)}주`} ·
+              {result.toStore} 현재 재고 {fmtNum(result.toStock)}개{result.toStockConfirmed === false ? " (확인 안됨)" : ""} · 재고주수 {result.toStockWeeks >= 999 ? "판매없음" : `${Number(result.toStockWeeks).toFixed(1)}주`} ·
               목표수량 {fmtNum(result.desiredQty)}개 (충족 {fmtNum(result.fulfilledQty)}개{result.shortfall ? `, 부족 ${fmtNum(result.shortfall)}개` : ""})
             </p>
+            {result.toStockConfirmed === false && (
+              <p className="mt-2 text-xs font-black text-amber-600">
+                ⚠ {result.toStore}은 최근 45일간 이 품번(칼라) 판매 이력이 없어서 "현재 재고 0"은 확인된 값이 아니에요 — 실제 재고는 매장에 다시 확인해주세요.
+              </p>
+            )}
           </div>
 
           {!result.suggestions?.length ? (

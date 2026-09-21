@@ -141,7 +141,16 @@ async function readHourlyAmountsByDate(historyId: string, dateKeys: string[]): P
 
 export type HourlyTrendPoint = { hour: string; todayAmount: number | null; lastWeekAmount: number | null };
 
-export async function readRealtimeHourlyTrend() {
+// MARK 2026-09-21: "매출예측은 소천님이 주신 시간대별 배율표(hourlyPaceProfile.ts)만으로
+// 계산되게 하자, 그거면 충분히 표시할 수 있잖아" 요청 — 예전엔 Realtime_Hourly_Snapshot에
+// 오늘 이번 시각 기록이 있어야만 예측이 나왔는데(정시 기록이 GitHub Actions 스케줄러
+// 불안정 문제로 빠지는 시간대가 많아서 예측도 같이 안 나오는 문제가 있었습니다), 이제는
+// "오늘 지금까지의 실시간 누적매출"(todayLiveAmount — 호출부인 app/api/realtime이 매번
+// Daily_Sales_History에서 직접 계산해서 넘겨줌, 정시 기록과 무관하게 항상 최신값)과
+// 정적 배율표만으로 계산합니다. 그래서 예측은 이제 Realtime_Hourly_Snapshot이 하나도
+// 없어도 항상 뜹니다. 정시 기록 자체는 이 함수 위쪽의 "오늘 vs 지난주" 시간대별 추이
+// 그래프(과거 시점별 비교가 반드시 필요한 용도)를 위해 계속 쌓아둡니다.
+export async function readRealtimeHourlyTrend(todayLiveAmount?: number) {
   const historyId = getHistorySheetId();
   const today = kstDateKey();
   const currentHourLabel = `${String(kstHour()).padStart(2, "0")}:00`;
@@ -159,41 +168,20 @@ export async function readRealtimeHourlyTrend() {
     lastWeekAmount: lastWeekMap.has(hour) ? lastWeekMap.get(hour)! : null,
   }));
 
-  // 각 과거 주(지금은 1주)에서 "그날의 최종 누적매출"(기록된 시각 중 가장 늦은 값)과
-  // "오늘과 같은 시각의 누적매출"을 뽑아서 run-rate 비율을 냅니다. 여러 주가 쌓이면
-  // 각 주의 비율을 평균 내서 projectedEndOfDayAmount를 계산합니다.
-  const todayAtCurrentHour = todayMap.get(currentHourLabel) ?? null;
-  const ratios: number[] = [];
-  let primaryLastWeekFinalAmount: number | null = null;
+  const primaryLastWeekFinalAmount: number | null = (() => {
+    const map = amountsByDate.get(primaryLastWeekDate);
+    if (!map || !map.size) return null;
+    return hours.reduce((latest: number | null, h) => (map.has(h) ? map.get(h)! : latest), null as number | null);
+  })();
 
-  lookbackDates.forEach((dateKey, idx) => {
-    const map = amountsByDate.get(dateKey);
-    if (!map || !map.size) return;
-    const finalAmount = hours.reduce((latest: number | null, h) => (map.has(h) ? map.get(h)! : latest), null as number | null);
-    const atSameHour = map.get(currentHourLabel);
-    if (idx === 0) primaryLastWeekFinalAmount = finalAmount ?? null;
-    if (atSameHour && atSameHour > 0 && finalAmount) ratios.push(finalAmount / atSameHour);
-  });
-
-  // MARK 2026-09-14: "지난주 같은 시각" 라이브 비교(위 ratios)는 Realtime_Hourly_Snapshot에
-  // 최소 1주치가 쌓여야만 계산되는데, 방금 GitHub Actions 기록을 시작해서 사실상 데이터가
-  // 없었습니다("실시간 매출추이 데이터 쌓을 필요없이 내가 주차별로 해서 주면되는거였네"). 대신
-  // 소천님이 주신 6주치 평일/주말 시간대별 집계(hourlyPaceProfile.ts)로 계산한, 훨씬 안정적인
-  // 배율을 우선 사용합니다. 라이브 데이터가 쌓여서 그쪽도 계산 가능해지면 폴백으로 씁니다.
   const todayDow = nowKST().getDay();
   const isWeekendToday = todayDow === 0 || todayDow === 6;
   const staticRatio = getCompanyProjectionRatio(currentHourLabel, isWeekendToday);
+  // 라이브 값이 넘어오면 그걸 우선 쓰고(정시 기록 여부와 무관하게 항상 최신), 안 넘어온
+  // 호출부(과거 호환)에서만 그날 기록된 스냅샷 값으로 대체합니다.
+  const todaySoFar = todayLiveAmount ?? todayMap.get(currentHourLabel) ?? null;
 
-  let projectedEndOfDayAmount: number | null = null;
-  let projectionSource: "historical_profile" | "last_week_live" | null = null;
-  if (todayAtCurrentHour && staticRatio) {
-    projectedEndOfDayAmount = Math.round(todayAtCurrentHour * staticRatio);
-    projectionSource = "historical_profile";
-  } else if (todayAtCurrentHour && ratios.length) {
-    const avgRatio = ratios.reduce((s, r) => s + r, 0) / ratios.length;
-    projectedEndOfDayAmount = Math.round(todayAtCurrentHour * avgRatio);
-    projectionSource = "last_week_live";
-  }
+  const projectedEndOfDayAmount = todaySoFar && staticRatio ? Math.round(todaySoFar * staticRatio) : null;
   // 예측이 아직 없을 때(대부분 이른 시간대) "언제부터 뜨는지" 화면에 정확히 알려주기 위한 값.
   const projectionAvailableFromHour = projectedEndOfDayAmount ? null : getFirstStableProjectionHour(isWeekendToday);
 
@@ -204,8 +192,7 @@ export async function readRealtimeHourlyTrend() {
     hasLastWeekData: lastWeekMap.size > 0,
     lastWeekFinalAmount: primaryLastWeekFinalAmount,
     projectedEndOfDayAmount,
-    projectionSource,
+    projectionSource: projectedEndOfDayAmount ? ("historical_profile" as const) : null,
     projectionAvailableFromHour,
-    weeksUsedForProjection: ratios.length,
   };
 }

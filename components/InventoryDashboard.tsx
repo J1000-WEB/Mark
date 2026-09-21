@@ -2222,11 +2222,27 @@ function StoreRequestRtSection() {
       {result && (
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-600">
-            <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode}{result.colorCode ? ` / ${result.colorCode}${result.colorName ? " " + result.colorName : ""}` : ""})</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-900">{result.productName} ({result.styleCode}{result.colorCode ? ` / ${result.colorCode}${result.colorName ? " " + result.colorName : ""}` : ""})</p>
+              {result.stockSource === "pip" ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                  PIP 재고 기준{result.pipUpdatedAt ? ` (${result.pipUpdatedAt} 업로드분)` : ""}
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
+                  판매이력 추정치(PIP에 이 품번 없음)
+                </span>
+              )}
+            </div>
             <p className="mt-1">
               {result.toStore} 현재 재고 {fmtNum(result.toStock)}개{result.toStockConfirmed === false ? " (확인 안됨)" : ""} · 재고주수 {result.toStockWeeks >= 999 ? "판매없음" : `${Number(result.toStockWeeks).toFixed(1)}주`} ·
               목표수량 {fmtNum(result.desiredQty)}개 (충족 {fmtNum(result.fulfilledQty)}개{result.shortfall ? `, 부족 ${fmtNum(result.shortfall)}개` : ""})
             </p>
+            {result.stockSource !== "pip" && (
+              <p className="mt-2 text-xs font-black text-amber-600">
+                ⚠ PIP 재고 스냅샷에서 이 품번을 찾지 못해서, 최근 21일 판매이력으로 재고를 추정했어요 — "판매데이터 제안" 탭에서 PIP 파일을 업로드하면 더 정확해져요.
+              </p>
+            )}
             {result.toStockConfirmed === false && (
               <p className="mt-2 text-xs font-black text-amber-600">
                 ⚠ {result.toStore}은 최근 21일간 이 품번(칼라) 판매 이력이 없어서 "현재 재고 0"은 확인된 값이 아니에요 — 실제 재고는 매장에 다시 확인해주세요.
@@ -2658,6 +2674,15 @@ export default function InventoryDashboard() {
 
         <SalesAllocationSection />
 
+        {data.rtStockSource === "pip" ? (
+          <p className="-mb-2 text-xs font-bold text-emerald-600">
+            ✓ 아래 RT 제안(호조/부진)은 PIP 매장별 재고 스냅샷 기준입니다{data.rtPipUpdatedAt ? ` (${data.rtPipUpdatedAt} 업로드분)` : ""}.
+          </p>
+        ) : (
+          <p className="-mb-2 text-xs font-bold text-amber-600">
+            ⚠ 아직 PIP 재고 스냅샷이 없어서, 아래 RT 제안은 최근 판매이력으로 추정한 재고를 기준으로 계산됐어요. "판매데이터 제안" 탭에서 PIP 파일을 올리면 더 정확해져요.
+          </p>
+        )}
         <RTSuggestionSection
           items={data.rtSuggestions || []}
           statusMap={rtStatusMap}

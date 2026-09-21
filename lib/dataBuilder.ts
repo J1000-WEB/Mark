@@ -568,6 +568,79 @@ async function readWarehouseStockSnapshot() {
   return { rows, meta };
 }
 
+// MARK 2026-09-21: "점포요청 RT 재고가 너무 부정확하다" — 소천님이 매일 아침 올리시는 PIP
+// 파일이 실제로는 매장별 재고를 정확히 갖고 있는데(스타일/칼라/사이즈별로 24개 매장 각각의
+// "재고" 컬럼이 있음, 클라이언트 쪽 lib/salesDataSuggestions.ts의 extractStoreStockRows가
+// 헤더+하위라벨을 둘 다 확인해서 뽑아옴), 점포요청 RT는 지금까지 Daily_Sales_History(판매된
+// 것만 기록되는 판매이력)로만 재고를 추정하고 있었습니다. PIP 업로드 시 이 매장별 재고도
+// 같이 압축 저장해서(물류가용재고_스냅샷과 동일한 패턴), 점포요청 RT가 훨씬 정확한 이
+// 소스를 재고 판단에 우선 사용하도록 합니다.
+const STORE_STOCK_SNAPSHOT_SHEET = "매장별_재고_스냅샷";
+const STORE_STOCK_SNAPSHOT_META_SHEET = "매장별_재고_스냅샷_메타";
+const STORE_STOCK_SNAPSHOT_HEADER = ["스타일", "스타일명", "칼라", "칼라명", "사이즈", "매장", "재고"];
+const STORE_STOCK_SNAPSHOT_META_HEADER = ["업로드일시", "행수", "매장수", "원본파일명"];
+
+// 업로드(app/api/store-stock-upload)에서 호출합니다. rows는 클라이언트에서 이미
+// [스타일,스타일명,칼라,칼라명,사이즈,매장,재고]로 압축해서 보낸 값입니다
+// (헤더/하위라벨을 둘 다 확인해서 뽑은 값 — lib/salesDataSuggestions.ts의 extractStoreStockRows 참고).
+export async function saveStoreStockSnapshot(rows: any[][], fileName?: string) {
+  const clean = (rows || [])
+    .map((r) => [text(r[0]), text(r[1]), text(r[2]), text(r[3]), text(r[4]), text(r[5]), num(r[6])])
+    .filter((r) => r[0] && r[2] && r[4] && r[5]); // 스타일/칼라/사이즈/매장 필수(스타일명/칼라명은 없어도 됨)
+  if (!clean.length) {
+    throw new Error("업로드할 매장별 재고 데이터를 찾지 못했습니다. PIP 파일의 매장 컬럼을 확인해주세요.");
+  }
+
+  const dbId = getDbSheetId();
+  await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, STORE_STOCK_SNAPSHOT_HEADER);
+  await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, STORE_STOCK_SNAPSHOT_META_HEADER);
+
+  await safeReplaceSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, [STORE_STOCK_SNAPSHOT_HEADER, ...clean]);
+
+  const storeCount = new Set(clean.map((r) => r[5])).size;
+  const uploadedAt = nowKSTDateTime();
+  await safeReplaceSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, [
+    STORE_STOCK_SNAPSHOT_META_HEADER,
+    [uploadedAt, clean.length, storeCount, text(fileName)],
+  ]);
+
+  return { ok: true, rowCount: clean.length, storeCount, uploadedAt };
+}
+
+export async function getStoreStockSnapshotMeta() {
+  const dbId = getDbSheetId();
+  const rows = await getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2").catch(() => [] as any[]);
+  const row = rows[0];
+  if (!row || !text(row[0])) return null;
+  return { uploadedAt: text(row[0]), rowCount: num(row[1]), storeCount: num(row[2]), fileName: text(row[3]) };
+}
+
+type StoreStockSnapshotRow = { styleCode: string; productName: string; color: string; colorName: string; size: string; storeName: string; stock: number };
+
+async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
+  const dbId = getDbSheetId();
+  const [dataRows, metaRows] = await Promise.all([
+    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G500000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2").catch(() => [] as any[]),
+  ]);
+  const rows = dataRows
+    .filter((r) => r && text(r[0]))
+    .map((r) => ({
+      styleCode: text(r[0]),
+      productName: text(r[1]),
+      color: text(r[2]),
+      colorName: text(r[3]),
+      size: text(r[4]),
+      storeName: text(r[5]),
+      stock: num(r[6]),
+    }));
+  const metaRow = metaRows[0];
+  const meta = metaRow && text(metaRow[0])
+    ? { uploadedAt: text(metaRow[0]), rowCount: num(metaRow[1]), storeCount: num(metaRow[2]), fileName: text(metaRow[3]) }
+    : null;
+  return { rows, meta };
+}
+
 export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
   const map = new Map<string, any>();
   for (const r of rows) {
@@ -1135,7 +1208,12 @@ function summarizeSkuNeeds(weights: any[], limit = 3) {
   return `사이즈별로 보면 ${parts.join(", ")}${rest} 부족합니다.`;
 }
 
-async function buildInventory(productRows: any[], inventoryRows: any[], companyTopProducts: any[]) {
+async function buildInventory(
+  productRows: any[],
+  inventoryRows: any[],
+  companyTopProducts: any[],
+  storeStockSnapshot?: { rows: StoreStockSnapshotRow[]; meta: any } | null
+) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
@@ -1201,6 +1279,66 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
 
     if (!byStyle.has(r.styleCode)) byStyle.set(r.styleCode, []);
     byStyle.get(r.styleCode)!.push(r);
+  }
+
+  // MARK 2026-09-21: "호조/부진 RT도 점포요청 RT처럼 PIP 재고를 쓰는 게 낫지 않겠냐" — 맞는
+  // 지적이라 반영합니다. Daily_Sales_History만으로는 "이 상품을 최근에 한 번도 안 판 매장"은
+  // 행 자체가 없어서(위 byStyle 그룹에 아예 안 잡히고, 심하면 rows.length<2에 걸려 그 품번
+  // 전체가 RT 후보에서 통째로 빠지기도 함) 재고가 있어도 이동 후보로 안 보였습니다. byStyle에
+  // 만 국한해서(= RT 제안에만 영향, 프로모션/재고위험 등 다른 섹션은 그대로) 다음을 합니다:
+  // (1) 이미 있는 행은 재고를 PIP 값으로 덮어쓰고(판매 추이는 여전히 Daily_Sales_History 사용),
+  // (2) PIP엔 재고가 있는데 행 자체가 없던 매장은 판매 0인 행을 추가해 출고 후보로는 잡히게
+  // 합니다(입고 후보/부진 받는점포는 둘 다 weekNet>0을 요구해서 자동으로 걸러짐 — 안 팔리는
+  // 매장이 받는 쪽으로 잘못 뽑힐 위험은 없음). 원본 coreProducts/productRows 배열의 행 객체는
+  // 건드리지 않고, byStyle이 들고 있는 배열/항목만 복제해서 바꿔치기하므로 다른 섹션(프로모션
+  // 제안, 재고위험 리스트 등)에는 영향이 없습니다.
+  if (storeStockSnapshot?.rows?.length) {
+    const pipByStyle = new Map<string, StoreStockSnapshotRow[]>();
+    for (const r of storeStockSnapshot.rows) {
+      const key = r.styleCode.toUpperCase();
+      if (!pipByStyle.has(key)) pipByStyle.set(key, []);
+      pipByStyle.get(key)!.push(r);
+    }
+
+    for (const [styleCode, rows] of byStyle.entries()) {
+      const pipRows = pipByStyle.get(styleCode.toUpperCase());
+      if (!pipRows || !pipRows.length) continue;
+
+      const pipStoreTotals = new Map<string, number>();
+      const pipStoreDisplayName = new Map<string, string>();
+      for (const r of pipRows) {
+        const key = normalizeStoreKey(r.storeName);
+        pipStoreTotals.set(key, (pipStoreTotals.get(key) || 0) + r.stock);
+        if (!pipStoreDisplayName.has(key)) pipStoreDisplayName.set(key, r.storeName);
+      }
+
+      const seenStoreKeys = new Set<string>();
+      for (let i = 0; i < rows.length; i++) {
+        const key = normalizeStoreKey(rows[i].storeName);
+        seenStoreKeys.add(key);
+        if (pipStoreTotals.has(key)) {
+          rows[i] = { ...rows[i], storeStock: pipStoreTotals.get(key) };
+        }
+      }
+
+      const sample = rows[0];
+      for (const [storeKey, stock] of pipStoreTotals.entries()) {
+        if (seenStoreKeys.has(storeKey)) continue;
+        const storeName = pipStoreDisplayName.get(storeKey) || storeKey;
+        if (!isCoreOfflineSalesStore(storeName)) continue;
+        rows.push({
+          styleCode,
+          storeName,
+          productName: sample?.productName || pipRows[0]?.productName || "",
+          weekNet: 0,
+          prevNet: 0,
+          weekAmount: 0,
+          storeStock: stock,
+          launchTime: sample?.launchTime || 0,
+          skuRows: [],
+        });
+      }
+    }
   }
 
   const maxStoreAmount = Math.max(1, ...Array.from(storeAmountMap.values()));
@@ -1648,6 +1786,9 @@ async function buildInventory(productRows: any[], inventoryRows: any[], companyT
     rtSuggestions: sortedRtSuggestions.slice(0, RT_SUGGESTION_SAFETY_CAP),
     rtEligibleProductRank: RT_ELIGIBLE_RANK,
     rtSuggestionProductCount,
+    // MARK 2026-09-21: 이 RT 제안들이 PIP 매장별 재고 스냅샷을 참고했는지 화면에 보여주기 위한 메타.
+    rtStockSource: storeStockSnapshot?.rows?.length ? "pip" : "daily_sales_history",
+    rtPipUpdatedAt: storeStockSnapshot?.meta?.uploadedAt || null,
     consignmentRecommendations,
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     overstockStoreTop5: finalize(send).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
@@ -2874,6 +3015,16 @@ export async function buildSalesAllocationPlan(startDateInput: string, endDateIn
 // "제안 계산 실패"(타임아웃/500)가 나는 걸 확인하고 21일로 되돌렸습니다.
 const RT_REQUEST_STOCK_LOOKBACK_DAYS = 21;
 
+// MARK 2026-09-21: "점포요청 RT 재고랑 판매를 어디서 보고 있는 거야? 너무 부정확한 거 같아"
+// — 재고 소스를 Daily_Sales_History(판매된 것만 기록되는 판매이력) 하나에서, 소천님이
+// 매일 아침 올리시는 PIP 파일 기반 매장별 재고 스냅샷(readStoreStockSnapshot, 있으면)을
+// 최우선으로 쓰도록 바꿨습니다. PIP는 실제 매장별 재고 전체를 담고 있어서(안 팔린 것 포함)
+// Daily_Sales_History보다 훨씬 정확하고, "최근에 안 팔린 매장"도 후보에서 빠지지 않습니다
+// (이게 바로 "재고가 있는데 0으로 나온다"던 원래 버그의 진짜 원인이었습니다 — Daily_Sales_History는
+// 그 매장이 최근에 이 품번을 한 번도 안 팔았으면 데이터 자체가 없었음). 판매 페이스(weekNet,
+// 안전재고 계산용)는 여전히 Daily_Sales_History에서 가져옵니다 — PIP는 재고 스냅샷이라
+// 판매 추이 데이터를 담고 있지 않습니다. PIP 스냅샷이 아직 없거나 이 품번이 PIP에 없으면
+// 예전처럼 Daily_Sales_History만으로 추정하고 "확인 안됨"으로 표시합니다.
 export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreInput: string, desiredQtyInput?: number, colorInput?: string) {
   const styleCode = text(styleCodeInput).toUpperCase();
   if (!styleCode) return { ok: false, error: "품번을 입력해주세요." };
@@ -2886,43 +3037,80 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
   // channelCodeMap과 동일한 문제). getStoreCodeNameMap()이 이미 "객_전주" 시트 기준 코드→매장명
   // 매핑을 제공하고(21030→성수 플래그십 등 자주 쓰는 코드는 fallback까지 갖춰둠) 있으므로,
   // 코드로 입력된 경우 먼저 매장명으로 변환해서 나머지 로직은 그대로 매장명 기준으로 동작하게 합니다.
-  const [productRowsRaw, storeCodeNameMap] = await Promise.all([
+  const [productRowsRaw, storeCodeNameMap, storeStockSnapshot] = await Promise.all([
     buildProductRowsFromDailyHistory(todayKST(), 7, RT_REQUEST_STOCK_LOOKBACK_DAYS),
     getStoreCodeNameMap().catch(() => new Map<string, string>()),
+    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
   ]);
   const resolvedToStoreInput =
     storeCodeNameMap.get(text(toStoreInput)) || storeCodeNameMap.get(normalizeStoreKey(toStoreInput)) || toStoreInput;
 
+  const colorCode = text(colorInput).toUpperCase();
+  const useColor = !!colorCode;
+
+  const pipRowsForStyleAllColors = storeStockSnapshot.rows.filter((r) => r.styleCode.toUpperCase() === styleCode);
+  const styleInPip = pipRowsForStyleAllColors.length > 0;
+  const pipRowsForStyle = useColor ? pipRowsForStyleAllColors.filter((r) => r.color.toUpperCase() === colorCode) : pipRowsForStyleAllColors;
+
   const coreRows = productRowsRaw.filter(
     (r: any) => isCoreOfflineSalesStore(r.storeName) && text(r.styleCode).toUpperCase() === styleCode
   );
-  if (!coreRows.length) {
-    return { ok: false, error: `품번 "${styleCodeInput}"에 대한 데이터를 최근 ${RT_REQUEST_STOCK_LOOKBACK_DAYS}일 판매기록에서 찾지 못했습니다. 품번을 다시 확인해주세요.` };
-  }
+  const salesByStoreKey = new Map(coreRows.map((r: any) => [normalizeStoreKey(r.storeName), r]));
 
-  const colorCode = text(colorInput).toUpperCase();
-  const useColor = !!colorCode;
   if (useColor) {
-    const anyColorMatch = coreRows.some((r: any) => colorLevelStats(r, colorCode).found);
-    if (!anyColorMatch) {
+    const colorExistsAnywhere =
+      pipRowsForStyleAllColors.some((r) => r.color.toUpperCase() === colorCode) ||
+      coreRows.some((r: any) => colorLevelStats(r, colorCode).found);
+    if (!colorExistsAnywhere) {
       return { ok: false, error: `품번 "${styleCodeInput}"에서 칼라 "${colorInput}"를 찾지 못했습니다. 칼라코드를 다시 확인해주세요.` };
     }
   }
 
-  const toKey = normalizeStoreKey(resolvedToStoreInput);
-  const toRow = coreRows.find((r: any) => normalizeStoreKey(r.storeName) === toKey);
-  const toColorStats = toRow && useColor ? colorLevelStats(toRow, colorCode) : null;
-  const productName = coreRows[0]?.productName || "";
-  const toStoreName = toRow?.storeName || resolvedToStoreInput;
-  const toStock = useColor ? (toColorStats?.stock || 0) : Number(toRow?.storeStock || 0);
-  const toWeekNet = useColor ? (toColorStats?.weekNet || 0) : Number(toRow?.weekNet || 0);
+  // 후보 매장 목록: PIP에 이 품번이 있으면 PIP 스냅샷 전체(모든 매장, 이 품번과 무관하게)에
+  // 등장하는 매장 목록을 씁니다 — Daily_Sales_History 기준으로만 후보를 뽑던 예전 방식은
+  // "이 품번을 최근에 안 판 매장"을 후보에서 통째로 제외해버렸는데, 점포요청은 오히려 그런
+  // 매장(재고는 있는데 최근 안 팔린 곳)에서 받아오려는 경우가 많았습니다.
+  const candidateStoreNames = styleInPip
+    ? Array.from(new Set(storeStockSnapshot.rows.map((r) => r.storeName))).filter((name) => isCoreOfflineSalesStore(name))
+    : Array.from(new Set(coreRows.map((r: any) => r.storeName)));
+
+  if (!candidateStoreNames.length) {
+    return { ok: false, error: `품번 "${styleCodeInput}"${useColor ? `(칼라 ${colorInput})` : ""}에 대한 매장별 재고/판매 데이터를 찾지 못했습니다. 품번을 다시 확인해주세요.` };
+  }
+
+  function pipStockForStore(storeName: string): number | null {
+    const key = normalizeStoreKey(storeName);
+    const matches = pipRowsForStyle.filter((r) => normalizeStoreKey(r.storeName) === key);
+    if (!matches.length) return null; // PIP에 이 매장의 해당 SKU 행이 없음 = 재고 0(스냅샷이 nonzero만 담고 있음)
+    return matches.reduce((s, r) => s + r.stock, 0);
+  }
+  function weekNetForStore(storeName: string): number {
+    const row = salesByStoreKey.get(normalizeStoreKey(storeName));
+    if (!row) return 0;
+    return useColor ? colorLevelStats(row, colorCode).weekNet : Number(row.weekNet || 0);
+  }
+  // 재고: PIP에 이 품번이 있으면(styleInPip) PIP를 확정값으로 쓰고(행이 없으면 확인된 0),
+  // 없으면 예전처럼 Daily_Sales_History에서 추정하되 "확인 안됨"으로 표시합니다.
+  function stockForStore(storeName: string): { stock: number; confirmed: boolean } {
+    if (styleInPip) {
+      return { stock: pipStockForStore(storeName) ?? 0, confirmed: true };
+    }
+    const row = salesByStoreKey.get(normalizeStoreKey(storeName));
+    if (!row) return { stock: 0, confirmed: false };
+    const stats = useColor ? colorLevelStats(row, colorCode) : null;
+    const stock = useColor ? (stats?.stock || 0) : Number(row.storeStock || 0);
+    const confirmed = useColor ? !!stats?.found : true;
+    return { stock, confirmed };
+  }
+
+  const toStoreName = resolvedToStoreInput;
+  const { stock: toStock, confirmed: toStockConfirmed } = stockForStore(toStoreName);
+  const toWeekNet = weekNetForStore(toStoreName);
   const toStockWeeks = toWeekNet > 0 ? toStock / toWeekNet : toStock > 0 ? 999 : 0;
-  const resolvedColorName = useColor ? (toColorStats?.colorName || coreRows.map((r: any) => colorLevelStats(r, colorCode).colorName).find(Boolean) || "") : "";
-  // MARK 2026-09-21: "재고가 있는데 0장이라고 나와" 버그 조사 결과 — Daily_Sales_History는
-  // "그날 팔린 것만" 기록되는 판매이력이라, 이 매장이 최근 RT_REQUEST_STOCK_LOOKBACK_DAYS(21)일 안에 해당
-  // 품번(칼라)을 한 번도 안 팔았으면 재고 데이터 자체가 없어서 0으로 나옵니다(실제 재고가
-  // 있어도 0처럼 보일 수 있음). 이걸 화면에서 "확인된 재고 0"과 구분해서 보여주기 위한 플래그.
-  const toStockConfirmed = useColor ? !!toColorStats?.found : !!toRow;
+  const productName = pipRowsForStyleAllColors[0]?.productName || coreRows[0]?.productName || "";
+  const resolvedColorName = useColor
+    ? (pipRowsForStyle[0]?.colorName || coreRows.map((r: any) => colorLevelStats(r, colorCode).colorName).find(Boolean) || "")
+    : "";
 
   // 호조 엔진과 동일한 "목표재고 3주" 기준을 기본값으로 사용하되, 사용자가 수량을 직접 지정하면 그걸 우선합니다.
   const RT_TARGET_STOCK_WEEKS = 3;
@@ -2931,19 +3119,19 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     ? Math.round(desiredQtyInput)
     : Math.max(1, defaultTarget - toStock);
 
-  const senderCandidates = coreRows
-    .filter((r: any) => normalizeStoreKey(r.storeName) !== toKey)
-    .map((r: any) => {
-      const colorStats = useColor ? colorLevelStats(r, colorCode) : null;
-      const weekNet = useColor ? (colorStats?.weekNet || 0) : Number(r.weekNet || 0);
-      const stock = useColor ? (colorStats?.stock || 0) : Number(r.storeStock || 0);
+  const toKey = normalizeStoreKey(toStoreName);
+  const senderCandidates = candidateStoreNames
+    .filter((name) => normalizeStoreKey(name) !== toKey)
+    .map((name) => {
+      const { stock } = stockForStore(name);
+      const weekNet = weekNetForStore(name);
       const targetStock = Math.max(1, Math.ceil(weekNet * RT_TARGET_STOCK_WEEKS));
       const safeStock = Math.max(3, targetStock, Math.ceil(weekNet * 2));
       const transferable = Math.max(0, Math.floor(stock - safeStock));
       const stockWeeks = weekNet > 0 ? stock / weekNet : stock > 0 ? 999 : 0;
-      return { storeName: r.storeName, stock, weekNet, stockWeeks, transferable, hasColor: !useColor || !!colorStats?.found };
+      return { storeName: name, stock, weekNet, stockWeeks, transferable };
     })
-    .filter((r) => r.transferable > 0 && r.hasColor)
+    .filter((r) => r.transferable > 0)
     .sort((a, b) => b.transferable - a.transferable || b.stockWeeks - a.stockWeeks);
 
   let remaining = desiredQty;
@@ -2971,6 +3159,7 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
         `${toStoreName} 매장에서 품번 ${styleCode}${useColor ? `(칼라 ${colorCode}${resolvedColorName ? " " + resolvedColorName : ""})` : ""} 이동을 직접 요청했습니다.`,
         `목표 수량은 ${desiredQty}개이며, 이 중 ${qty}개를 ${s.storeName}에서 이동하는 안입니다.`,
         `${s.storeName}의 현재 재고는 ${Math.round(s.stock).toLocaleString("ko-KR")}개(재고주수 ${s.stockWeeks >= 999 ? "판매없음" : `${s.stockWeeks.toFixed(1)}주`})로, 자체 안전재고를 제외한 이동 가능 여유분입니다.`,
+        styleInPip ? "" : `⚠ PIP 재고 스냅샷에서 이 품번을 찾지 못해, 최근 ${RT_REQUEST_STOCK_LOOKBACK_DAYS}일 판매이력으로 추정한 값입니다.`,
         toStockConfirmed ? "" : `⚠ ${toStoreName}은 최근 ${RT_REQUEST_STOCK_LOOKBACK_DAYS}일간 이 품번(칼라) 판매 이력이 없어 재고 데이터를 찾지 못했습니다 — 목표수량 계산에 쓰인 "현재 재고 0"은 확인된 값이 아니니, 실제 재고를 매장에 다시 확인해주세요.`,
       ].filter(Boolean).join("\n"),
     });
@@ -2987,6 +3176,8 @@ export async function buildRtRequestSuggestion(styleCodeInput: string, toStoreIn
     toStock,
     toStockWeeks,
     toStockConfirmed,
+    stockSource: styleInPip ? "pip" : "daily_sales_history",
+    pipUpdatedAt: storeStockSnapshot.meta?.uploadedAt || null,
     desiredQty,
     fulfilledQty: desiredQty - remaining,
     shortfall: Math.max(0, remaining),
@@ -3650,7 +3841,12 @@ export async function buildDashboardDataFromGoogleSheet() {
 
   // MARK 6.49: RT제안/재고이관/프로모션제안은 이제 "금주/전주"(주 1회 갱신) 대신
   // Daily_Sales_History(매일 갱신, 실제 판매금액 포함)를 직접 집계해서 씁니다.
-  const productRowsRaw = await buildProductRowsFromDailyHistory();
+  // MARK 2026-09-21: 호조/부진 RT도 점포요청 RT와 같은 PIP 매장별 재고 스냅샷을 같이 읽어와서
+  // buildInventory에 넘깁니다(스냅샷이 없으면 예전처럼 Daily_Sales_History만으로 동작).
+  const [productRowsRaw, storeStockSnapshotForRt] = await Promise.all([
+    buildProductRowsFromDailyHistory(),
+    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
+  ]);
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);
@@ -3681,7 +3877,7 @@ export async function buildDashboardDataFromGoogleSheet() {
   const topProduct = companyTopProducts[0];
 
   // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지
-  const inventory = { ...(await buildInventory(productRowsRaw, inventoryRows, companyTopProducts)), performance };
+  const inventory = { ...(await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt)), performance };
   const latestPerformance = performance?.byDate?.[performance?.latestDate || ""] || {};
   const rtBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "RT") || {};
   const promoBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "PROMOTION") || {};

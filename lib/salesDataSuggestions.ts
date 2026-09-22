@@ -159,6 +159,67 @@ export function computeSizeCoverageByStyle(pipRows: any[][]): Map<string, SizeCo
   return result;
 }
 
+// ---- PIP 파일에서 매장별 재고 추출 (점포요청 RT 재고 소스 정확도 개선용) ----
+// MARK 2026-09-21: PIP 파일은 스타일/칼라/사이즈별로 매장(오프라인 24개 + 온라인/물류 등)마다
+// [재고,일간,일간금액,주간,누적] 5칸이 반복되는 구조입니다. 까다로운 점: 매장명 라벨(헤더 2번째
+// 줄, 0-index로 pipRows[1])이 "재고" 칸이 아니라 그 다음 칸인 "일간" 칸 위치에 붙어있어서,
+// 그 매장의 실제 "재고" 컬럼은 라벨이 있는 칸 바로 왼쪽(index-1)입니다. 실제 샘플 파일(2026-09-21
+// 업로드분)을 Python openpyxl과 Node xlsx(SheetJS, 이 파일과 동일 라이브러리) 양쪽으로 직접
+// 열어서 검증한 규칙입니다 — 추측으로 넘어가면 예전에 "온오프 합계 vs 가용(오프)" 컬럼을
+// 잘못 읽었던 실수를 반복할 위험이 있어서, 반드시 pipRows[2](하위 라벨 행)로 재고/일간 위치를
+// 한 번 더 확인합니다. "_"로 시작하는 매장명(예: "오프라인_현대신촌(교원)")은 중복/레거시
+// 항목이라 제외하고, 매장명처럼 안 보이는 라벨("제이미" 등 실제 매장이 아닌 집계열)도 정규식으로 걸러냅니다.
+const PIP_STORE_NAME_PATTERN =
+  /(점|플래그십|아울렛|백화점|몰|현대|롯데|신세계|LF|타임스퀘어|성수|신사|한남|센텀|용산|광주|송도|김포|잠실|강남|대전|평촌|광양|운정)/i;
+
+export interface StoreStockRow {
+  styleCode: string;
+  productName: string;
+  color: string;
+  colorName: string;
+  size: string;
+  storeName: string;
+  stock: number;
+}
+
+function detectPipStoreStockColumns(pipRows: any[][]): { storeName: string; stockCol: number }[] {
+  const nameRow = pipRows[1] || [];
+  const subRow = pipRows[2] || [];
+  const result: { storeName: string; stockCol: number }[] = [];
+  for (let i = 0; i < nameRow.length; i++) {
+    const name = String(nameRow[i] ?? "").trim();
+    if (!name || name.includes("_")) continue;
+    if (!PIP_STORE_NAME_PATTERN.test(name)) continue;
+    const subHere = String(subRow[i] ?? "").trim();
+    const subPrev = String(subRow[i - 1] ?? "").trim();
+    if (subPrev !== "재고" || subHere !== "일간") continue; // 라벨 위치가 예상과 다르면(포맷 변경 등) 건너뜀
+    result.push({ storeName: name, stockCol: i - 1 });
+  }
+  return result;
+}
+
+export function extractStoreStockRows(pipRows: any[][]): StoreStockRow[] {
+  const storeCols = detectPipStoreStockColumns(pipRows);
+  if (!storeCols.length) return [];
+
+  const result: StoreStockRow[] = [];
+  for (const r of pipRows.slice(PIP_HEADER_ROW_COUNT)) {
+    const styleCode = String(r[13] ?? "").trim();
+    if (!styleCode) continue;
+    const productName = String(r[14] ?? "").trim();
+    const color = String(r[15] ?? "").trim();
+    const colorName = String(r[16] ?? "").trim();
+    const size = String(r[PIP_COL.SIZE] ?? "").trim();
+
+    for (const { storeName, stockCol } of storeCols) {
+      const stock = Math.max(0, num(r[stockCol]));
+      if (!stock) continue;
+      result.push({ styleCode, productName, color, colorName, size, storeName, stock });
+    }
+  }
+  return result;
+}
+
 // ---- 제안 타입들 ----
 export interface Suggestion {
   type: "추가이관" | "프로모션" | "추가투입" | "단종검토" | "이월소진";

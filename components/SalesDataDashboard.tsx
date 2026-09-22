@@ -7,6 +7,7 @@ import {
   findLatestWeekSheetName,
   parseWeeklyStyleRows,
   computeSizeCoverageByStyle,
+  extractStoreStockRows,
   buildSuggestions,
   buildPriceSuggestions,
   type WeeklyStyleRow,
@@ -91,6 +92,25 @@ export default function SalesDataDashboard() {
         const pipSheet = pipWb.Sheets[pipWb.SheetNames[0]];
         const pipRows: any[][] = XLSX.utils.sheet_to_json(pipSheet, { header: 1, raw: true, defval: "" });
         sizeCoverageMap = computeSizeCoverageByStyle(pipRows);
+
+        // MARK 2026-09-21: 점포요청 RT가 매장별 재고를 정확히 볼 수 있도록, PIP 파일에서
+        // 매장별 재고도 같이 뽑아서 전용 스냅샷으로 저장합니다(판매데이터 자체와는 무관하게,
+        // 이 탭에 PIP 파일을 올릴 때마다 항상 최신 매장별 재고로 갱신됨).
+        const storeStockRows = extractStoreStockRows(pipRows);
+        if (storeStockRows.length) {
+          setProgress("PIP 파일에서 매장별 재고 읽는 중...");
+          const compactRows = storeStockRows.map((r) => [r.styleCode, r.productName, r.color, r.colorName, r.size, r.storeName, r.stock]);
+          const storeStockRes = await fetch("/api/store-stock-upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows: compactRows, fileName: pipFile.name }),
+          });
+          const storeStockData = await storeStockRes.json();
+          if (!storeStockData.ok) {
+            // 매장별 재고 저장이 실패해도 판매데이터 제안 자체는 계속 진행합니다(점포요청 RT만 영향받음).
+            console.error("매장별 재고 스냅샷 저장 실패:", storeStockData.error);
+          }
+        }
       }
 
       setProgress("제안 계산 중...");

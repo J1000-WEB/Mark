@@ -96,20 +96,31 @@ export default function SalesDataDashboard() {
         // MARK 2026-09-21: 점포요청 RT가 매장별 재고를 정확히 볼 수 있도록, PIP 파일에서
         // 매장별 재고도 같이 뽑아서 전용 스냅샷으로 저장합니다(판매데이터 자체와는 무관하게,
         // 이 탭에 PIP 파일을 올릴 때마다 항상 최신 매장별 재고로 갱신됨).
-        const storeStockRows = extractStoreStockRows(pipRows);
-        if (storeStockRows.length) {
-          setProgress("PIP 파일에서 매장별 재고 읽는 중...");
-          const compactRows = storeStockRows.map((r) => [r.styleCode, r.productName, r.color, r.colorName, r.size, r.storeName, r.stock]);
-          const storeStockRes = await fetch("/api/store-stock-upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows: compactRows, fileName: pipFile.name }),
-          });
-          const storeStockData = await storeStockRes.json();
-          if (!storeStockData.ok) {
-            // 매장별 재고 저장이 실패해도 판매데이터 제안 자체는 계속 진행합니다(점포요청 RT만 영향받음).
-            console.error("매장별 재고 스냅샷 저장 실패:", storeStockData.error);
+        // MARK 2026-09-22: 이 저장은 "보너스" 기능이라, 여기서 실패해도(예: 새 API 라우트가
+        // 아직 배포 전이라 404 HTML이 와서 JSON 파싱이 깨지는 경우 등) 원래 하던 주간판매데이터
+        // 업로드/제안 생성까지 같이 막히면 안 됩니다 — 별도 try/catch로 격리합니다.
+        try {
+          const storeStockRows = extractStoreStockRows(pipRows);
+          if (storeStockRows.length) {
+            setProgress("PIP 파일에서 매장별 재고 읽는 중...");
+            const compactRows = storeStockRows.map((r) => [r.styleCode, r.productName, r.color, r.colorName, r.size, r.storeName, r.stock]);
+            const storeStockRes = await fetch("/api/store-stock-upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ rows: compactRows, fileName: pipFile.name }),
+            });
+            const contentType = storeStockRes.headers.get("content-type") || "";
+            if (!contentType.includes("application/json")) {
+              throw new Error(`서버가 JSON을 안 돌려줬어요(상태 ${storeStockRes.status}) — 배포가 아직 안 됐을 수 있어요.`);
+            }
+            const storeStockData = await storeStockRes.json();
+            if (!storeStockData.ok) throw new Error(storeStockData.error || "매장별 재고 스냅샷 저장 실패");
           }
+        } catch (storeStockErr: any) {
+          // 매장별 재고 저장이 실패해도 판매데이터 제안 자체는 계속 진행합니다(점포요청/호조·부진
+          // RT의 PIP 재고 정확도만 영향받고, 그 경우 자동으로 예전 방식으로 폴백됩니다).
+          console.error("매장별 재고 스냅샷 저장 실패:", storeStockErr);
+          setError((prev) => prev || `⚠ 매장별 재고 스냅샷 저장은 실패했지만(${storeStockErr?.message || storeStockErr}), 판매데이터 제안은 계속 진행할게요.`);
         }
       }
 

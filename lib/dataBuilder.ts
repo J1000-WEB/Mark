@@ -615,9 +615,13 @@ export async function getStoreStockSnapshotMeta() {
   return { uploadedAt: text(row[0]), rowCount: num(row[1]), storeCount: num(row[2]), fileName: text(row[3]) };
 }
 
-type StoreStockSnapshotRow = { styleCode: string; productName: string; color: string; colorName: string; size: string; storeName: string; stock: number };
+export type StoreStockSnapshotRow = { styleCode: string; productName: string; color: string; colorName: string; size: string; storeName: string; stock: number };
 
-async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
+// MARK 2026-09-22: RT 승인(app/api/rt-result)의 "출고점 칼라/사이즈별 재고 배분"이 이 스냅샷을
+// 폴백으로 쓸 수 있도록 export합니다 — 원래 "금주/전주" 시트만 보고 있었는데, 그 시트에
+// 아직 안 올라온 신규 매장(예: 팩토리아울렛 용인점처럼 최근에 생긴 매장)은 칼라/사이즈별
+// 재고를 못 찾아서 승인 자체가 실패했습니다.
+export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
   const dbId = getDbSheetId();
   const [dataRows, metaRows] = await Promise.all([
     getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G500000").catch(() => [] as any[]),

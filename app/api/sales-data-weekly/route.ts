@@ -43,8 +43,19 @@ export async function POST(req: Request) {
     await ensureSheetExistsById(spreadsheetId, SHEET_NAME, HEADER);
 
     const savedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-    const payload = { styles, suggestions: suggestions || [], priceSuggestions: priceSuggestions || [] };
-    const chunks = chunkBySize([payload]); // 보통 한 덩어리로 충분하지만, 커지면 자동으로 나뉨
+
+    // MARK 2026-09-22: "Your input contains more than the maximum of 50000 characters in a
+    // single cell" 에러 수정 — chunkBySize([payload])처럼 styles/suggestions/priceSuggestions를
+    // 전부 하나로 뭉친 객체 "1개"를 넘기면, chunkBySize는 "항목 사이"에서만 나누기 때문에
+    // (항목 1개짜리 리스트라 나눌 자리가 없음) 그 통짜 객체가 40,000자를 넘는 순간 그대로
+    // 하나의 셀에 다 들어가버려서 구글시트 셀당 50,000자 한도를 넘겼습니다. styles/suggestions/
+    // priceSuggestions를 각각 원소 단위(품번 1개, 제안 1건)의 작은 "항목"으로 쪼개서 넘기면,
+    // chunkBySize가 원래 의도대로 여러 행(part)에 나눠 담습니다(GET 쪽은 이미 여러 part를
+    // 순서대로 합치도록 되어 있어서 그대로 동작합니다).
+    const styleItems = (styles || []).map((s: any) => ({ styles: [s], suggestions: [], priceSuggestions: [] }));
+    const suggestionItems = (suggestions || []).map((s: any) => ({ styles: [], suggestions: [s], priceSuggestions: [] }));
+    const priceSuggestionItems = (priceSuggestions || []).map((s: any) => ({ styles: [], suggestions: [], priceSuggestions: [s] }));
+    const chunks = chunkBySize([...styleItems, ...suggestionItems, ...priceSuggestionItems]);
 
     const rows = chunks.map((chunk, i) => [weekLabel, savedAt, i + 1, JSON.stringify(chunk)]);
     await safeReplaceSheetValuesById(spreadsheetId, SHEET_NAME, [HEADER, ...rows]);

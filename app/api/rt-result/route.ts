@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { appendValues, appendValuesById, ensureSheetExists, ensureSheetExistsById, getDbSheetId, getManySheetValues, getSheetValues, getSpreadsheetTitles, updateValues } from "@/lib/googleSheets";
+import { readStoreStockSnapshot, type StoreStockSnapshotRow } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -144,6 +145,26 @@ function skuRowsForTransfer(productRows: any[][], fromStore: string, styleCode: 
       stock: num(row[stockCol]),
     }))
     .filter((r) => normalizeStoreKey(r.storeName) === normalizeStoreKey(fromStore) && r.styleCode === styleCode && r.stock > 0 && r.color && r.size);
+}
+
+// MARK 2026-09-22: "출고점의 칼라/사이즈별 실제 재고를 찾지 못했습니다" 에러 수정 — 위
+// skuRowsForTransfer는 "금주/전주" 시트(수동/주간 갱신)만 보는데, 최근에 새로 생긴 매장
+// (예: 팩토리아울렛 용인점, 롯데아울렛 동부산)이 아직 그 시트에 안 올라와 있으면 칼라/사이즈별
+// 재고를 전혀 못 찾아서 승인 자체가 막혔습니다. 점포요청/호조/부진 RT가 이미 쓰고 있는 PIP
+// 매장별 재고 스냅샷(매일 아침 갱신, 칼라/사이즈까지 있음)을 폴백으로 사용합니다.
+function skuRowsForTransferFromPip(pipRows: StoreStockSnapshotRow[], fromStore: string, styleCode: string) {
+  const fromKey = normalizeStoreKey(fromStore);
+  const styleUpper = styleCode.toUpperCase();
+  return pipRows
+    .filter((r) => normalizeStoreKey(r.storeName) === fromKey && r.styleCode.toUpperCase() === styleUpper && r.stock > 0 && r.color && r.size)
+    .map((r) => ({
+      storeName: r.storeName,
+      storeKey: fromKey,
+      styleCode: r.styleCode,
+      color: r.color,
+      size: r.size,
+      stock: r.stock,
+    }));
 }
 
 // MARK 2026-09-17: "RT 제안은 품번 단위인데 지시서는 컬러/사이즈로 나간다" 개선 — 예전엔
@@ -358,12 +379,23 @@ export async function POST(req: Request) {
     const fromCode = channels.get(fromStore) || channels.get(normalizeStoreKey(fromStore)) || fromStore;
     const toCode = channels.get(toStore) || channels.get(normalizeStoreKey(toStore)) || toStore;
 
-    const skus = skuRowsForTransfer(productRows, fromStore, styleCode);
+    let skus = skuRowsForTransfer(productRows, fromStore, styleCode);
+    let skuSource: "금주/전주" | "pip" = "금주/전주";
+    if (!skus.length) {
+      // "금주/전주" 시트에 이 출고점/품번 데이터가 없으면(최근에 생긴 매장이 아직 그 시트에
+      // 안 올라온 경우 등) PIP 매장별 재고 스냅샷으로 폴백합니다.
+      const storeStockSnapshot = await readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null }));
+      skus = skuRowsForTransferFromPip(storeStockSnapshot.rows, fromStore, styleCode);
+      skuSource = "pip";
+    }
     const skuNeedWeights = Array.isArray(item.skuNeedWeights) ? item.skuNeedWeights : undefined;
     const allocated = allocateByStock(skus, suggestQty, skuNeedWeights);
 
     if (!allocated.length) {
-      return NextResponse.json({ ok: false, error: "출고점의 칼라/사이즈별 실제 재고를 찾지 못했습니다." }, { status: 400 });
+      return NextResponse.json({
+        ok: false,
+        error: `출고점(${fromStore})의 칼라/사이즈별 실제 재고를 찾지 못했습니다. "금주/전주" 시트와 PIP 매장별 재고 스냅샷 둘 다에서 이 매장/품번 데이터를 못 찾았어요 — 최근에 생긴 매장이면 "판매데이터 제안" 탭에서 PIP 파일을 다시 업로드해주세요.`,
+      }, { status: 400 });
     }
 
     const proposedAt = todayKST();
@@ -389,7 +421,7 @@ export async function POST(req: Request) {
       performanceError = error?.message || "Promotion_Performance 자동 기록 실패";
     }
 
-    return NextResponse.json({ ok: true, savedRows: rows.length, proposedAt, performanceSaved, performanceError });
+    return NextResponse.json({ ok: true, savedRows: rows.length, proposedAt, performanceSaved, performanceError, skuSource });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error?.message || "RT_Result 저장 실패" }, { status: 500 });
   }

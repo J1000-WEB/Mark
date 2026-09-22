@@ -3,13 +3,15 @@ import { buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBu
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// MARK 2026-09-22: "RT 이동 제안이 계속 안 됨(500같음)" 제보로 확인 — 이 라우트(대시보드
-// 전체를 만드는 가장 무거운 엔드포인트)에만 다른 라우트들과 달리 maxDuration이 아예
-// 없었습니다(이 코드베이스의 다른 무거운 라우트 26개는 전부 maxDuration=60을 명시). Next.js/
-// Vercel 기본 제한 시간을 쓰게 되는데, 이번에 buildInventory가 PIP 매장별 재고 스냅샷
-// (최대 5만 행)까지 같이 읽도록 늘어나면서 그 기본 제한을 넘겼을 가능성이 큽니다. 다른
-// 무거운 라우트들과 동일하게 60초로 맞춥니다.
-export const maxDuration = 60;
+// MARK 2026-09-22: "RT 이동 제안이 계속 안 됨(500같음)" 제보 확인 중 1차로 maxDuration=60을
+// 추가했었는데, 다시 찾아보니 vercel.json에는 이 라우트가 이미 maxDuration:120(메모리
+// 3009MB)로 별도 설정되어 있었습니다. Next.js App Router(13.5+)에서는 vercel.json의
+// functions.maxDuration이 아니라 이 파일의 export const maxDuration이 실제로 적용되는
+// 설정값이라, 60을 넣은 게 오히려 기존 120초보다 짧게 깎아버린 것이었을 가능성이 있습니다
+// (원인 진단 실수). vercel.json 쪽 값과 맞춰 300초로 올립니다 — 대시보드 전체(RT 이동 제안
+// 포함)를 만드는 가장 무거운 엔드포인트이고, PIP 매장별 재고 스냅샷까지 같이 읽게 되면서
+// 더 늘어났기 때문에 여유를 넉넉히 둡니다.
+export const maxDuration = 300;
 
 export async function GET() {
   try {

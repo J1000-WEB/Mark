@@ -3850,10 +3850,16 @@ export async function buildDashboardDataFromGoogleSheet() {
   // Daily_Sales_History(매일 갱신, 실제 판매금액 포함)를 직접 집계해서 씁니다.
   // MARK 2026-09-21: 호조/부진 RT도 점포요청 RT와 같은 PIP 매장별 재고 스냅샷을 같이 읽어와서
   // buildInventory에 넘깁니다(스냅샷이 없으면 예전처럼 Daily_Sales_History만으로 동작).
-  const [productRowsRaw, storeStockSnapshotForRt] = await Promise.all([
-    buildProductRowsFromDailyHistory(),
-    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
-  ]);
+  // MARK 2026-09-22(임시 원인 격리): 이 라우트가 메모리 4GB(Vercel Performance 등급, 이
+  // 설정에서 가능한 최댓값)로 올려도 계속 OOM(instance was killed because it ran out of
+  // available memory)으로 죽는 게 로그로 확인돼서, "PIP 스냅샷을 이 라우트에서 같이 읽는 것"이
+  // 진짜 원인인지 가설을 검증하기 위해 일단 이 호출부에서만 꺼둡니다(읽기 자체를 생략 —
+  // storeStockSnapshotForRt를 null로). 점포요청 RT(buildRtRequestSuggestion)와 RT 승인
+  // 폴백(app/api/rt-result)은 각자 따로 읽어오는 구조라 영향 없습니다. 이걸로 OOM이 없어지면
+  // 범인이 맞다는 뜻이고, 그래도 죽으면 다른 원인(예: 연간판매/온오프재고현황/기준 시트의
+  // 전체("A:AZ") 읽기 등)을 봐야 합니다. 원인 확정되면 다시 정리해서 되돌릴 예정입니다.
+  const [productRowsRaw] = await Promise.all([buildProductRowsFromDailyHistory()]);
+  const storeStockSnapshotForRt: { rows: StoreStockSnapshotRow[]; meta: any } | null = null;
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);

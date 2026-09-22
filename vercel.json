@@ -29,7 +29,7 @@
     },
     "app/api/data/route.ts": {
       "memory": 3009,
-      "maxDuration": 120
+      "maxDuration": 300
     },
     "app/api/snapshots/route.ts": {
       "memory": 3009,

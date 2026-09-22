@@ -3253,9 +3253,29 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     // 아래 "전체 읽기" 폴백(A:AZ, 수십만 행 + 행당 JSON 펼치기)으로 빠지고 있었습니다.
     // 그래서 항상 최근 60일치를 기본 하한으로 둬서 neededSinceDate가 절대 비지 않게 합니다.
     const DEFAULT_PERFORMANCE_LOOKBACK_DAYS = 60;
-    const neededSinceDate =
-      earliestNeededDailyHistoryDate(performanceRows, override) ||
-      dateAddDays(todayDateKey(), -DEFAULT_PERFORMANCE_LOOKBACK_DAYS);
+
+    // MARK 2026-09-22: /api/data가 4GB 메모리에서도 계속 OOM으로 죽는 진짜 원인을 찾았습니다 —
+    // 대시보드가 매번 부르는 loadPromotionPerformance()는 override 없이(= 날짜 필터 없이)
+    // buildPerformanceAnalysis()를 호출하는데, 이러면 위 earliestNeededDailyHistoryDate가
+    // "지금까지 쌓인 모든 RT/프로모션 행" 각각의 실제 실행 시점까지 다 훑어서 "그중 가장 이른
+    // 날짜"를 찾습니다. RT/프로모션은 계속 쌓이기만 하는 로그라 이 값이 시간이 갈수록 점점 더
+    // 과거로 밀리고, 그 결과 바로 아래에서 "필요한 기간만" 읽으려던 Daily_Sales_History 읽기가
+    // 사실상 거의 전체 히스토리를 다시 펼치는 것과 같아집니다(행마다 최대 4만자 JSON —
+    // 이 파일의 다른 주석들이 경고하는 바로 그 OOM 패턴). 사용자가 성과분석 화면에서 직접 날짜를
+    // 고른 경우(app/api/performance가 selectedDate/beforeStart/duringStart를 넘길 때)는 그
+    // 선택을 그대로 존중하고, "날짜 필터 없이" 부른 경우(대시보드의 블라인드 호출)에만 최근
+    // 90일로 하한을 둡니다 — 대시보드는 어차피 "최근 성과 요약"만 보여주면 되므로 이걸로
+    // 화면상 의미있는 손실은 없습니다.
+    const PERFORMANCE_BLIND_LOOKBACK_CAP_DAYS = 90;
+    const hasExplicitDateFilter = !!(override.selectedDate || override.beforeStart || override.duringStart);
+    const rawEarliestNeeded = earliestNeededDailyHistoryDate(performanceRows, override);
+    const blindLookbackFloor = dateAddDays(todayDateKey(), -PERFORMANCE_BLIND_LOOKBACK_CAP_DAYS);
+    const boundedEarliestNeeded = hasExplicitDateFilter
+      ? rawEarliestNeeded
+      : rawEarliestNeeded && rawEarliestNeeded > blindLookbackFloor
+      ? rawEarliestNeeded
+      : blindLookbackFloor;
+    const neededSinceDate = boundedEarliestNeeded || dateAddDays(todayDateKey(), -DEFAULT_PERFORMANCE_LOOKBACK_DAYS);
 
     let dailyValues: any[][] = [];
     let dailySource = "NOT_FOUND";
@@ -3850,16 +3870,13 @@ export async function buildDashboardDataFromGoogleSheet() {
   // Daily_Sales_History(매일 갱신, 실제 판매금액 포함)를 직접 집계해서 씁니다.
   // MARK 2026-09-21: 호조/부진 RT도 점포요청 RT와 같은 PIP 매장별 재고 스냅샷을 같이 읽어와서
   // buildInventory에 넘깁니다(스냅샷이 없으면 예전처럼 Daily_Sales_History만으로 동작).
-  // MARK 2026-09-22(임시 원인 격리): 이 라우트가 메모리 4GB(Vercel Performance 등급, 이
-  // 설정에서 가능한 최댓값)로 올려도 계속 OOM(instance was killed because it ran out of
-  // available memory)으로 죽는 게 로그로 확인돼서, "PIP 스냅샷을 이 라우트에서 같이 읽는 것"이
-  // 진짜 원인인지 가설을 검증하기 위해 일단 이 호출부에서만 꺼둡니다(읽기 자체를 생략 —
-  // storeStockSnapshotForRt를 null로). 점포요청 RT(buildRtRequestSuggestion)와 RT 승인
-  // 폴백(app/api/rt-result)은 각자 따로 읽어오는 구조라 영향 없습니다. 이걸로 OOM이 없어지면
-  // 범인이 맞다는 뜻이고, 그래도 죽으면 다른 원인(예: 연간판매/온오프재고현황/기준 시트의
-  // 전체("A:AZ") 읽기 등)을 봐야 합니다. 원인 확정되면 다시 정리해서 되돌릴 예정입니다.
-  const [productRowsRaw] = await Promise.all([buildProductRowsFromDailyHistory()]);
-  const storeStockSnapshotForRt: { rows: StoreStockSnapshotRow[]; meta: any } | null = null;
+  // MARK 2026-09-22: 임시로 여기서 PIP 읽기를 꺼서 OOM 원인을 격리해봤는데, 꺼도 OOM이
+  // 그대로 재현돼서 범인이 아닌 걸로 확인됐습니다(진짜 원인은 loadPromotionPerformance() —
+  // 아래 buildPerformanceAnalysis 관련 주석 참고). 다시 켭니다.
+  const [productRowsRaw, storeStockSnapshotForRt] = await Promise.all([
+    buildProductRowsFromDailyHistory(),
+    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
+  ]);
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
   const carryoverAnnualSales = buildCarryoverAnnualSales(values[annualSalesSheet] || [], values[standardSheet] || []);

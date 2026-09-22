@@ -623,8 +623,11 @@ export type StoreStockSnapshotRow = { styleCode: string; productName: string; co
 // 재고를 못 찾아서 승인 자체가 실패했습니다.
 export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
   const dbId = getDbSheetId();
+  // MARK 2026-09-22: 실제 데이터는 PIP 24개 매장 기준 4만 행 안팎인데 "A2:G500000"으로
+  // 12배 넓게 요청하고 있었습니다 — /api/data(대시보드 전체) 타임아웃 원인 조사 중 눈에 띄어서,
+  // 여유(6만 행)만 남기고 좁혔습니다. 매장이 더 늘어나도 6만 행이면 한동안 충분합니다.
   const [dataRows, metaRows] = await Promise.all([
-    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G500000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G60000").catch(() => [] as any[]),
     getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2").catch(() => [] as any[]),
   ]);
   const rows = dataRows

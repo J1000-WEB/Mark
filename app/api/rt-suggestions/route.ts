@@ -3,7 +3,11 @@ import { buildRtSuggestions } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 120;
+// MARK 2026-09-24: 첫 배포 후 504(Gateway Timeout, = maxDuration 안에 못 끝나서 플랫폼이
+// 강제 종료)가 발생해서, /api/data가 실제로 쓰고 있는 것과 동일한 값(300초/3009MB)으로
+// 올립니다. 이 라우트가 하는 일은 /api/data의 부분집합이라 이것보다 적게 걸려야 정상이지만,
+// 새로 생긴 라우트라 항상 콜드스타트(캐시된 인증 없음)라는 점도 감안합니다.
+export const maxDuration = 300;
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 

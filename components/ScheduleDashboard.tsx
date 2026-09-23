@@ -390,7 +390,13 @@ export default function ScheduleDashboard() {
                 : "Schedule_Simple"}
             </p>
           </div>
-          <NavTabs active="schedule" />
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <NavTabs active="schedule" />
+            {/* MARK 2026-09-25: 판매전체상이 독립 탭에서 빠지고 매출 탭 안으로 들어가서, 돌아가는 길을 남겨둡니다. */}
+            <a href="/store-sales" className="text-xs font-black text-slate-400 hover:text-slate-600">
+              ← 매출로 돌아가기
+            </a>
+          </div>
         </header>
 
         <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm">

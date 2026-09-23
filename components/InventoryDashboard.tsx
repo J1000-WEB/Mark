@@ -112,14 +112,13 @@ const REALTIME_OPERATING_START_HOUR = 11;
 const REALTIME_OPERATING_END_HOUR = 22;
 
 async function runHealthChecks(): Promise<HealthCheckResult[]> {
-  const [dataRes, dailyRes, realtimeRes, weeklyRes, snapshotsRes, gridRes, rtRes] = await Promise.all([
+  const [dataRes, dailyRes, realtimeRes, weeklyRes, snapshotsRes, gridRes] = await Promise.all([
     probeJson("/api/data", 40000),
     probeJson("/api/daily-sales", 20000),
     probeJson("/api/realtime", 30000),
     probeJson("/api/weekly-history?dashboard=1", 30000),
     probeJson("/api/weekly-snapshots", 15000),
     probeJson("/api/sheet-grid-diagnostic", 15000),
-    probeJson("/api/rt-suggestions", 40000),
   ]);
 
   const results: HealthCheckResult[] = [];
@@ -141,20 +140,9 @@ async function runHealthChecks(): Promise<HealthCheckResult[]> {
     results.push({ id: "data", label: "일간/월간 데이터", status: "error", detail: `응답 실패 (status ${dataRes.status})`, ms: dataRes.ms });
   }
 
-  // MARK 2026-09-24: RT 이동 제안은 이제 /api/data와 분리된 전용 엔드포인트라 따로 점검합니다.
-  if (rtRes.json?.ok) {
-    results.push({ id: "rt-suggestions", label: "RT 이동 제안", status: "ok", detail: `정상 (${fmtNum(rtRes.json.rtSuggestions?.length || 0)}건)`, ms: rtRes.ms });
-  } else if (rtRes.timedOut) {
-    results.push({ id: "rt-suggestions", label: "RT 이동 제안", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: rtRes.ms });
-  } else {
-    results.push({
-      id: "rt-suggestions",
-      label: "RT 이동 제안",
-      status: "error",
-      detail: rtRes.json?.error || `응답 실패 (status ${rtRes.status})`,
-      ms: rtRes.ms,
-    });
-  }
+  // MARK 2026-09-24: RT 이동 제안은 재고CTRL 탭 안의 RT 칸(RtControlSection)이 자체적으로
+  // 불러와서 상태/에러를 표시하므로, 여기 시스템상태점검에서 또 호출하면 같은 걸 페이지 로드마다
+  // 두 번 읽는 셈이라(구글시트 API 쿼터 낭비) 빼고 RtControlSection에 맡깁니다.
 
   // /api/daily-sales
   if (dailyRes.json?.ok) {
@@ -2699,6 +2687,19 @@ export default function InventoryDashboard() {
         </section>
 
         <SystemHealthPanel />
+
+        {/* MARK 2026-09-25: 탭 정리 요청 — 판매데이터 탭을 독립 탭에서 빼서 재고CTRL 탭 안으로
+            옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
+        <a
+          href="/sales-data"
+          className="flex items-center justify-between rounded-3xl bg-gradient-to-r from-slate-800 to-slate-900 p-5 text-white shadow-sm transition hover:from-slate-900 hover:to-black"
+        >
+          <div>
+            <p className="text-xs font-bold text-slate-300">판매데이터</p>
+            <p className="mt-1 text-lg font-black">📊 판매데이터 — 눌러서 이동</p>
+          </div>
+          <span className="text-2xl">→</span>
+        </a>
 
         <a
           href="/consignment-upload"

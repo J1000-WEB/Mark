@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 
 function won(n: number) {
@@ -32,13 +33,146 @@ type StoreSalesSummaryRow = {
   storeName: string;
   channelGroup: string;
   channelCode: string;
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
 };
+
+// MARK 2026-09-25: "맨 상단에 매출 총합" 요청 — 지금 화면에 보이는(필터 적용된) 매장들을
+// 합산한 가상의 "합계" 줄을 만듭니다. 객단가는 매장별 객단가를 단순평균하면 안 되고(매장마다
+// 거래 규모가 다름) 반드시 "합계 매출금액 / 합계 영수건수"로 다시 계산해야 정확하므로, 매장별
+// receiptCount를 그대로 합산해서 씁니다. 달성률/전년比/전주比도 같은 이유로 비율의 평균이 아니라
+// 합계끼리 다시 나눠서 계산합니다.
+type PeriodAgg = {
+  target: number;
+  actual: number;
+  achievementRate: number | null;
+  avgReceiptAmount: number | null;
+  receiptCount: number;
+  prevYearAmount: number;
+  yoyGrowthRate: number | null;
+  prevWeekAmount: number;
+  wowGrowthRate: number | null;
+  qty: number;
+};
+
+function aggregatePeriod(
+  rows: { target: number; actual: number; receiptCount: number; prevYearAmount: number; prevWeekAmount?: number; qty?: number }[]
+): PeriodAgg {
+  let target = 0;
+  let actual = 0;
+  let receiptCount = 0;
+  let prevYearAmount = 0;
+  let prevWeekAmount = 0;
+  let qty = 0;
+  for (const r of rows) {
+    target += r.target || 0;
+    actual += r.actual || 0;
+    receiptCount += r.receiptCount || 0;
+    prevYearAmount += r.prevYearAmount || 0;
+    prevWeekAmount += r.prevWeekAmount || 0;
+    qty += r.qty || 0;
+  }
+  const achievementRate = target ? actual / target : null;
+  const avgReceiptAmount = receiptCount > 0 ? actual / receiptCount : null;
+  const yoyGrowthRate = prevYearAmount ? (actual - prevYearAmount) / prevYearAmount : actual > 0 ? null : 0;
+  const wowGrowthRate = prevWeekAmount ? (actual - prevWeekAmount) / prevWeekAmount : actual > 0 ? null : 0;
+  return { target, actual, achievementRate, avgReceiptAmount, receiptCount, prevYearAmount, yoyGrowthRate, prevWeekAmount, wowGrowthRate, qty };
+}
+
+function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | null {
+  if (!rows.length) return null;
+  const daily = aggregatePeriod(rows.map((s) => s.daily));
+  const weekly = aggregatePeriod(rows.map((s) => s.weekly));
+  const monthly = aggregatePeriod(rows.map((s) => ({ ...s.monthly, target: s.monthly.periodTarget })));
+  const prevMonth = aggregatePeriod(rows.map((s) => s.prevMonth));
+  const annual = aggregatePeriod(rows.map((s) => ({ ...s.annual, target: s.annual.ytdTarget, actual: s.annual.ytdActual })));
+  const customSource = rows.map((s) => s.customPeriod).filter((c): c is NonNullable<typeof c> => !!c);
+  const customPeriod = customSource.length ? aggregatePeriod(customSource) : null;
+
+  return {
+    storeName: "합계",
+    channelGroup: "",
+    channelCode: "",
+    daily: {
+      date: rows[0].daily.date,
+      target: daily.target,
+      actual: daily.actual,
+      achievementRate: daily.achievementRate,
+      qty: daily.qty,
+      avgReceiptAmount: daily.avgReceiptAmount,
+      receiptCount: daily.receiptCount,
+      prevYearAmount: daily.prevYearAmount,
+      yoyGrowthRate: daily.yoyGrowthRate,
+    },
+    weekly: {
+      start: rows[0].weekly.start,
+      end: rows[0].weekly.end,
+      target: weekly.target,
+      actual: weekly.actual,
+      achievementRate: weekly.achievementRate,
+      avgReceiptAmount: weekly.avgReceiptAmount,
+      receiptCount: weekly.receiptCount,
+      prevWeekAmount: weekly.prevWeekAmount,
+      wowGrowthRate: weekly.wowGrowthRate,
+      prevYearAmount: weekly.prevYearAmount,
+      yoyGrowthRate: weekly.yoyGrowthRate,
+    },
+    monthly: {
+      month: rows[0].monthly.month,
+      periodTarget: monthly.target,
+      actual: monthly.actual,
+      achievementRate: monthly.achievementRate,
+      avgReceiptAmount: monthly.avgReceiptAmount,
+      receiptCount: monthly.receiptCount,
+      progressRate: rows[0].monthly.progressRate,
+      prevYearAmount: monthly.prevYearAmount,
+      yoyGrowthRate: monthly.yoyGrowthRate,
+    },
+    prevMonth: {
+      month: rows[0].prevMonth.month,
+      target: prevMonth.target,
+      actual: prevMonth.actual,
+      achievementRate: prevMonth.achievementRate,
+      avgReceiptAmount: prevMonth.avgReceiptAmount,
+      receiptCount: prevMonth.receiptCount,
+      prevYearAmount: prevMonth.prevYearAmount,
+      yoyGrowthRate: prevMonth.yoyGrowthRate,
+    },
+    annual: {
+      year: rows[0].annual.year,
+      ytdTarget: annual.target,
+      ytdActual: annual.actual,
+      achievementRate: annual.achievementRate,
+      avgReceiptAmount: annual.avgReceiptAmount,
+      receiptCount: annual.receiptCount,
+      progressRate: rows[0].annual.progressRate,
+      prevYearAmount: annual.prevYearAmount,
+      yoyGrowthRate: annual.yoyGrowthRate,
+    },
+    ...(customPeriod && rows[0].customPeriod
+      ? {
+          customPeriod: {
+            start: rows[0].customPeriod.start,
+            end: rows[0].customPeriod.end,
+            target: customPeriod.target,
+            actual: customPeriod.actual,
+            achievementRate: customPeriod.achievementRate,
+            qty: customPeriod.qty,
+            avgReceiptAmount: customPeriod.avgReceiptAmount,
+            receiptCount: customPeriod.receiptCount,
+            prevYearStart: rows[0].customPeriod.prevYearStart,
+            prevYearEnd: rows[0].customPeriod.prevYearEnd,
+            prevYearAmount: customPeriod.prevYearAmount,
+            yoyGrowthRate: customPeriod.yoyGrowthRate,
+          },
+        }
+      : {}),
+  };
+}
 
 type CustomPeriodInfo = { start: string; end: string; prevYearStart: string; prevYearEnd: string } | null;
 
@@ -151,6 +285,9 @@ export default function StoreSalesSummaryDashboard() {
 
   const filteredStores = groupFilter === "전체" ? stores : stores.filter((s) => s.channelGroup === groupFilter);
 
+  // MARK 2026-09-25: 지금 보이는(필터 적용된) 매장 기준 합계 — 필터를 바꾸면 합계도 같이 바뀜.
+  const totalRow = useMemo(() => buildTotalRow(filteredStores), [filteredStores]);
+
   return (
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-[1600px] px-4 pt-6">
@@ -159,12 +296,35 @@ export default function StoreSalesSummaryDashboard() {
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-slate-400">STORE SALES SUMMARY</p>
-            <h1 className="mt-1 text-xl font-black text-slate-900">매출탭 (점포별)</h1>
+            <h1 className="mt-1 text-xl font-black text-slate-900">매출 (점포별)</h1>
             <p className="mt-1 text-xs font-semibold text-slate-400">
               {meta
                 ? `마지막 업로드: ${meta.uploadedAt}(${meta.newStartDate || meta.startDate}~${meta.newEndDate || meta.endDate}, ${(meta.newRowCount || 0).toLocaleString("ko-KR")}행) · 누적 ${meta.storeCount}개 매장 · ${meta.startDate}~${meta.endDate}(${meta.rowCount.toLocaleString("ko-KR")}행)`
                 : "아직 업로드된 데이터가 없어요"}
             </p>
+          </div>
+
+          {/* MARK 2026-09-25: 탭 정리 요청 — 판매전체상/일간/월간을 독립 탭에서 빼서 매출 탭
+              안으로 옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/schedule"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+            >
+              📋 판매전체상 열기
+            </Link>
+            <Link
+              href="/daily"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+            >
+              📅 일간 열기
+            </Link>
+            <Link
+              href="/monthly"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+            >
+              📆 월간 열기
+            </Link>
           </div>
         </div>
 
@@ -343,6 +503,54 @@ export default function StoreSalesSummaryDashboard() {
                   </tr>
                 </thead>
                 <tbody>
+                  {totalRow && (
+                    <tr className="bg-amber-50/80 ring-1 ring-inset ring-amber-200">
+                      <td className="sticky left-0 z-10 border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-500">합계</td>
+                      <td className="sticky left-[56px] z-10 border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
+                        {groupFilter === "전체" ? "전체 매장" : groupFilter} ({filteredStores.length}개)
+                      </td>
+
+                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.daily.target)}</td>
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.daily.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.daily.avgReceiptAmount)}</td>}
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.daily.achievementRate)}</td>
+                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.daily.yoyGrowthRate)}`}>{growthPct(totalRow.daily.yoyGrowthRate)}</td>
+
+                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.weekly.target)}</td>
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.weekly.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.weekly.avgReceiptAmount)}</td>}
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.weekly.achievementRate)}</td>
+                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.weekly.yoyGrowthRate)}`}>{growthPct(totalRow.weekly.yoyGrowthRate)}</td>
+
+                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.monthly.periodTarget)}</td>
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.monthly.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.monthly.avgReceiptAmount)}</td>}
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.monthly.achievementRate)}</td>
+                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.monthly.yoyGrowthRate)}`}>{growthPct(totalRow.monthly.yoyGrowthRate)}</td>
+
+                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.prevMonth.target)}</td>
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.prevMonth.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.prevMonth.avgReceiptAmount)}</td>}
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.prevMonth.achievementRate)}</td>
+                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.prevMonth.yoyGrowthRate)}`}>{growthPct(totalRow.prevMonth.yoyGrowthRate)}</td>
+
+                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.annual.ytdTarget)}</td>
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.annual.ytdActual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.annual.avgReceiptAmount)}</td>}
+                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.annual.achievementRate)}</td>
+                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.annual.yoyGrowthRate)}`}>{growthPct(totalRow.annual.yoyGrowthRate)}</td>
+
+                      {customPeriod && (
+                        <>
+                          <td className="border-t border-l border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold">{won(totalRow.customPeriod?.target || 0)}</td>
+                          <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-black">{won(totalRow.customPeriod?.actual || 0)}</td>
+                          {showAvgReceipt && <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.customPeriod?.avgReceiptAmount ?? null)}</td>}
+                          <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold">{pct(totalRow.customPeriod?.achievementRate ?? null)}</td>
+                          <td className={`border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold ${growthColor(totalRow.customPeriod?.yoyGrowthRate ?? null)}`}>{growthPct(totalRow.customPeriod?.yoyGrowthRate ?? null)}</td>
+                        </>
+                      )}
+                    </tr>
+                  )}
                   {filteredStores.map((s, i) => (
                     <tr key={s.storeName} className={i % 2 ? "bg-slate-50" : "bg-white"}>
                       <td className="sticky left-0 z-10 border-t border-slate-100 bg-inherit px-3 py-2 font-bold text-slate-500">{s.channelGroup}</td>

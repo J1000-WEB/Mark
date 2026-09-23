@@ -162,6 +162,10 @@ export default function SalesDataDashboard() {
             <h1 className="text-3xl font-bold tracking-tight">판매데이터 제안</h1>
             <p className="mt-1 text-sm text-slate-500">주간판매데이터 파일을 올리면, 재고컨트롤 제안(RT/이관/프로모션)처럼 자동으로 액션을 제안해드려요.</p>
           </div>
+          {/* MARK 2026-09-25: 판매데이터가 독립 탭에서 빠지고 재고CTRL 탭 안으로 들어가서, 돌아가는 길을 남겨둡니다. */}
+          <a href="/inventory" className="text-xs font-black text-slate-400 hover:text-slate-600">
+            ← 재고CTRL로 돌아가기
+          </a>
         </div>
 
         {/* 업로드 박스 */}

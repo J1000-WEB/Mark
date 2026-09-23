@@ -610,6 +610,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
             <NavTabs active={active} />
+            {/* MARK 2026-09-25: 일간/월간이 독립 탭에서 빠지고 매출 탭 안으로 들어가서, 돌아가는 길을 남겨둡니다. */}
+            {(active === "daily" || active === "monthly") && (
+              <a href="/store-sales" className="text-xs font-black text-slate-400 hover:text-slate-600">
+                ← 매출로 돌아가기
+              </a>
+            )}
             {active === "weekly" ? (
               <div className="flex flex-wrap justify-end gap-2">
                 <button

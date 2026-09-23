@@ -4293,14 +4293,17 @@ export interface StoreSalesSummaryRow {
   channelCode: string;
   // MARK 2026-09-23: 각 기간 블록에 avgReceiptAmount(객단가=매출금액/영수건수)를 추가했습니다 —
   // 화면에서 기본은 숨기고 토글로 펼쳐볼 수 있게 할 예정이라, 매 기간마다 하나씩만 있으면 됩니다.
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  // MARK 2026-09-25: 매출탭 상단 "합계" 줄에서 객단가를 (매장별 객단가의 단순평균이 아니라)
+  // 매출금액합계/영수건수합계로 정확히 계산할 수 있도록, 원본 영수건수(receiptCount)도 같이
+  // 내려줍니다(화면에 직접 표시하진 않고, 합계 계산에만 씀).
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
   // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
   customPeriod?: {
-    start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null;
+    start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number;
     prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null;
   };
 }
@@ -4356,6 +4359,12 @@ const SALES_SUMMARY_STORE_WHITELIST = [
 ];
 const SALES_SUMMARY_STORE_WHITELIST_KEYS = new Set(SALES_SUMMARY_STORE_WHITELIST.map((n) => normalizeStoreKey(n)));
 
+// MARK 2026-09-25: "오프라인_롯데면세점"이 원본 파일에 점포코드 2개(21029/81028)로 겹쳐서
+// 들어오는 바람에 매출탭에 같은 이름이 두 줄로 나뉘어 표시되는 문제가 있었습니다 —
+// 소천님 확인: 21029는 빼고 81028만 남깁니다. 이름이 아니라 코드로 제외하므로, 같은 이름을
+// 쓰는 다른 코드가 나중에 생겨도 여기 코드만 더 추가하면 됩니다.
+const SALES_SUMMARY_STORE_CODE_EXCLUDE = new Set(["21029"]);
+
 export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions = {}): Promise<{
   asOfDate: string;
   dailyDate: string;
@@ -4364,7 +4373,9 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   meta: Awaited<ReturnType<typeof getSalesSummaryMeta>>;
 }> {
   const { rows: rawRows, meta } = await readSalesSummarySnapshot();
-  const rows = rawRows.filter((r) => SALES_SUMMARY_STORE_WHITELIST_KEYS.has(normalizeStoreKey(r.storeName)));
+  const rows = rawRows.filter(
+    (r) => SALES_SUMMARY_STORE_WHITELIST_KEYS.has(normalizeStoreKey(r.storeName)) && !SALES_SUMMARY_STORE_CODE_EXCLUDE.has(text(r.channelCode))
+  );
   if (!rows.length) return { asOfDate: "", dailyDate: "", customPeriod: null, stores: [], meta };
 
   const byStore = new Map<string, SalesSummaryDailyRow[]>();
@@ -4398,15 +4409,21 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   // 자유롭게 과거 하루를 골라볼 수 있습니다).
   const requestedDailyDate = options.dailyDate && SALES_SUMMARY_DATE_RE.test(options.dailyDate) ? options.dailyDate : "";
   const dailyDate = requestedDailyDate && requestedDailyDate >= earliestOverall && requestedDailyDate <= asOfDate ? requestedDailyDate : asOfDate;
-  const prevYearDailyDate = dateAddDays(dailyDate, -365);
+  // MARK 2026-09-25: 전년 같은 날짜(-365일)로 비교하면 매년 요일이 하루(윤년엔 이틀)씩 밀려서
+  // "월요일 vs 화요일"처럼 요일이 어긋나게 비교되는 문제가 있었습니다 — 주간 비교가 이미
+  // -364일(정확히 52주 전)을 써서 요일을 맞추고 있는 것과 똑같이, 일간도 -364일로 맞춥니다.
+  const prevYearDailyDate = dateAddDays(dailyDate, -364);
 
   // MARK 2026-09-22: 커스텀 기간비교 — 시작~끝 날짜를 직접 골라 그 기간의 목표달성률과
-  // 전년동기(정확히 365일 전 같은 기간) 신장률을 같이 봅니다. 형식 오류거나 시작일이 종료일보다
-  // 뒤면 유효하지 않은 것으로 보고 customPeriod는 null(=요청 안 한 것과 동일하게 처리).
+  // 전년동기 신장률을 같이 봅니다. 형식 오류거나 시작일이 종료일보다 뒤면 유효하지 않은
+  // 것으로 보고 customPeriod는 null(=요청 안 한 것과 동일하게 처리).
+  // MARK 2026-09-25: 여기도 위 일간과 같은 이유로 -365일이 아니라 -364일(52주 전)을 써서,
+  // 예를 들어 "26-09-07(월)~26-09-13(일)"을 고르면 전년동기가 "25-09-08(월)~25-09-14(일)"처럼
+  // 같은 요일로 맞춰지게 합니다.
   const rangeStartValid = options.rangeStart && SALES_SUMMARY_DATE_RE.test(options.rangeStart) ? options.rangeStart : "";
   const rangeEndValid = options.rangeEnd && SALES_SUMMARY_DATE_RE.test(options.rangeEnd) ? options.rangeEnd : "";
   const customPeriod = rangeStartValid && rangeEndValid && rangeStartValid <= rangeEndValid
-    ? { start: rangeStartValid, end: rangeEndValid, prevYearStart: dateAddDays(rangeStartValid, -365), prevYearEnd: dateAddDays(rangeEndValid, -365) }
+    ? { start: rangeStartValid, end: rangeEndValid, prevYearStart: dateAddDays(rangeStartValid, -364), prevYearEnd: dateAddDays(rangeEndValid, -364) }
     : null;
 
   // 이번주(월~일) — asOfDate가 속한 주
@@ -4483,6 +4500,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         achievementRate: cur.target ? cur.amount / cur.target : null,
         qty: cur.qty,
         avgReceiptAmount: avgReceiptAmount(cur.amount, cur.receiptCount),
+        receiptCount: cur.receiptCount,
         prevYearStart: customPeriod.prevYearStart,
         prevYearEnd: customPeriod.prevYearEnd,
         prevYearAmount: prev.amount,
@@ -4501,6 +4519,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         achievementRate: dailyTarget ? dailyActual / dailyTarget : null,
         qty: todayRow?.qty || 0,
         avgReceiptAmount: avgReceiptAmount(dailyActual, todayRow?.receiptCount || 0),
+        receiptCount: todayRow?.receiptCount || 0,
         prevYearAmount: dailyPrevYear,
         yoyGrowthRate: growthRate(dailyActual, dailyPrevYear, existedBefore(prevYearDailyDate)),
       },
@@ -4511,6 +4530,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         actual: weekNow.amount,
         achievementRate: weekNow.target ? weekNow.amount / weekNow.target : null,
         avgReceiptAmount: avgReceiptAmount(weekNow.amount, weekNow.receiptCount),
+        receiptCount: weekNow.receiptCount,
         prevWeekAmount: weekPrev.amount,
         wowGrowthRate: growthRate(weekNow.amount, weekPrev.amount, existedBefore(prevWeekStart)),
         prevYearAmount: weekPrevYear.amount,
@@ -4522,6 +4542,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         actual: monthNow.amount,
         achievementRate: monthNow.target ? monthNow.amount / monthNow.target : null,
         avgReceiptAmount: avgReceiptAmount(monthNow.amount, monthNow.receiptCount),
+        receiptCount: monthNow.receiptCount,
         progressRate: monthProgressRate,
         prevYearAmount: monthPrevYear.amount,
         yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
@@ -4532,6 +4553,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         actual: prevMonthNow.amount,
         achievementRate: prevMonthNow.target ? prevMonthNow.amount / prevMonthNow.target : null,
         avgReceiptAmount: avgReceiptAmount(prevMonthNow.amount, prevMonthNow.receiptCount),
+        receiptCount: prevMonthNow.receiptCount,
         prevYearAmount: prevMonthPrevYear.amount,
         yoyGrowthRate: growthRate(prevMonthNow.amount, prevMonthPrevYear.amount, existedBefore(prevYearPrevMonthStart)),
       },
@@ -4541,6 +4563,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         ytdActual: yearNow.amount,
         achievementRate: yearNow.target ? yearNow.amount / yearNow.target : null,
         avgReceiptAmount: avgReceiptAmount(yearNow.amount, yearNow.receiptCount),
+        receiptCount: yearNow.receiptCount,
         progressRate: yearProgressRate,
         prevYearAmount: yearPrevYear.amount,
         yoyGrowthRate: growthRate(yearNow.amount, yearPrevYear.amount, existedBefore(prevYearYtdStart)),

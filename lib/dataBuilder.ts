@@ -1828,16 +1828,26 @@ async function buildInventory(
 // /api/data 쪽에서도 어차피 다시 읽으므로 약간의 중복 조회는 있지만, 그 대신 완전히 독립적으로
 // 성공/실패합니다.
 export async function buildRtSuggestions() {
-  const titles = await getSpreadsheetTitles();
-  const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
-  const values = await getManySheetValues([inventorySheet], "A:AZ");
-  const inventoryRows = parseInventory(values[inventorySheet] || []);
+  // MARK 2026-09-24: 배포 후 504(=maxDuration 안에 못 끝나서 강제종료, 즉 이 함수가 정말
+  // 오래 걸렸다는 뜻)가 발생해서, 어느 단계가 오래 걸리는지 다음번엔 Vercel 함수 로그에서
+  // 바로 보이도록 단계별로 소요시간을 남깁니다. 또한 titles/판매이력/PIP스냅샷/Daily_Sales_History
+  // 넷 다 서로 의존관계가 없는데 기존엔 titles→재고시트 읽기를 먼저 끝내고서야 나머지 3개를
+  // 시작했습니다 — 넷 다 한번에 병렬로 돌리도록 바꿔서 그만큼 시간을 아낍니다.
+  const t0 = Date.now();
+  const elapsed = () => `${Date.now() - t0}ms`;
 
-  const [productRowsRaw, storeStockSnapshotForRt, history] = await Promise.all([
+  const [titles, productRowsRaw, storeStockSnapshotForRt, history] = await Promise.all([
+    getSpreadsheetTitles(),
     buildProductRowsFromDailyHistory(),
     readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
     loadDashboardDailyHistory(),
   ]);
+  console.log(`[rt-suggestions] titles+productRows+pip+history 완료 (${elapsed()})`);
+
+  const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
+  const values = await getManySheetValues([inventorySheet], "A:AZ");
+  const inventoryRows = parseInventory(values[inventorySheet] || []);
+  console.log(`[rt-suggestions] 온오프재고현황 읽기 완료, ${inventoryRows.length}행 (${elapsed()})`);
 
   const currentDate = yesterdayDateKeyKST();
   const historyRowsAll = history.rows || [];
@@ -1847,6 +1857,7 @@ export async function buildRtSuggestions() {
   const companyTopProducts = aggregateProducts(historyProductRows, undefined, 20);
 
   const inventory = await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt);
+  console.log(`[rt-suggestions] buildInventory 완료, RT 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);
 
   return {
     rtSuggestions: inventory.rtSuggestions,

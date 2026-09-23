@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" }) {
+export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" }) {
   // MARK: 상품동향/VMD/스냅샷 탭은 안 쓰셔서 네비게이션에서 숨겼습니다 (라우트 자체는
   // 남아있어서 주소로 직접 들어가면 여전히 열립니다 — 나중에 다시 켜고 싶으면 이 배열에
   // 도로 추가하면 됩니다).
@@ -15,6 +15,7 @@ export default function NavTabs({ active }: { active: "schedule" | "sales-data" 
     { key: "daily", label: "일간", href: "/daily" },
     { key: "store", label: "매장", href: "/store" },
     { key: "monthly", label: "월간", href: "/monthly" },
+    { key: "store-sales", label: "매출탭", href: "/store-sales" },
   ] as const;
 
   function logout() {

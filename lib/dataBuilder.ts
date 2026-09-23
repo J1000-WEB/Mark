@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getWeeklyHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, ensureSheetExistsById, safeReplaceSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
@@ -1906,7 +1906,7 @@ export async function getStoreCodeNameMap(): Promise<Map<string, string>> {
     const mainId = getSheetId();
     const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
     const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
-    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
+    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A1:AZ10000").catch(() => []) : [];
     return buildChannelCodeNameMap(channelValues || []);
   } catch {
     return buildChannelCodeNameMap([]); // 시트를 못 읽어도 최소 fallback 매핑은 반환됨
@@ -3197,17 +3197,30 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
   try {
     const dbId = getDbSheetId();
     const historyId = getHistorySheetId();
-    const weeklyHistoryId = getWeeklyHistorySheetId();
     const mainId = getSheetId();
+
+    // MARK 2026-09-22: 아래 여러 read가 다 같이 참조하도록 맨 위로 끌어올렸습니다 — override만
+    // 보면 바로 알 수 있는 값이라 데이터를 먼저 읽을 필요가 없습니다. 성과분석 화면에서 사용자가
+    // 직접 날짜를 고른 경우(hasExplicitDateFilter=true)는 정확한 과거 조회가 우선이라 지금처럼
+    // 전체를 읽고, 대시보드가 "날짜 필터 없이" 블라인드로 부르는 경우에만 아래 Promotion_Performance
+    // /RT_Result 읽기도 "최근 N행"으로 좁힙니다(바로 아래 PERFORMANCE_LOG_BLIND_TAIL_ROWS 참고).
+    const hasExplicitDateFilter = !!(override.selectedDate || override.beforeStart || override.duringStart);
 
     const dbTitles = await getSpreadsheetTitlesById(dbId);
     const historyTitles = await getSpreadsheetTitlesById(historyId).catch(() => []);
-    const weeklyHistoryTitles = await getSpreadsheetTitlesById(weeklyHistoryId).catch(() => []);
     const mainTitles = await getSpreadsheetTitlesById(mainId).catch(() => []);
 
+    // MARK 2026-09-22: Promotion_Performance는 RT/프로모션 지시마다 계속 쌓이기만 하는 로그라,
+    // 대시보드의 블라인드 호출(날짜 필터 없음)에서 매번 전체("A:AZ")를 읽으면 시트가 커질수록
+    // OOM 위험이 커집니다 — 바로 아래 RT_Result, 그리고 이 파일의 Daily_Sales_History/금주전주가
+    // 이미 겪은 것과 같은 패턴입니다. 사용자가 성과분석 화면에서 직접 날짜를 고른 경우엔 예전처럼
+    // 전체를 읽어 정확한 과거 조회를 보장하고, 블라인드 호출일 때만 "최근 2만 행"으로 좁힙니다.
+    const PERFORMANCE_LOG_BLIND_TAIL_ROWS = 20000;
     const performanceSheetName = pickNormalizedTitle(dbTitles, ["Promotion_Performance", "프로모션성과", "RT프로모션성과"], "Promotion_Performance");
     const performanceValues = performanceSheetName && dbTitles.includes(performanceSheetName)
-      ? await getSheetValuesById(dbId, performanceSheetName, "A:AZ")
+      ? hasExplicitDateFilter
+        ? await getSheetValuesById(dbId, performanceSheetName, "A:AZ")
+        : await readRecentTailRowsById(dbId, performanceSheetName, "A:AZ", PERFORMANCE_LOG_BLIND_TAIL_ROWS, 20)
       : [];
 
     const basePerformanceRows = parsePerformanceRows(performanceValues || []);
@@ -3221,11 +3234,22 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     // MARK 2026-09: RT_Result/채널 읽기를 Daily_Sales_History 읽기보다 먼저 하도록 순서를
     // 바꿨습니다 — performanceRows(RT/프로모션 성과 행)의 실제 시작일들을 먼저 알아야, 그 아래
     // Daily_Sales_History 읽기를 "필요한 기간만"으로 좁힐 수 있기 때문입니다.
+    // MARK 2026-09-22: RT_Result도 Promotion_Performance와 같은 이유(계속 쌓이는 로그)로,
+    // 블라인드 호출일 때만 "최근 2만 행"으로 좁힙니다.
     const rtSheetName = mainTitles.includes("RT_Result") ? "RT_Result" : "";
+    // MARK 2026-09-22: "객_전주"는 채널코드↔점포명 매핑용 참조표라 순서와 무관하게 고유 코드/
+    // 이름 쌍만 있으면 충분합니다(실제 매장 수만큼, 보통 수십 행). 로그성 시트는 아니지만
+    // 혹시 모를 이상 증식에 대비해 다른 곳들과 같은 방식으로 넉넉히(1만 행) 상한만 걸어둡니다 —
+    // buildChannelCodeNameMap엔 이미 알려진 매장 코드 fallback도 있어 이 상한으로 실제 매핑이
+    // 빠질 위험은 없습니다.
     const channelSheetName = mainTitles.find((title) => normalizeSheetName(title).includes("객_전주")) || "";
-    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A:AZ").catch(() => []) : [];
+    const channelValues = channelSheetName ? await getSheetValuesById(mainId, channelSheetName, "A1:AZ10000").catch(() => []) : [];
     const codeNameMap = buildChannelCodeNameMap(channelValues || []);
-    const rtValues = rtSheetName ? await getSheetValuesById(mainId, rtSheetName, "A:AZ").catch(() => []) : [];
+    const rtValues = rtSheetName
+      ? hasExplicitDateFilter
+        ? await getSheetValuesById(mainId, rtSheetName, "A:AZ").catch(() => [])
+        : await readRecentTailRowsById(mainId, rtSheetName, "A:AZ", PERFORMANCE_LOG_BLIND_TAIL_ROWS, 20).catch(() => [])
+      : [];
     const rtRows = parseRtResultRows(rtValues || [], codeNameMap, productNameMap);
 
     let performanceRows = mergeRtRows(basePerformanceRows, rtRows);
@@ -3267,7 +3291,8 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
     // 90일로 하한을 둡니다 — 대시보드는 어차피 "최근 성과 요약"만 보여주면 되므로 이걸로
     // 화면상 의미있는 손실은 없습니다.
     const PERFORMANCE_BLIND_LOOKBACK_CAP_DAYS = 90;
-    const hasExplicitDateFilter = !!(override.selectedDate || override.beforeStart || override.duringStart);
+    // hasExplicitDateFilter는 함수 맨 위(Promotion_Performance/RT_Result 읽기 범위를 정할 때)로
+    // 옮겼습니다 — 여기서는 그대로 재사용합니다.
     const rawEarliestNeeded = earliestNeededDailyHistoryDate(performanceRows, override);
     const blindLookbackFloor = dateAddDays(todayDateKey(), -PERFORMANCE_BLIND_LOOKBACK_CAP_DAYS);
     const boundedEarliestNeeded = hasExplicitDateFilter
@@ -3307,9 +3332,17 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
 
     const dailyRows = parseDailyHistoryRows(dailyValues || []);
 
-    const weeklyStoreSheetName = weeklyHistoryTitles.includes("Weekly_history") ? "Weekly_history" : "";
-    const weeklyStoreValues = weeklyStoreSheetName ? await getSheetValuesById(weeklyHistoryId, weeklyStoreSheetName, "A:S").catch(() => []) : [];
-    const weeklyStoreRows = parseWeeklyStoreHistoryRows(weeklyStoreValues || []);
+    // MARK 2026-09-22: 여기서 예전엔 Weekly_history 시트 전체(A:S, "지금까지 쌓인 모든 주차·
+    // 스타일·컬러·점포 조합" — weeklyDataProvider.ts 주석 참고)를 매번 통째로 읽고 있었는데,
+    // 그 결과(weeklyStoreRows)를 실제로 쓰는 곳이 이 함수 안에 없다는 걸 발견했습니다 —
+    // applyWeeklyPerformance()가 이 값을 쓰도록 정의는 돼있지만 이 함수 어디서도 호출되지
+    // 않고(RT 성과 수량 추이는 주석에 적힌 대로 Daily_Sales_History만 씁니다), weeklyStoreRows는
+    // 아래 debug.weeklyStoreRows(단순 개수 표시)에만 쓰였습니다. "금주/전주" 시트가 예상과 달리
+    // 121,197행까지 자랐던 것과 완전히 같은 패턴(형제 시트)이라 Weekly_history도 이미 비슷하게
+    // 커져 있을 가능성이 높고, 아무 데도 안 쓰는 값 때문에 전체를 읽는 건 순수 낭비 + OOM
+    // 위험이라 이 읽기 자체를 없앴습니다(다른 화면들이 쓰는 자기 자신의 Weekly_history 읽기는
+    // weeklyDataProvider.ts 쪽에서 이미 별도로 안전하게(타겟 읽기) 처리하고 있어 영향 없습니다).
+    const weeklyStoreRows: any[] = [];
 
     // MARK 2026-09: "금주/전주" 시트가 원래 예상(매주 새로 쓰는 작은 시트)과 달리
     // 121,197행(약 400만 셀)까지 자라있는 게 발견됐습니다 — 계속 growing 상태라면 매번
@@ -3351,8 +3384,7 @@ export async function buildPerformanceAnalysis(override: PerformanceOverride = {
         mergedRows: performanceRows.length,
         dailyRows: dailyRows.length,
         dailySource,
-        weeklyStoreSheetName,
-        weeklyStoreRows: weeklyStoreRows.length,
+        weeklyStoreRows: weeklyStoreRows.length, // MARK 2026-09-22: 더는 안 읽음(위 주석 참고) — 항상 0
         weeklyPriceSheetName: weeklyPriceSheetName || "",
         weeklyUnitPriceCount: weeklyUnitPriceMap.size,
       },
@@ -3967,4 +3999,399 @@ export async function buildDashboardDataFromGoogleSheet() {
 
 export function getFallbackData() {
   return fallback as any;
+}
+
+// =====================================================================
+// MARK 2026-09-22: 매출탭(점포별) — "전체매출" 원본 다운로드 파일(매장×날짜별 일간
+// 실적+목표)을 매일 업로드하면, 그동안 여러 시트를 수기로 붙여넣어서 만들던 "점포별"
+// 표(일간/주간/월간/전월/연간, 목표·달성율·전년대비)를 자동으로 만들어줍니다.
+// - "차주"(다음주) 목표는 원본 파일이 지난 실적만 담고 있어서 계산할 수 없어 뺐습니다
+//   (소천님 확인 완료).
+// - 구분(로드샵/백화점/쇼핑몰/아울렛/위탁(오프))은 원본 파일에 있는 값을 그대로 씁니다.
+// - 이번 달/올해처럼 아직 안 끝난 기간은 "월목표"(그 달 전체 목표) 대신 "기간목표"(지금까지
+//   지난 날짜들의 목표 합)만 계산합니다 — 안 지난 날짜는 목표 자체가 원본 파일에 없어서
+//   전체 월/연 목표를 미리 알 수 없기 때문입니다. 완결된 지난달은 전체 월목표를 그대로 씁니다.
+// =====================================================================
+
+const SALES_SUMMARY_SHEET = "매출_일별_스냅샷";
+const SALES_SUMMARY_META_SHEET = "매출_일별_스냅샷_메타";
+const SALES_SUMMARY_HEADER = ["날짜", "구분", "채널코드", "매장명", "수량", "금액", "건수", "목표"];
+// MARK 2026-09-22: "매일 전체매출 파일 통째로" 대신 "어제 하루치만" 매일 올리는 방식으로
+// 바뀌면서, 메타 시트도 "누적 전체" 정보와 "이번(가장 최근) 업로드" 정보를 구분해서 기록합니다.
+// 앞 6칸(업로드일시~원본파일명)은 기존과 자리가 같아 옛날 방식대로 이해해도 되지만, 이제
+// 업로드일시/행수/시작일/종료일은 "누적 전체" 기준이고, 뒤 3칸이 "이번 업로드분"만의 정보입니다.
+const SALES_SUMMARY_META_HEADER = [
+  "마지막업로드일시", "누적행수", "누적매장수", "누적시작일", "누적종료일", "최근업로드파일명",
+  "최근업로드행수", "최근업로드시작일", "최근업로드종료일",
+];
+
+export type SalesSummaryDailyRow = {
+  date: string;
+  channelGroup: string;
+  channelCode: string;
+  storeName: string;
+  qty: number;
+  amount: number;
+  receiptCount: number;
+  target: number;
+};
+
+// MARK 2026-09-22: 처음엔 "전체매출 파일을 매일 통째로 다시 올린다"는 전제로 매번 전체
+// 덮어쓰기(safeReplaceSheetValuesById에 새로 올라온 행만 넘김)였는데, 소천님이 "매일은
+// 하루치만 올려서 그게 기록되어 쌓이게 하고 싶다"고 확인해주셔서 구조를 바꿨습니다.
+// 이제는 "날짜+채널코드+매장명"을 고유 키로 삼아 기존에 쌓여있던 행 위에 새로 올라온 행만
+// upsert(있으면 새 값으로 덮어쓰고, 없으면 추가)합니다 — 과거 행은 그대로 남고, 같은 날을
+// (정정 등의 이유로) 다시 올려도 중복되지 않고 최신 값으로만 갱신됩니다. 최초 1회 올렸던
+// 전체 히스토리(2025-01~)는 이미 시트에 쌓여있으므로 별도 마이그레이션 없이 그 위에
+// 계속 하루치씩 쌓으면 됩니다.
+export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fileName?: string) {
+  const clean = (rows || [])
+    .map((r) => ({
+      date: text(r.date),
+      channelGroup: text(r.channelGroup),
+      channelCode: text(r.channelCode),
+      storeName: text(r.storeName),
+      qty: num(r.qty),
+      amount: num(r.amount),
+      receiptCount: num(r.receiptCount),
+      target: num(r.target),
+    }))
+    .filter((r) => r.date && r.storeName);
+  if (!clean.length) {
+    throw new Error("업로드할 매출 데이터를 찾지 못했습니다. 파일 형식을 확인해주세요.");
+  }
+
+  const dbId = getDbSheetId();
+  await ensureSheetExistsById(dbId, SALES_SUMMARY_SHEET, SALES_SUMMARY_HEADER);
+  await ensureSheetExistsById(dbId, SALES_SUMMARY_META_SHEET, SALES_SUMMARY_META_HEADER);
+
+  const keyOf = (r: { date: string; channelCode: string; storeName: string }) => `${r.date}__${r.channelCode || r.storeName}__${r.storeName}`;
+
+  // 기존에 쌓여있던 전체를 먼저 읽어옵니다(이미 A2:H60000 상한 — readSalesSummarySnapshot과
+  // 동일한 캡, 하루 38~60행씩 늘어나는 정도라 앞으로 몇 년치 여유가 있습니다).
+  const existingRaw = await getSheetValuesById(dbId, SALES_SUMMARY_SHEET, "A2:H60000").catch(() => [] as any[]);
+  const merged = new Map<string, SalesSummaryDailyRow>();
+  for (const r of existingRaw) {
+    const date = text(r?.[0]);
+    const storeName = text(r?.[3]);
+    if (!date || !storeName) continue;
+    const row: SalesSummaryDailyRow = {
+      date,
+      channelGroup: text(r?.[1]),
+      channelCode: text(r?.[2]),
+      storeName,
+      qty: num(r?.[4]),
+      amount: num(r?.[5]),
+      receiptCount: num(r?.[6]),
+      target: num(r?.[7]),
+    };
+    merged.set(keyOf(row), row);
+  }
+  for (const r of clean) merged.set(keyOf(r), r); // 새로 올라온 행이 같은 키를 덮어씀(정정 포함)
+
+  const mergedRows = Array.from(merged.values()).sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
+  const sheetRows = mergedRows.map((r) => [r.date, r.channelGroup, r.channelCode, r.storeName, r.qty, r.amount, r.receiptCount, r.target]);
+  await safeReplaceSheetValuesById(dbId, SALES_SUMMARY_SHEET, [SALES_SUMMARY_HEADER, ...sheetRows]);
+
+  const storeCount = new Set(mergedRows.map((r) => r.storeName)).size;
+  const cumulativeStart = mergedRows[0]?.date || "";
+  const cumulativeEnd = mergedRows[mergedRows.length - 1]?.date || "";
+  const newDates = clean.map((r) => r.date).sort();
+  const newStartDate = newDates[0] || "";
+  const newEndDate = newDates[newDates.length - 1] || "";
+  const uploadedAt = nowKSTDateTime();
+
+  await safeReplaceSheetValuesById(dbId, SALES_SUMMARY_META_SHEET, [
+    SALES_SUMMARY_META_HEADER,
+    [uploadedAt, mergedRows.length, storeCount, cumulativeStart, cumulativeEnd, text(fileName), clean.length, newStartDate, newEndDate],
+  ]);
+
+  return {
+    ok: true,
+    rowCount: mergedRows.length,
+    storeCount,
+    startDate: cumulativeStart,
+    endDate: cumulativeEnd,
+    uploadedAt,
+    newRowCount: clean.length,
+    newStartDate,
+    newEndDate,
+  };
+}
+
+export async function getSalesSummaryMeta() {
+  const dbId = getDbSheetId();
+  const rows = await getSheetValuesById(dbId, SALES_SUMMARY_META_SHEET, "A2:I2").catch(() => [] as any[]);
+  const row = rows[0];
+  if (!row || !text(row[0])) return null;
+  return {
+    uploadedAt: text(row[0]), // 마지막 업로드 시각
+    rowCount: num(row[1]), // 누적 전체 행수
+    storeCount: num(row[2]), // 누적 전체 매장수
+    startDate: text(row[3]), // 누적 시작일
+    endDate: text(row[4]), // 누적 종료일(=대개 어제)
+    fileName: text(row[5]), // 최근 업로드 파일명
+    newRowCount: num(row[6]), // 최근 업로드분 행수
+    newStartDate: text(row[7]), // 최근 업로드분 시작일
+    newEndDate: text(row[8]), // 최근 업로드분 종료일
+  };
+}
+
+export async function readSalesSummarySnapshot(): Promise<{ rows: SalesSummaryDailyRow[]; meta: Awaited<ReturnType<typeof getSalesSummaryMeta>> }> {
+  const dbId = getDbSheetId();
+  // MARK: 원본 파일은 38개 매장 × (2025-01-02 ~ 오늘)치라 지금 기준 약 2만6천 행 정도입니다.
+  // 매일 하루씩만 늘어나므로 6만 행이면 앞으로 몇 년치 여유가 있습니다(오늘 겪은 OOM 교훈으로
+  // "A2:G500000" 같은 과도하게 넓은 범위는 처음부터 쓰지 않습니다).
+  const [dataRows, meta] = await Promise.all([
+    getSheetValuesById(dbId, SALES_SUMMARY_SHEET, "A2:H60000").catch(() => [] as any[]),
+    getSalesSummaryMeta().catch(() => null),
+  ]);
+  const rows: SalesSummaryDailyRow[] = dataRows
+    .filter((r) => r && text(r[0]) && text(r[3]))
+    .map((r) => ({
+      date: text(r[0]),
+      channelGroup: text(r[1]),
+      channelCode: text(r[2]),
+      storeName: text(r[3]),
+      qty: num(r[4]),
+      amount: num(r[5]),
+      receiptCount: num(r[6]),
+      target: num(r[7]),
+    }));
+  return { rows, meta };
+}
+
+function daysInMonth(year: number, month1to12: number) {
+  return new Date(year, month1to12, 0).getDate();
+}
+
+function dayOfYear(dateKey: string) {
+  const d = parseDate(dateKey);
+  if (!d) return 0;
+  const start = new Date(d.getFullYear(), 0, 1);
+  return Math.round((d.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+// 기간 [startKey, endKey](양끝 포함)의 실적/목표 합계. seen store rows만 대상으로 하므로
+// 호출부에서 이미 storeRows(그 매장의 행만)를 넘겨야 합니다.
+function sumPeriod(storeRows: SalesSummaryDailyRow[], startKey: string, endKey: string) {
+  let amount = 0;
+  let target = 0;
+  let qty = 0;
+  let dayCount = 0;
+  for (const r of storeRows) {
+    if (r.date < startKey || r.date > endKey) continue;
+    amount += r.amount;
+    target += r.target;
+    qty += r.qty;
+    dayCount++;
+  }
+  return { amount, target, qty, dayCount };
+}
+
+function growthRate(current: number, previous: number, storeExistedInPrevPeriod: boolean): number | null {
+  if (!storeExistedInPrevPeriod) return null; // "동일"(같은 매장) 조건 미충족 — 신규 매장 등
+  if (!previous) return current > 0 ? null : 0; // 전년 실적 0이면 배율이 무의미 — 신장률 표기 안 함
+  return (current - previous) / previous;
+}
+
+export interface StoreSalesSummaryRow {
+  storeName: string;
+  channelGroup: string;
+  channelCode: string;
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
+  customPeriod?: {
+    start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number;
+    prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null;
+  };
+}
+
+export interface SalesSummaryQueryOptions {
+  dailyDate?: string; // "일간" 블록에서 보고 싶은 날짜(기본값=데이터상 가장 최근 날짜)
+  rangeStart?: string; // 커스텀 기간비교 시작일
+  rangeEnd?: string; // 커스텀 기간비교 종료일
+}
+
+const SALES_SUMMARY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions = {}): Promise<{
+  asOfDate: string;
+  dailyDate: string;
+  customPeriod: { start: string; end: string; prevYearStart: string; prevYearEnd: string } | null;
+  stores: StoreSalesSummaryRow[];
+  meta: Awaited<ReturnType<typeof getSalesSummaryMeta>>;
+}> {
+  const { rows, meta } = await readSalesSummarySnapshot();
+  if (!rows.length) return { asOfDate: "", dailyDate: "", customPeriod: null, stores: [], meta };
+
+  const byStore = new Map<string, SalesSummaryDailyRow[]>();
+  for (const r of rows) {
+    if (!byStore.has(r.storeName)) byStore.set(r.storeName, []);
+    byStore.get(r.storeName)!.push(r);
+  }
+
+  const asOfDate = rows.reduce((max, r) => (r.date > max ? r.date : max), rows[0].date);
+  const asOfDateObj = parseDate(asOfDate)!;
+
+  // MARK 2026-09-22: "일간" 블록만 원하는 날짜를 골라볼 수 있게 합니다(기본값=최신 데이터
+  // 날짜=보통 어제) — 주간/월간/전월/연간은 그대로 "지금 기준" 리포트라 dailyDate와 무관하게
+  // asOfDate를 계속 씁니다. 형식이 틀리거나 데이터 범위(가장 이른 날짜~asOfDate) 밖이면
+  // 조용히 무시하고 최신 날짜로 폴백합니다(첫 파일은 과거 조회가 아예 안 됐던 것과 달리,
+  // 이제 쌓인 데이터 안에서는 자유롭게 과거 하루를 골라볼 수 있습니다).
+  const earliestOverall = rows.reduce((min, r) => (r.date < min ? r.date : min), rows[0].date);
+  const requestedDailyDate = options.dailyDate && SALES_SUMMARY_DATE_RE.test(options.dailyDate) ? options.dailyDate : "";
+  const dailyDate = requestedDailyDate && requestedDailyDate >= earliestOverall && requestedDailyDate <= asOfDate ? requestedDailyDate : asOfDate;
+  const prevYearDailyDate = dateAddDays(dailyDate, -365);
+
+  // MARK 2026-09-22: 커스텀 기간비교 — 시작~끝 날짜를 직접 골라 그 기간의 목표달성률과
+  // 전년동기(정확히 365일 전 같은 기간) 신장률을 같이 봅니다. 형식 오류거나 시작일이 종료일보다
+  // 뒤면 유효하지 않은 것으로 보고 customPeriod는 null(=요청 안 한 것과 동일하게 처리).
+  const rangeStartValid = options.rangeStart && SALES_SUMMARY_DATE_RE.test(options.rangeStart) ? options.rangeStart : "";
+  const rangeEndValid = options.rangeEnd && SALES_SUMMARY_DATE_RE.test(options.rangeEnd) ? options.rangeEnd : "";
+  const customPeriod = rangeStartValid && rangeEndValid && rangeStartValid <= rangeEndValid
+    ? { start: rangeStartValid, end: rangeEndValid, prevYearStart: dateAddDays(rangeStartValid, -365), prevYearEnd: dateAddDays(rangeEndValid, -365) }
+    : null;
+
+  // 이번주(월~일) — asOfDate가 속한 주
+  const dow = asOfDateObj.getDay(); // 0=일 ... 6=토
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const weekStart = dateAddDays(asOfDate, mondayOffset);
+  const weekEnd = dateAddDays(weekStart, 6);
+  const prevWeekStart = dateAddDays(weekStart, -7);
+  const prevWeekEnd = dateAddDays(weekEnd, -7);
+  const prevYearWeekStart = dateAddDays(weekStart, -364); // 정확히 52주 전 = 같은 요일
+  const prevYearWeekEnd = dateAddDays(weekEnd, -364);
+
+  const monthStart = firstDayOfMonth(asOfDate);
+  const prevYearMonthStart = dateAddDays(monthStart, -365);
+  const prevYearAsOfDate = dateAddDays(asOfDate, -365);
+  const prevYearMonthPeriodEnd = prevYearAsOfDate; // 같은 "1일~이맘때" 구간 비교
+
+  const prevMonthKeyStr = previousMonthKey(asOfDate); // "YYYY-MM"
+  const prevMonthStart = `${prevMonthKeyStr}-01`;
+  const prevMonthEnd = lastDayOfMonth(prevMonthStart);
+  const prevYearPrevMonthStart = dateAddDays(prevMonthStart, -365);
+  const prevYearPrevMonthEnd = dateAddDays(prevMonthEnd, -365);
+
+  const yearStart = `${asOfDateObj.getFullYear()}-01-01`;
+  const prevYearYtdStart = `${asOfDateObj.getFullYear() - 1}-01-01`;
+  const prevYearYtdEnd = prevYearAsOfDate;
+
+  const dim = daysInMonth(asOfDateObj.getFullYear(), asOfDateObj.getMonth() + 1);
+  const monthProgressRate = asOfDateObj.getDate() / dim;
+  const yearProgressRate = dayOfYear(asOfDate) / (new Date(asOfDateObj.getFullYear(), 1, 29).getMonth() === 1 ? 366 : 365);
+
+  const stores: StoreSalesSummaryRow[] = [];
+  for (const [storeName, storeRowsUnsorted] of byStore.entries()) {
+    const storeRows = [...storeRowsUnsorted].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const earliestDate = storeRows[0].date;
+    const sample = storeRows[storeRows.length - 1];
+
+    const existedBefore = (periodStart: string) => earliestDate <= periodStart;
+
+    // 일간 — dailyDate 기준(기본값 asOfDate와 동일, 사용자가 날짜를 고르면 그 날짜)
+    const todayRow = storeRows.find((r) => r.date === dailyDate);
+    const prevYearDayRow = storeRows.find((r) => r.date === prevYearDailyDate);
+    const dailyActual = todayRow?.amount || 0;
+    const dailyTarget = todayRow?.target || 0;
+    const dailyPrevYear = prevYearDayRow?.amount || 0;
+
+    // 주간
+    const weekNow = sumPeriod(storeRows, weekStart, weekEnd);
+    const weekPrev = sumPeriod(storeRows, prevWeekStart, prevWeekEnd);
+    const weekPrevYear = sumPeriod(storeRows, prevYearWeekStart, prevYearWeekEnd);
+
+    // 이번달(월초~asOfDate = 기간목표만 — 아직 안 지난 날짜의 목표는 원본에 없음)
+    const monthNow = sumPeriod(storeRows, monthStart, asOfDate);
+    const monthPrevYear = sumPeriod(storeRows, prevYearMonthStart, prevYearMonthPeriodEnd);
+
+    // 전월(완결된 달 — 전체 월 목표 사용 가능)
+    const prevMonthNow = sumPeriod(storeRows, prevMonthStart, prevMonthEnd);
+    const prevMonthPrevYear = sumPeriod(storeRows, prevYearPrevMonthStart, prevYearPrevMonthEnd);
+
+    // 연간(올해 1/1~asOfDate = 기간목표만)
+    const yearNow = sumPeriod(storeRows, yearStart, asOfDate);
+    const yearPrevYear = sumPeriod(storeRows, prevYearYtdStart, prevYearYtdEnd);
+
+    // 커스텀 기간비교(요청했을 때만)
+    let customPeriodRow: StoreSalesSummaryRow["customPeriod"];
+    if (customPeriod) {
+      const cur = sumPeriod(storeRows, customPeriod.start, customPeriod.end);
+      const prev = sumPeriod(storeRows, customPeriod.prevYearStart, customPeriod.prevYearEnd);
+      customPeriodRow = {
+        start: customPeriod.start,
+        end: customPeriod.end,
+        target: cur.target,
+        actual: cur.amount,
+        achievementRate: cur.target ? cur.amount / cur.target : null,
+        qty: cur.qty,
+        prevYearStart: customPeriod.prevYearStart,
+        prevYearEnd: customPeriod.prevYearEnd,
+        prevYearAmount: prev.amount,
+        yoyGrowthRate: growthRate(cur.amount, prev.amount, existedBefore(customPeriod.prevYearStart)),
+      };
+    }
+
+    stores.push({
+      storeName,
+      channelGroup: sample.channelGroup,
+      channelCode: sample.channelCode,
+      daily: {
+        date: dailyDate,
+        target: dailyTarget,
+        actual: dailyActual,
+        achievementRate: dailyTarget ? dailyActual / dailyTarget : null,
+        qty: todayRow?.qty || 0,
+        prevYearAmount: dailyPrevYear,
+        yoyGrowthRate: growthRate(dailyActual, dailyPrevYear, existedBefore(prevYearDailyDate)),
+      },
+      weekly: {
+        start: weekStart,
+        end: weekEnd,
+        target: weekNow.target,
+        actual: weekNow.amount,
+        achievementRate: weekNow.target ? weekNow.amount / weekNow.target : null,
+        prevWeekAmount: weekPrev.amount,
+        wowGrowthRate: growthRate(weekNow.amount, weekPrev.amount, existedBefore(prevWeekStart)),
+        prevYearAmount: weekPrevYear.amount,
+        yoyGrowthRate: growthRate(weekNow.amount, weekPrevYear.amount, existedBefore(prevYearWeekStart)),
+      },
+      monthly: {
+        month: monthStart.slice(0, 7),
+        periodTarget: monthNow.target,
+        actual: monthNow.amount,
+        achievementRate: monthNow.target ? monthNow.amount / monthNow.target : null,
+        progressRate: monthProgressRate,
+        prevYearAmount: monthPrevYear.amount,
+        yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
+      },
+      prevMonth: {
+        month: prevMonthKeyStr,
+        target: prevMonthNow.target,
+        actual: prevMonthNow.amount,
+        achievementRate: prevMonthNow.target ? prevMonthNow.amount / prevMonthNow.target : null,
+        prevYearAmount: prevMonthPrevYear.amount,
+        yoyGrowthRate: growthRate(prevMonthNow.amount, prevMonthPrevYear.amount, existedBefore(prevYearPrevMonthStart)),
+      },
+      annual: {
+        year: asOfDateObj.getFullYear(),
+        ytdTarget: yearNow.target,
+        ytdActual: yearNow.amount,
+        achievementRate: yearNow.target ? yearNow.amount / yearNow.target : null,
+        progressRate: yearProgressRate,
+        prevYearAmount: yearPrevYear.amount,
+        yoyGrowthRate: growthRate(yearNow.amount, yearPrevYear.amount, existedBefore(prevYearYtdStart)),
+      },
+      ...(customPeriodRow ? { customPeriod: customPeriodRow } : {}),
+    });
+  }
+
+  stores.sort((a, b) => b.weekly.actual - a.weekly.actual);
+
+  return { asOfDate, dailyDate, customPeriod, stores, meta };
 }

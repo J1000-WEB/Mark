@@ -128,6 +128,33 @@ export async function getSheetValuesById(spreadsheetId: string, sheetName: strin
   return (res.data.values || []) as any[][];
 }
 
+// MARK 2026-09-22: Promotion_Performance / RT_Result처럼 "계속 쌓이기만 하는 로그" 시트를
+// 헤더 컬럼을 이름으로 찾는(findHeaderRow/findCol) 기존 파서와 그대로 호환되면서도, 시트가
+// 계속 커져도 항상 가볍게 읽기 위한 공용 헬퍼입니다. getSheetRowCountById로 행 수만 먼저
+// 확인해서(셀 데이터 전혀 안 읽음) 시트가 이미 작으면 기존과 완전히 동일하게 전체를 한 번에
+// 읽고, 크면 위쪽 헤더(headerRows행)와 최근 maxDataRows행만 따로 읽어 이어 붙입니다.
+export async function readRecentTailRowsById(
+  spreadsheetId: string,
+  sheetName: string,
+  range: string,
+  maxDataRows: number,
+  headerRows = 1
+): Promise<any[][]> {
+  const totalRows = await getSheetRowCountById(spreadsheetId, sheetName).catch(() => 0);
+  if (!totalRows || totalRows <= maxDataRows + headerRows) {
+    return getSheetValuesById(spreadsheetId, sheetName, range).catch(() => [] as any[][]);
+  }
+  const m = /^([A-Z]+)\d*:([A-Z]+)\d*$/.exec(range);
+  const startCol = m?.[1] || "A";
+  const endCol = m?.[2] || "AZ";
+  const tailStart = Math.max(headerRows + 1, totalRows - maxDataRows + 1);
+  const [headerVals, tailVals] = await Promise.all([
+    getSheetValuesById(spreadsheetId, sheetName, `${startCol}1:${endCol}${headerRows}`).catch(() => [] as any[][]),
+    getSheetValuesById(spreadsheetId, sheetName, `${startCol}${tailStart}:${endCol}${totalRows}`).catch(() => [] as any[][]),
+  ]);
+  return [...headerVals, ...tailVals];
+}
+
 // 날짜 셀이 표시 형식상 연도를 포함 안 하는 경우(예: "4월 25일")가 있어서,
 // 텍스트 대신 구글시트 내부 일련번호(SERIAL_NUMBER)로 받아옵니다 — 표시 형식과 무관하게 항상 정확합니다.
 export async function getSheetValuesWithSerialDatesById(spreadsheetId: string, sheetName: string, range = "A:AZ") {

@@ -8,6 +8,11 @@ function won(n: number) {
   return `${Math.round(n || 0).toLocaleString("ko-KR")}원`;
 }
 
+function wonOrDash(n: number | null | undefined) {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "-";
+  return won(n);
+}
+
 function pct(n: number | null) {
   if (n === null || !Number.isFinite(n)) return "-";
   return `${(n * 100).toFixed(0)}%`;
@@ -28,12 +33,12 @@ type StoreSalesSummaryRow = {
   storeName: string;
   channelGroup: string;
   channelCode: string;
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
 };
 
 type CustomPeriodInfo = { start: string; end: string; prevYearStart: string; prevYearEnd: string } | null;
@@ -56,6 +61,15 @@ export default function StoreSalesSummaryDashboard() {
   const [rangeEndInput, setRangeEndInput] = useState("");
   const [customPeriod, setCustomPeriod] = useState<CustomPeriodInfo>(null);
   const [rangeError, setRangeError] = useState("");
+
+  // MARK 2026-09-23: 객단가(매출금액/영수건수) — 기본은 접어두고 토글로 펼쳐볼 수 있게.
+  const [showAvgReceipt, setShowAvgReceipt] = useState(false);
+
+  // MARK 2026-09-23: 구글드라이브에 올려둔 "전체매출" 파일을 수동으로 지금 바로 가져오기
+  // (자동으로는 매일 새벽 cron이 같은 걸 호출함 — app/api/sales-summary-drive-import).
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveMessage, setDriveMessage] = useState("");
+  const [driveError, setDriveError] = useState("");
 
   useEffect(() => {
     load();
@@ -154,6 +168,31 @@ export default function StoreSalesSummaryDashboard() {
     }
   }
 
+  async function runDriveImport() {
+    setDriveImporting(true);
+    setDriveError("");
+    setDriveMessage("드라이브에서 가져오는 중...");
+    try {
+      const res = await fetch("/api/sales-summary-drive-import", { method: "POST" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "가져오기 실패");
+      setDriveMessage(
+        `완료! "${data.driveFile?.name || ""}" 기준 이번 반영 ${data.newRowCount.toLocaleString("ko-KR")}행(${data.newStartDate}~${data.newEndDate}) · ` +
+        `누적 ${data.storeCount}개 매장 ${data.rowCount.toLocaleString("ko-KR")}행(${data.startDate}~${data.endDate})`
+      );
+      await load({
+        date: dailyDate || undefined,
+        rangeStart: rangeStartInput && rangeEndInput ? rangeStartInput : undefined,
+        rangeEnd: rangeStartInput && rangeEndInput ? rangeEndInput : undefined,
+      });
+    } catch (e: any) {
+      setDriveMessage("");
+      setDriveError(e?.message || "가져오기 실패");
+    } finally {
+      setDriveImporting(false);
+    }
+  }
+
   const groups = useMemo(() => {
     const set = new Set(stores.map((s) => s.channelGroup).filter(Boolean));
     return ["전체", ...Array.from(set)];
@@ -203,6 +242,25 @@ export default function StoreSalesSummaryDashboard() {
             {progress && <span className="text-xs font-bold text-slate-500">{progress}</span>}
           </div>
           {error && <p className="mt-2 text-sm font-black text-red-600">⚠ {error}</p>}
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-black text-slate-700">구글드라이브에서 가져오기</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">
+            드라이브에 올려둔 전체매출 파일을 매일 새벽에 자동으로 가져와요. 방금 올렸다면 기다리지 않고 지금 바로 가져올 수 있어요.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={driveImporting}
+              onClick={runDriveImport}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
+            >
+              {driveImporting ? "가져오는 중..." : "지금 가져오기"}
+            </button>
+            {driveMessage && <span className="text-xs font-bold text-slate-500">{driveMessage}</span>}
+          </div>
+          {driveError && <p className="mt-2 text-sm font-black text-red-600">⚠ {driveError}</p>}
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-6 rounded-2xl border border-slate-200 bg-white p-4">
@@ -276,19 +334,30 @@ export default function StoreSalesSummaryDashboard() {
 
         {!loading && stores.length > 0 && (
           <>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {groups.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGroupFilter(g)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-black ${
-                    groupFilter === g ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                {groups.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGroupFilter(g)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-black ${
+                      groupFilter === g ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAvgReceipt((v) => !v)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-black ${
+                  showAvgReceipt ? "bg-indigo-600 text-white" : "border border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                객단가 {showAvgReceipt ? "숨기기 ▲" : "보기 ▼"}
+              </button>
             </div>
 
             <p className="mt-3 text-xs font-bold text-slate-400">
@@ -296,18 +365,18 @@ export default function StoreSalesSummaryDashboard() {
             </p>
 
             <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-              <table className={`${customPeriod ? "min-w-[2200px]" : "min-w-[1800px]"} w-full border-collapse text-xs`}>
+              <table className={`${customPeriod ? (showAvgReceipt ? "min-w-[2600px]" : "min-w-[2200px]") : showAvgReceipt ? "min-w-[2200px]" : "min-w-[1800px]"} w-full border-collapse text-xs`}>
                 <thead>
                   <tr className="bg-slate-900 text-white">
                     <th rowSpan={2} className="sticky left-0 z-10 bg-slate-900 px-3 py-2 text-left font-black">구분</th>
                     <th rowSpan={2} className="sticky left-[56px] z-10 bg-slate-900 px-3 py-2 text-left font-black">매장명</th>
-                    <th colSpan={4} className="border-l border-slate-700 px-2 py-1 text-center font-black">일간</th>
-                    <th colSpan={4} className="border-l border-slate-700 px-2 py-1 text-center font-black">주간</th>
-                    <th colSpan={4} className="border-l border-slate-700 px-2 py-1 text-center font-black">이번달(기간)</th>
-                    <th colSpan={4} className="border-l border-slate-700 px-2 py-1 text-center font-black">전월</th>
-                    <th colSpan={4} className="border-l border-slate-700 px-2 py-1 text-center font-black">연간(누계)</th>
+                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">일간</th>
+                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">주간</th>
+                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">이번달(기간)</th>
+                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">전월</th>
+                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">연간(누계)</th>
                     {customPeriod && (
-                      <th colSpan={4} className="border-l border-slate-700 bg-blue-900 px-2 py-1 text-center font-black">
+                      <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 bg-blue-900 px-2 py-1 text-center font-black">
                         기간비교 ({customPeriod.start}~{customPeriod.end})
                       </th>
                     )}
@@ -315,28 +384,34 @@ export default function StoreSalesSummaryDashboard() {
                   <tr className="bg-slate-800 text-white">
                     <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
                     <th className="px-2 py-1 text-right font-bold">실적</th>
+                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                     <th className="px-2 py-1 text-right font-bold">달성률</th>
                     <th className="px-2 py-1 text-right font-bold">전년比</th>
                     <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
                     <th className="px-2 py-1 text-right font-bold">실적</th>
+                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                     <th className="px-2 py-1 text-right font-bold">달성률</th>
                     <th className="px-2 py-1 text-right font-bold">전년比</th>
                     <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">기간목표</th>
                     <th className="px-2 py-1 text-right font-bold">실적</th>
+                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                     <th className="px-2 py-1 text-right font-bold">달성률</th>
                     <th className="px-2 py-1 text-right font-bold">전년比</th>
                     <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
                     <th className="px-2 py-1 text-right font-bold">실적</th>
+                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                     <th className="px-2 py-1 text-right font-bold">달성률</th>
                     <th className="px-2 py-1 text-right font-bold">전년比</th>
                     <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">기간목표</th>
                     <th className="px-2 py-1 text-right font-bold">실적</th>
+                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                     <th className="px-2 py-1 text-right font-bold">달성률</th>
                     <th className="px-2 py-1 text-right font-bold">전년比</th>
                     {customPeriod && (
                       <>
                         <th className="border-l border-slate-700 bg-blue-950 px-2 py-1 text-right font-bold">목표</th>
                         <th className="bg-blue-950 px-2 py-1 text-right font-bold">실적</th>
+                        {showAvgReceipt && <th className="bg-blue-950 px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
                         <th className="bg-blue-950 px-2 py-1 text-right font-bold">달성률</th>
                         <th className="bg-blue-950 px-2 py-1 text-right font-bold">전년동기比</th>
                       </>
@@ -351,26 +426,31 @@ export default function StoreSalesSummaryDashboard() {
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.daily.target)}</td>
                       <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.daily.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.daily.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.daily.yoyGrowthRate)}`}>{growthPct(s.daily.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.weekly.target)}</td>
                       <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.weekly.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.weekly.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.weekly.yoyGrowthRate)}`}>{growthPct(s.weekly.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.monthly.periodTarget)}</td>
                       <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.monthly.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.monthly.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.monthly.yoyGrowthRate)}`}>{growthPct(s.monthly.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.prevMonth.target)}</td>
                       <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.prevMonth.actual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.prevMonth.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.prevMonth.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.prevMonth.yoyGrowthRate)}`}>{growthPct(s.prevMonth.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.annual.ytdTarget)}</td>
                       <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.annual.ytdActual)}</td>
+                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.annual.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.annual.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.annual.yoyGrowthRate)}`}>{growthPct(s.annual.yoyGrowthRate)}</td>
 
@@ -378,6 +458,7 @@ export default function StoreSalesSummaryDashboard() {
                         <>
                           <td className="border-t border-l border-blue-100 bg-blue-50/40 px-2 py-2 text-right">{won(s.customPeriod?.target || 0)}</td>
                           <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right font-bold">{won(s.customPeriod?.actual || 0)}</td>
+                          {showAvgReceipt && <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.customPeriod?.avgReceiptAmount ?? null)}</td>}
                           <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right">{pct(s.customPeriod?.achievementRate ?? null)}</td>
                           <td className={`border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right font-bold ${growthColor(s.customPeriod?.yoyGrowthRate ?? null)}`}>{growthPct(s.customPeriod?.yoyGrowthRate ?? null)}</td>
                         </>

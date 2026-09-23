@@ -4178,15 +4178,22 @@ function sumPeriod(storeRows: SalesSummaryDailyRow[], startKey: string, endKey: 
   let amount = 0;
   let target = 0;
   let qty = 0;
+  let receiptCount = 0;
   let dayCount = 0;
   for (const r of storeRows) {
     if (r.date < startKey || r.date > endKey) continue;
     amount += r.amount;
     target += r.target;
     qty += r.qty;
+    receiptCount += r.receiptCount;
     dayCount++;
   }
-  return { amount, target, qty, dayCount };
+  return { amount, target, qty, receiptCount, dayCount };
+}
+
+// 객단가 = 매출금액 / 영수건수. 건수가 0이면(데이터 없음) 의미가 없으니 null로 둡니다.
+function avgReceiptAmount(amount: number, receiptCount: number): number | null {
+  return receiptCount > 0 ? amount / receiptCount : null;
 }
 
 function growthRate(current: number, previous: number, storeExistedInPrevPeriod: boolean): number | null {
@@ -4199,14 +4206,16 @@ export interface StoreSalesSummaryRow {
   storeName: string;
   channelGroup: string;
   channelCode: string;
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  // MARK 2026-09-23: 각 기간 블록에 avgReceiptAmount(객단가=매출금액/영수건수)를 추가했습니다 —
+  // 화면에서 기본은 숨기고 토글로 펼쳐볼 수 있게 할 예정이라, 매 기간마다 하나씩만 있으면 됩니다.
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
   // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
   customPeriod?: {
-    start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number;
+    start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null;
     prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null;
   };
 }
@@ -4330,6 +4339,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         actual: cur.amount,
         achievementRate: cur.target ? cur.amount / cur.target : null,
         qty: cur.qty,
+        avgReceiptAmount: avgReceiptAmount(cur.amount, cur.receiptCount),
         prevYearStart: customPeriod.prevYearStart,
         prevYearEnd: customPeriod.prevYearEnd,
         prevYearAmount: prev.amount,
@@ -4347,6 +4357,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         actual: dailyActual,
         achievementRate: dailyTarget ? dailyActual / dailyTarget : null,
         qty: todayRow?.qty || 0,
+        avgReceiptAmount: avgReceiptAmount(dailyActual, todayRow?.receiptCount || 0),
         prevYearAmount: dailyPrevYear,
         yoyGrowthRate: growthRate(dailyActual, dailyPrevYear, existedBefore(prevYearDailyDate)),
       },
@@ -4356,6 +4367,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         target: weekNow.target,
         actual: weekNow.amount,
         achievementRate: weekNow.target ? weekNow.amount / weekNow.target : null,
+        avgReceiptAmount: avgReceiptAmount(weekNow.amount, weekNow.receiptCount),
         prevWeekAmount: weekPrev.amount,
         wowGrowthRate: growthRate(weekNow.amount, weekPrev.amount, existedBefore(prevWeekStart)),
         prevYearAmount: weekPrevYear.amount,
@@ -4366,6 +4378,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         periodTarget: monthNow.target,
         actual: monthNow.amount,
         achievementRate: monthNow.target ? monthNow.amount / monthNow.target : null,
+        avgReceiptAmount: avgReceiptAmount(monthNow.amount, monthNow.receiptCount),
         progressRate: monthProgressRate,
         prevYearAmount: monthPrevYear.amount,
         yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
@@ -4375,6 +4388,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         target: prevMonthNow.target,
         actual: prevMonthNow.amount,
         achievementRate: prevMonthNow.target ? prevMonthNow.amount / prevMonthNow.target : null,
+        avgReceiptAmount: avgReceiptAmount(prevMonthNow.amount, prevMonthNow.receiptCount),
         prevYearAmount: prevMonthPrevYear.amount,
         yoyGrowthRate: growthRate(prevMonthNow.amount, prevMonthPrevYear.amount, existedBefore(prevYearPrevMonthStart)),
       },
@@ -4383,6 +4397,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         ytdTarget: yearNow.target,
         ytdActual: yearNow.amount,
         achievementRate: yearNow.target ? yearNow.amount / yearNow.target : null,
+        avgReceiptAmount: avgReceiptAmount(yearNow.amount, yearNow.receiptCount),
         progressRate: yearProgressRate,
         prevYearAmount: yearPrevYear.amount,
         yoyGrowthRate: growthRate(yearNow.amount, yearPrevYear.amount, existedBefore(prevYearYtdStart)),

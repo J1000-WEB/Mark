@@ -28,6 +28,10 @@ const RETENTION_DAYS = 10; // 2일 전 비교에 필요한 것보다 넉넉하�
 const SPIKE_COMPARE_DAYS_AGO = 2;
 const SPIKE_THRESHOLD = 100; // "100장 이상 입고"
 const RESOLVE_DROP_RATIO = 0.3; // peak 대비 30% 이상 줄면 "투입 완료"로 보고 알림 해제
+// MARK 2026-09-24: 재고가 안 줄어드는 품목은 RESOLVE_DROP_RATIO 조건을 영영 못 채워서 활성
+// 목록에 계속 쌓이는 문제가 있었습니다 — 재고 변화와 무관하게 1주 지난 알림은 정리합니다
+// (읽는 쪽 /api/stock-inbound-alerts에서도 조회할 때마다 같은 기준으로 한 번 더 정리합니다).
+const ALERT_MAX_AGE_DAYS = 7;
 
 function keyOf(styleCode: string, colorCode: string) {
   return `${styleCode}_${colorCode}`;
@@ -125,6 +129,14 @@ export async function POST(req: Request) {
       if (currentStock <= alert.peakStock * (1 - RESOLVE_DROP_RATIO)) {
         activeMap.delete(key);
       }
+    }
+
+    // 3) 재고 변화와 무관하게 1주 넘은 알림도 정리(계속 안 팔려도 목록이 무한정 쌓이는 것 방지)
+    const alertCutoff = new Date(date);
+    alertCutoff.setDate(alertCutoff.getDate() - ALERT_MAX_AGE_DAYS);
+    const alertCutoffStr = alertCutoff.toISOString().slice(0, 10);
+    for (const [key, alert] of Array.from(activeMap.entries())) {
+      if (alert.firstAlertedDate < alertCutoffStr) activeMap.delete(key);
     }
 
     const activeRows = Array.from(activeMap.values()).map((a) => [a.styleCode, a.colorCode, a.firstAlertedDate, a.baselineStock, a.peakStock]);

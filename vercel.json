@@ -102,6 +102,10 @@
     "app/api/auto-daily-sales-check/route.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "app/api/sales-summary-drive-import/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -140,6 +144,10 @@
     {
       "path": "/api/auto-upload-staleness-check",
       "schedule": "40 3 * * *"
+    },
+    {
+      "path": "/api/sales-summary-drive-import",
+      "schedule": "45 3 * * *"
     }
   ]
 }

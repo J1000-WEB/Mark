@@ -1827,34 +1827,56 @@ async function buildInventory(
 // 필요한 입력(온오프재고현황 시트, 최근 7일 판매, 전사 TOP20 상품, PIP 매장별 재고 스냅샷)은
 // /api/data 쪽에서도 어차피 다시 읽으므로 약간의 중복 조회는 있지만, 그 대신 완전히 독립적으로
 // 성공/실패합니다.
+// MARK 2026-09-25: "RT 이동 제안이 4분 넘게 안 끝남" 점검 — buildRtSuggestions()가 전사
+// TOP20 상품 랭킹(companyTopProducts)을 구하려고 loadDashboardDailyHistory()를 그대로
+// 갖다 썼는데, 그 함수는 원래 월간 대시보드용이라 "지난달 1일-10일 여유 ~ 오늘"(보통 60일
+// 넘는 기간)을 통째로 읽고 펼칩니다. 정작 companyTopProducts 계산(buildHistoryProductRows)에
+// 실제로 쓰는 건 "이번주+지난주"(14일)뿐이라, buildProductRowsFromDailyHistory()가 이미 하고
+// 있는 것과 똑같은 방식(A열로 필요한 구간만 먼저 찾고 그 구간만 읽기)으로 딱 그 14일치만
+// 따로 읽는 전용 헬퍼를 씁니다 — 같은 계산 결과를 훨씬 적게 읽고 훨씬 적게 펼쳐서 구합니다.
+async function loadCompanyTopProductsFromHistory(currentDate: string) {
+  const weeklyAnchorMonday = mondayAfterDate(currentDate);
+  const currentWeek = weekWindowBeforeMonday(weeklyAnchorMonday, 0);
+  const prevWeek = weekWindowBeforeMonday(weeklyAnchorMonday, -1);
+  if (!currentWeek.start || !prevWeek.start) return [] as any[];
+
+  const historyId = getHistorySheetId();
+  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", prevWeek.start, currentWeek.end);
+  let raw: any[][];
+  if (range) {
+    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
+    raw = [DAILY_HISTORY_HEADER, ...tailRows];
+  } else {
+    raw = [DAILY_HISTORY_HEADER];
+  }
+  const flatRows = expandAnyDailyHistoryRows(raw || []);
+  const coreHistoryRows = flatRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
+  const historyProductRows = buildHistoryProductRows(coreHistoryRows, currentDate);
+  return aggregateProducts(historyProductRows, undefined, 20);
+}
+
 export async function buildRtSuggestions() {
   // MARK 2026-09-24: 배포 후 504(=maxDuration 안에 못 끝나서 강제종료, 즉 이 함수가 정말
   // 오래 걸렸다는 뜻)가 발생해서, 어느 단계가 오래 걸리는지 다음번엔 Vercel 함수 로그에서
-  // 바로 보이도록 단계별로 소요시간을 남깁니다. 또한 titles/판매이력/PIP스냅샷/Daily_Sales_History
+  // 바로 보이도록 단계별로 소요시간을 남깁니다. 또한 titles/판매이력/PIP스냅샷/전사TOP20
   // 넷 다 서로 의존관계가 없는데 기존엔 titles→재고시트 읽기를 먼저 끝내고서야 나머지 3개를
   // 시작했습니다 — 넷 다 한번에 병렬로 돌리도록 바꿔서 그만큼 시간을 아낍니다.
   const t0 = Date.now();
   const elapsed = () => `${Date.now() - t0}ms`;
 
-  const [titles, productRowsRaw, storeStockSnapshotForRt, history] = await Promise.all([
+  const currentDate = yesterdayDateKeyKST();
+  const [titles, productRowsRaw, storeStockSnapshotForRt, companyTopProducts] = await Promise.all([
     getSpreadsheetTitles(),
     buildProductRowsFromDailyHistory(),
     readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
-    loadDashboardDailyHistory(),
+    loadCompanyTopProductsFromHistory(currentDate),
   ]);
-  console.log(`[rt-suggestions] titles+productRows+pip+history 완료 (${elapsed()})`);
+  console.log(`[rt-suggestions] titles+productRows+pip+전사TOP20 완료 (${elapsed()})`);
 
   const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
   const values = await getManySheetValues([inventorySheet], "A:AZ");
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   console.log(`[rt-suggestions] 온오프재고현황 읽기 완료, ${inventoryRows.length}행 (${elapsed()})`);
-
-  const currentDate = yesterdayDateKeyKST();
-  const historyRowsAll = history.rows || [];
-  const historyRows = historyRowsAll.filter((r: any) => isOfflineSalesStore(r.storeName));
-  const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
-  const historyProductRows = buildHistoryProductRows(coreHistoryRows, currentDate);
-  const companyTopProducts = aggregateProducts(historyProductRows, undefined, 20);
 
   const inventory = await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt);
   console.log(`[rt-suggestions] buildInventory 완료, RT 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);

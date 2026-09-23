@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 
@@ -29,13 +29,23 @@ function growthColor(n: number | null) {
   return n >= 0 ? "text-blue-600" : "text-rose-600";
 }
 
+// MARK 2026-09-25: 실적 금액을 같은 열(일간/주간/이번달) 안에서 상대적으로 비교해
+// 빨강(낮음)~초록(높음) 그라데이션 배경을 입히는 헬퍼. min===max(매장이 1개뿐이거나 전부
+// 같은 값)면 색을 안 입혀서 의미 없는 붉은색/초록색이 나오지 않게 합니다.
+function heatBg(value: number, range: { min: number; max: number }): CSSProperties | undefined {
+  if (!Number.isFinite(value) || range.max <= range.min) return undefined;
+  const t = Math.max(0, Math.min(1, (value - range.min) / (range.max - range.min)));
+  const hue = t * 120; // 0=빨강 ... 120=초록
+  return { backgroundColor: `hsl(${hue.toFixed(0)}, 72%, 90%)` };
+}
+
 type StoreSalesSummaryRow = {
   storeName: string;
   channelGroup: string;
   channelCode: string;
   daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
   weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null; fullMonthTarget: number };
   prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
   annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
   customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
@@ -131,6 +141,7 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       progressRate: rows[0].monthly.progressRate,
       prevYearAmount: monthly.prevYearAmount,
       yoyGrowthRate: monthly.yoyGrowthRate,
+      fullMonthTarget: rows.reduce((sum, r) => sum + (r.monthly.fullMonthTarget || 0), 0),
     },
     prevMonth: {
       month: rows[0].prevMonth.month,
@@ -288,6 +299,29 @@ export default function StoreSalesSummaryDashboard() {
   // MARK 2026-09-25: 지금 보이는(필터 적용된) 매장 기준 합계 — 필터를 바꾸면 합계도 같이 바뀜.
   const totalRow = useMemo(() => buildTotalRow(filteredStores), [filteredStores]);
 
+  // MARK 2026-09-25: "이대로가면 이번달 착지금액" — 지금까지의 하루 평균 페이스가 월말까지
+  // 그대로 이어진다고 가정한 추정치입니다(누적실적 ÷ 이번달 경과율). 이번달 전체 목표가
+  // 이미 입력돼 있으면(월말치까지) 착지 기준 달성률도 같이 보여줍니다.
+  const landingEstimate = useMemo(() => {
+    if (!totalRow || !totalRow.monthly.progressRate) return null;
+    const landingAmount = totalRow.monthly.actual / totalRow.monthly.progressRate;
+    const fullMonthTarget = totalRow.monthly.fullMonthTarget;
+    const landingAchievementRate = fullMonthTarget ? landingAmount / fullMonthTarget : null;
+    return { landingAmount, fullMonthTarget, landingAchievementRate, month: totalRow.monthly.month };
+  }, [totalRow]);
+
+  // MARK 2026-09-25: "금액 높낮이에 따라 빨강~초록" 요청 — 일간/주간/이번달 실적을 지금
+  // 화면에 보이는 매장들 사이에서 상대적으로 비교해 색을 입힙니다(가장 낮은 매장이 빨강,
+  // 가장 높은 매장이 초록, 그 사이는 그라데이션). 합계 줄은 스케일을 왜곡하니 제외합니다.
+  const heatRanges = useMemo(() => {
+    const range = (vals: number[]) => (vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min: 0, max: 0 });
+    return {
+      daily: range(filteredStores.map((s) => s.daily.actual)),
+      weekly: range(filteredStores.map((s) => s.weekly.actual)),
+      monthly: range(filteredStores.map((s) => s.monthly.actual)),
+    };
+  }, [filteredStores]);
+
   return (
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-[1600px] px-4 pt-6">
@@ -304,27 +338,42 @@ export default function StoreSalesSummaryDashboard() {
             </p>
           </div>
 
-          {/* MARK 2026-09-25: 탭 정리 요청 — 판매전체상/일간/월간을 독립 탭에서 빼서 매출 탭
-              안으로 옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/schedule"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-            >
-              📋 판매전체상 열기
-            </Link>
-            <Link
-              href="/daily"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-            >
-              📅 일간 열기
-            </Link>
-            <Link
-              href="/monthly"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-            >
-              📆 월간 열기
-            </Link>
+          <div className="flex flex-wrap items-start gap-3">
+            {/* MARK 2026-09-25: "오른쪽상단에 이대로가면 월간 착지금액" 요청 — 지금 보이는
+                (필터 적용된) 매장 기준, 지금까지의 하루 평균 페이스가 이어진다고 가정한 이번달
+                착지 예상 금액. 이번달 전체 목표가 입력돼 있으면 착지 기준 달성률도 같이 표시. */}
+            {landingEstimate && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-right">
+                <p className="text-[11px] font-black text-emerald-700">이대로가면 {landingEstimate.month.slice(5)}월 착지</p>
+                <p className="mt-0.5 text-lg font-black text-emerald-900">{won(landingEstimate.landingAmount)}</p>
+                {landingEstimate.landingAchievementRate !== null && (
+                  <p className="mt-0.5 text-[11px] font-bold text-emerald-600">월목표대비 {pct(landingEstimate.landingAchievementRate)}</p>
+                )}
+              </div>
+            )}
+
+            {/* MARK 2026-09-25: 탭 정리 요청 — 판매전체상/일간/월간을 독립 탭에서 빼서 매출 탭
+                안으로 옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/schedule"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+              >
+                📋 판매전체상 열기
+              </Link>
+              <Link
+                href="/daily"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+              >
+                📅 일간 열기
+              </Link>
+              <Link
+                href="/monthly"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+              >
+                📆 월간 열기
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -445,7 +494,7 @@ export default function StoreSalesSummaryDashboard() {
             </div>
 
             <p className="mt-3 text-xs font-bold text-slate-400">
-              기준일: {asOfDate}{dailyDate && dailyDate !== asOfDate ? ` · 일간 조회일: ${dailyDate}` : ""} · 신장률이 "신규"인 경우는 비교 기간에 그 매장이 아직 없었다는 뜻이에요.
+              기준일: {asOfDate}{dailyDate && dailyDate !== asOfDate ? ` · 일간 조회일: ${dailyDate}` : ""} · 신장률이 "신규"인 경우는 비교 기간에 그 매장이 아직 없었다는 뜻이에요. · 일간/주간/이번달 실적 색상은 지금 보이는 매장들 사이의 상대 비교예요(낮음 🔴 ~ 높음 🟢).
             </p>
 
             <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -557,19 +606,19 @@ export default function StoreSalesSummaryDashboard() {
                       <td className="sticky left-[56px] z-10 border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">{s.storeName}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.daily.target)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.daily.actual)}</td>
+                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.daily.actual, heatRanges.daily)}>{won(s.daily.actual)}</td>
                       {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.daily.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.daily.yoyGrowthRate)}`}>{growthPct(s.daily.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.weekly.target)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.weekly.actual)}</td>
+                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.weekly.actual, heatRanges.weekly)}>{won(s.weekly.actual)}</td>
                       {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.weekly.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.weekly.yoyGrowthRate)}`}>{growthPct(s.weekly.yoyGrowthRate)}</td>
 
                       <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.monthly.periodTarget)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.monthly.actual)}</td>
+                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.monthly.actual, heatRanges.monthly)}>{won(s.monthly.actual)}</td>
                       {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>}
                       <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.monthly.achievementRate)}</td>
                       <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.monthly.yoyGrowthRate)}`}>{growthPct(s.monthly.yoyGrowthRate)}</td>

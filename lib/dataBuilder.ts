@@ -4298,7 +4298,9 @@ export interface StoreSalesSummaryRow {
   // 내려줍니다(화면에 직접 표시하진 않고, 합계 계산에만 씀).
   daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
   weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  // MARK 2026-09-25: fullMonthTarget = 이번달 "전체"(월말까지) 목표 — "이대로가면 착지금액"을
+  // 계산할 때 착지 달성률을 비교할 분모로 씁니다(periodTarget은 asOfDate까지만이라 착지 비교엔 부적합).
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null; fullMonthTarget: number };
   prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
   annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
   // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
@@ -4437,6 +4439,11 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const prevYearWeekEnd = dateAddDays(weekEnd, -364);
 
   const monthStart = firstDayOfMonth(asOfDate);
+  // MARK 2026-09-25: "이대로가면 이번달 착지금액" 계산에 쓸 이번달 "전체" 목표(월말까지) —
+  // monthNow.target은 asOfDate까지만 더해서 착지 달성률 비교엔 안 맞습니다. 소천님이 목표를
+  // 미리(다음달치까지) 입력해두는 방식으로 운영 중이라 월말치 목표도 이미 들어있는 경우가
+  // 많아서, 있으면 그대로 쓰고 없으면(아직 입력 전이면) 0으로 자연히 처리됩니다.
+  const monthEndFull = lastDayOfMonth(monthStart);
   const prevYearMonthStart = dateAddDays(monthStart, -365);
   const prevYearAsOfDate = dateAddDays(asOfDate, -365);
   const prevYearMonthPeriodEnd = prevYearAsOfDate; // 같은 "1일~이맘때" 구간 비교
@@ -4475,9 +4482,11 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     const weekPrev = sumPeriod(storeRows, prevWeekStart, prevWeekEnd);
     const weekPrevYear = sumPeriod(storeRows, prevYearWeekStart, prevYearWeekEnd);
 
-    // 이번달(월초~asOfDate = 기간목표만 — 아직 안 지난 날짜의 목표는 원본에 없음)
+    // 이번달(월초~asOfDate = 기간목표만 — 아직 안 지난 날짜의 목표는 원본에 없을 수 있음)
     const monthNow = sumPeriod(storeRows, monthStart, asOfDate);
     const monthPrevYear = sumPeriod(storeRows, prevYearMonthStart, prevYearMonthPeriodEnd);
+    // 착지금액 계산용 — 월말까지의 전체 목표(미리 입력해둔 경우에만 값이 있고, 아직이면 0)
+    const monthFull = sumPeriod(storeRows, monthStart, monthEndFull);
 
     // 전월(완결된 달 — 전체 월 목표 사용 가능)
     const prevMonthNow = sumPeriod(storeRows, prevMonthStart, prevMonthEnd);
@@ -4546,6 +4555,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         progressRate: monthProgressRate,
         prevYearAmount: monthPrevYear.amount,
         yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
+        fullMonthTarget: monthFull.target,
       },
       prevMonth: {
         month: prevMonthKeyStr,

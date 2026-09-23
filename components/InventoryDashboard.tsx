@@ -112,13 +112,14 @@ const REALTIME_OPERATING_START_HOUR = 11;
 const REALTIME_OPERATING_END_HOUR = 22;
 
 async function runHealthChecks(): Promise<HealthCheckResult[]> {
-  const [dataRes, dailyRes, realtimeRes, weeklyRes, snapshotsRes, gridRes] = await Promise.all([
+  const [dataRes, dailyRes, realtimeRes, weeklyRes, snapshotsRes, gridRes, rtRes] = await Promise.all([
     probeJson("/api/data", 40000),
     probeJson("/api/daily-sales", 20000),
     probeJson("/api/realtime", 30000),
     probeJson("/api/weekly-history?dashboard=1", 30000),
     probeJson("/api/weekly-snapshots", 15000),
     probeJson("/api/sheet-grid-diagnostic", 15000),
+    probeJson("/api/rt-suggestions", 40000),
   ]);
 
   const results: HealthCheckResult[] = [];
@@ -138,6 +139,21 @@ async function runHealthChecks(): Promise<HealthCheckResult[]> {
     results.push({ id: "data", label: "일간/월간 데이터", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: dataRes.ms });
   } else {
     results.push({ id: "data", label: "일간/월간 데이터", status: "error", detail: `응답 실패 (status ${dataRes.status})`, ms: dataRes.ms });
+  }
+
+  // MARK 2026-09-24: RT 이동 제안은 이제 /api/data와 분리된 전용 엔드포인트라 따로 점검합니다.
+  if (rtRes.json?.ok) {
+    results.push({ id: "rt-suggestions", label: "RT 이동 제안", status: "ok", detail: `정상 (${fmtNum(rtRes.json.rtSuggestions?.length || 0)}건)`, ms: rtRes.ms });
+  } else if (rtRes.timedOut) {
+    results.push({ id: "rt-suggestions", label: "RT 이동 제안", status: "error", detail: "응답 시간 초과 (크래시 가능성)", ms: rtRes.ms });
+  } else {
+    results.push({
+      id: "rt-suggestions",
+      label: "RT 이동 제안",
+      status: "error",
+      detail: rtRes.json?.error || `응답 실패 (status ${rtRes.status})`,
+      ms: rtRes.ms,
+    });
   }
 
   // /api/daily-sales
@@ -2280,13 +2296,136 @@ function StoreRequestRtSection() {
   );
 }
 
+// MARK 2026-09-24: "RT 이동 제안이 계속 안 됨" 문제 — 원인이 RT 제안이 /api/data(재고CTRL
+// 탭 전체를 포함해 일간/주간/월간 매출 등 훨씬 무거운 다른 계산까지 한 요청에 다 묶여있는
+// "대시보드 전체" 엔드포인트)의 일부라서, 그 안의 다른 부분이 느리거나 죽으면 RT 제안까지
+// 같이 죽었기 때문이었습니다. 그래서 RT 관련 기능(RT 이동 제안 + 점포요청 RT)을 이 전용
+// "RT" 칸으로 묶고, RT 이동 제안은 완전히 분리된 전용 엔드포인트(/api/rt-suggestions)에서
+// 따로 불러옵니다 — /api/data가 느리거나 실패해도 이 칸은 영향을 안 받고, 반대로 여기서
+// 문제가 생겨도 나머지 대시보드에는 영향이 없습니다. 실패하면(/api/data처럼 조용히 내장
+// 데이터로 감추지 않고) 실제 에러 메시지를 그대로 보여줍니다.
+function RtControlSection() {
+  const [rtData, setRtData] = useState<any>(null);
+  const [rtLoading, setRtLoading] = useState(true);
+  const [rtError, setRtError] = useState("");
+  const [rtFilter, setRtFilter] = useState("all");
+  const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
+  const [rtSavingKey, setRtSavingKey] = useState("");
+
+  async function loadRtSuggestions() {
+    setRtLoading(true);
+    setRtError("");
+    try {
+      const res = await fetch("/api/rt-suggestions", { cache: "no-store" });
+      const body = await res.json().catch(() => null);
+      if (!body) throw new Error(`서버 응답을 읽지 못했습니다 (status ${res.status})`);
+      if (!res.ok || !body.ok) throw new Error(body.error || `RT 이동 제안 조회 실패 (status ${res.status})`);
+      setRtData(body);
+    } catch (e: any) {
+      setRtError(e?.message || "RT 이동 제안을 불러오지 못했습니다.");
+    } finally {
+      setRtLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadRtSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function updateRtStatus(item: any, index: number, status: "approved" | "hold" | "rejected") {
+    const key = rtItemKey(item, index);
+    setRtStatusMap((prev) => ({ ...prev, [key]: status }));
+
+    if (status !== "approved") return;
+
+    setRtSavingKey(key);
+    try {
+      const res = await fetch("/api/rt-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error || "RT_Result 저장 실패");
+      }
+    } catch (error: any) {
+      alert(error?.message || "RT_Result 저장 실패");
+      setRtStatusMap((prev) => ({ ...prev, [key]: "suggested" }));
+    } finally {
+      setRtSavingKey("");
+    }
+  }
+
+  const rtSuggestions = rtData?.rtSuggestions || [];
+
+  return (
+    <section className="space-y-4 rounded-3xl border-2 border-slate-900/10 bg-slate-50/60 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-slate-900">🔁 RT</h2>
+          <p className="text-xs font-semibold text-slate-500">RT 이동 제안 + 점포요청 RT — 나머지 대시보드와 완전히 분리된 전용 데이터로 동작해요.</p>
+        </div>
+        <button
+          type="button"
+          onClick={loadRtSuggestions}
+          disabled={rtLoading}
+          className="h-9 rounded-full border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+        >
+          {rtLoading ? "불러오는 중..." : "🔄 RT 제안 새로고침"}
+        </button>
+      </div>
+
+      {rtError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-black text-red-700">🚨 RT 이동 제안을 불러오지 못했습니다</p>
+          <p className="mt-1 whitespace-pre-line text-xs font-bold text-red-600">{rtError}</p>
+          <button
+            type="button"
+            onClick={loadRtSuggestions}
+            className="mt-3 h-9 rounded-full bg-red-600 px-4 text-xs font-black text-white hover:bg-red-700"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {rtLoading && !rtData && !rtError && (
+        <p className="text-sm font-bold text-slate-400">RT 이동 제안 불러오는 중...</p>
+      )}
+
+      {rtData && (
+        rtData.rtStockSource === "pip" ? (
+          <p className="text-xs font-bold text-emerald-600">
+            ✓ 아래 RT 제안(호조/부진)은 PIP 매장별 재고 스냅샷 기준입니다{rtData.rtPipUpdatedAt ? ` (${rtData.rtPipUpdatedAt} 업로드분)` : ""}.
+          </p>
+        ) : (
+          <p className="text-xs font-bold text-amber-600">
+            ⚠ 아직 PIP 재고 스냅샷이 없어서, 아래 RT 제안은 최근 판매이력으로 추정한 재고를 기준으로 계산됐어요. "판매데이터 제안" 탭에서 PIP 파일을 올리면 더 정확해져요.
+          </p>
+        )
+      )}
+
+      {(rtData || !rtError) && (
+        <RTSuggestionSection
+          items={rtSuggestions}
+          statusMap={rtStatusMap}
+          savingKey={rtSavingKey}
+          filter={rtFilter}
+          onFilter={setRtFilter}
+          onStatus={updateRtStatus}
+        />
+      )}
+
+      <StoreRequestRtSection />
+    </section>
+  );
+}
 
 export default function InventoryDashboard() {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
-  const [rtFilter, setRtFilter] = useState("all");
-  const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
-  const [rtSavingKey, setRtSavingKey] = useState("");
   const [priceMeta, setPriceMeta] = useState<any>(null);
   const [priceCapturing, setPriceCapturing] = useState(false);
   const [priceStatus, setPriceStatus] = useState("");
@@ -2544,31 +2683,6 @@ export default function InventoryDashboard() {
 
   const data = dashboardData?.inventory || {};
 
-  async function updateRtStatus(item: any, index: number, status: "approved" | "hold" | "rejected") {
-    const key = rtItemKey(item, index);
-    setRtStatusMap((prev) => ({ ...prev, [key]: status }));
-
-    if (status !== "approved") return;
-
-    setRtSavingKey(key);
-    try {
-      const res = await fetch("/api/rt-result", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ item }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body?.ok) {
-        throw new Error(body?.error || "RT_Result 저장 실패");
-      }
-    } catch (error: any) {
-      alert(error?.message || "RT_Result 저장 실패");
-      setRtStatusMap((prev) => ({ ...prev, [key]: "suggested" }));
-    } finally {
-      setRtSavingKey("");
-    }
-  }
-
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -2670,32 +2784,13 @@ export default function InventoryDashboard() {
           </div>
         )}
 
-        <StoreRequestRtSection />
+        <RtControlSection />
 
         <SalesAllocationSection />
 
-        {data.rtStockSource === "pip" ? (
-          <p className="-mb-2 text-xs font-bold text-emerald-600">
-            ✓ 아래 RT 제안(호조/부진)은 PIP 매장별 재고 스냅샷 기준입니다{data.rtPipUpdatedAt ? ` (${data.rtPipUpdatedAt} 업로드분)` : ""}.
-          </p>
-        ) : (
-          <p className="-mb-2 text-xs font-bold text-amber-600">
-            ⚠ 아직 PIP 재고 스냅샷이 없어서, 아래 RT 제안은 최근 판매이력으로 추정한 재고를 기준으로 계산됐어요. "판매데이터 제안" 탭에서 PIP 파일을 올리면 더 정확해져요.
-          </p>
-        )}
-        <RTSuggestionSection
-          items={data.rtSuggestions || []}
-          statusMap={rtStatusMap}
-          savingKey={rtSavingKey}
-          filter={rtFilter}
-          onFilter={setRtFilter}
-          onStatus={updateRtStatus}
-        />
-
         <PerformanceTrackingSection data={data} />
 
-        <section className="grid gap-4 md:grid-cols-4">
-          <Kpi title="RT 제안" value={`${data.rtSuggestions?.length || 0}건`} tone="blue" />
+        <section className="grid gap-4 md:grid-cols-3">
           <Kpi title="온라인 이관 제안" value={`${data.onlineTransferSuggestions?.length || data.allocationSuggestions?.length || 0}건`} tone="green" />
           <Kpi title="품절 위험" value={`${data.stockoutRisk?.length || 0}품번`} tone="orange" />
           <Kpi title="과재고 위험" value={`${data.overstockRisk?.length || 0}품번`} tone="purple" />

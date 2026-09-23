@@ -1812,6 +1812,51 @@ async function buildInventory(
   };
 }
 
+// MARK 2026-09-24: "RT 이동 제안이 계속 안 됨" — 원인은 RT 제안이 buildDashboardDataFromGoogleSheet()
+// (일간/주간/월간 매출, 프로모션 성과 등 훨씬 무거운 다른 계산들까지 전부 한 요청/한 함수 안에
+// 같이 묶여 있는 재고CTRL 탭의 "대시보드 전체" 엔드포인트, /api/data)의 극히 일부라는 점이었습니다.
+// 그 함수 안의 다른 어떤 부분이 느리거나 OOM/에러가 나면, RT 제안 자체는 멀쩡히 계산 가능했어도
+// 응답 전체가 실패해서 같이 죽어버렸습니다(그리고 /api/data는 실패하면 조용히 내장 fallback
+// 데이터로 대체해서 반환하기 때문에 정확히 뭐가 문제인지도 화면에서 알 수 없었습니다).
+//
+// 그래서 RT 제안 계산에 실제로 필요한 입력만 따로 모아서 buildInventory()를 호출하는 훨씬 가벼운
+// 전용 경로를 만듭니다 — 나머지 대시보드(일간/주간/월간 매출, 프로모션 성과 등)와 완전히 분리되어
+// 있어서, 그쪽에서 무슨 일이 나도 이 함수는 영향을 안 받습니다(반대도 마찬가지). 재고CTRL 탭의
+// 다른 위젯들(품절/과재고 위험, 온라인 이관 제안, 프로모션 제안 등)은 여전히 /api/data(=
+// buildDashboardDataFromGoogleSheet)를 그대로 씁니다 — 여긴 RT 제안만 분리한 것이라, RT 제안에
+// 필요한 입력(온오프재고현황 시트, 최근 7일 판매, 전사 TOP20 상품, PIP 매장별 재고 스냅샷)은
+// /api/data 쪽에서도 어차피 다시 읽으므로 약간의 중복 조회는 있지만, 그 대신 완전히 독립적으로
+// 성공/실패합니다.
+export async function buildRtSuggestions() {
+  const titles = await getSpreadsheetTitles();
+  const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
+  const values = await getManySheetValues([inventorySheet], "A:AZ");
+  const inventoryRows = parseInventory(values[inventorySheet] || []);
+
+  const [productRowsRaw, storeStockSnapshotForRt, history] = await Promise.all([
+    buildProductRowsFromDailyHistory(),
+    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
+    loadDashboardDailyHistory(),
+  ]);
+
+  const currentDate = yesterdayDateKeyKST();
+  const historyRowsAll = history.rows || [];
+  const historyRows = historyRowsAll.filter((r: any) => isOfflineSalesStore(r.storeName));
+  const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
+  const historyProductRows = buildHistoryProductRows(coreHistoryRows, currentDate);
+  const companyTopProducts = aggregateProducts(historyProductRows, undefined, 20);
+
+  const inventory = await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt);
+
+  return {
+    rtSuggestions: inventory.rtSuggestions,
+    rtEligibleProductRank: inventory.rtEligibleProductRank,
+    rtSuggestionProductCount: inventory.rtSuggestionProductCount,
+    rtStockSource: inventory.rtStockSource,
+    rtPipUpdatedAt: inventory.rtPipUpdatedAt,
+  };
+}
+
 function buildCarryoverAnnualSales(annualRows: any[][], standardRows: any[][]) {
   // 임시 월간 카드용: 기준!E 품번 + 기준!W = 이월 상품만 연간판매에서 합산
   // 연간판매: D 품번, AG 판매수량, AH 판매금액

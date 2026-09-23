@@ -108,8 +108,8 @@
       "maxDuration": 60
     },
     "app/api/rt-suggestions/route.ts": {
-      "memory": 2048,
-      "maxDuration": 120
+      "memory": 3009,
+      "maxDuration": 300
     }
   },
   "crons": [

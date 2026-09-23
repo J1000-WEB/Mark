@@ -4196,6 +4196,35 @@ function avgReceiptAmount(amount: number, receiptCount: number): number | null {
   return receiptCount > 0 ? amount / receiptCount : null;
 }
 
+// MARK 2026-09-24: 매출탭 초기 매장 나열 순서 — 채널구분(로드샵→백화점→쇼핑몰→아울렛→위탁)
+// 우선, 그 안에서는 점포코드 오름차순. includes()로 매칭해서 원본 파일의 "위탁(오프)" 같은
+// 표기도 그대로 걸립니다. 목록에 없는 구분은 맨 뒤로(순서는 유지).
+const SALES_SUMMARY_CHANNEL_GROUP_ORDER = ["로드샵", "백화점", "쇼핑몰", "아울렛", "위탁"];
+function channelGroupRank(group: string): number {
+  const idx = SALES_SUMMARY_CHANNEL_GROUP_ORDER.findIndex((k) => group.includes(k));
+  return idx === -1 ? SALES_SUMMARY_CHANNEL_GROUP_ORDER.length : idx;
+}
+
+// 점포코드 자연 정렬(숫자 구간은 숫자로 비교) — "2"가 "10"보다 앞에 오도록, 코드가
+// 0으로 안 채워져 있어도(패딩 없어도) 사람이 보기에 자연스러운 순서로 정렬됩니다.
+function naturalCompare(a: string, b: string): number {
+  const ax = a.match(/\d+|\D+/g) || [a];
+  const bx = b.match(/\d+|\D+/g) || [b];
+  const len = Math.max(ax.length, bx.length);
+  for (let i = 0; i < len; i++) {
+    const as = ax[i] ?? "";
+    const bs = bx[i] ?? "";
+    const an = Number(as);
+    const bn = Number(bs);
+    if (as !== "" && bs !== "" && !Number.isNaN(an) && !Number.isNaN(bn)) {
+      if (an !== bn) return an - bn;
+    } else if (as !== bs) {
+      return as < bs ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 function growthRate(current: number, previous: number, storeExistedInPrevPeriod: boolean): number | null {
   if (!storeExistedInPrevPeriod) return null; // "동일"(같은 매장) 조건 미충족 — 신규 매장 등
   if (!previous) return current > 0 ? null : 0; // 전년 실적 0이면 배율이 무의미 — 신장률 표기 안 함
@@ -4244,15 +4273,29 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     byStore.get(r.storeName)!.push(r);
   }
 
-  const asOfDate = rows.reduce((max, r) => (r.date > max ? r.date : max), rows[0].date);
+  const earliestOverall = rows.reduce((min, r) => (r.date < min ? r.date : min), rows[0].date);
+  const latestRowDate = rows.reduce((max, r) => (r.date > max ? r.date : max), rows[0].date);
+
+  // MARK 2026-09-24: 이제 매출목표를 미리(예: 다음달 치까지) 입력해두는 방식으로 운영하다 보니,
+  // 데이터의 "가장 최근 날짜"가 목표만 있고 실적은 0인 미래 날짜로 밀리는 일이 생깁니다. 그
+  // 미래 날짜를 그대로 asOfDate로 쓰면 일간/주간/월간/연간이 전부 텅 빈 미래 기준으로 계산돼서
+  // 화면이 다 빈칸으로 보이는 문제가 있었습니다 — 그래서 asOfDate는 항상 실제 달력 기준
+  // "어제"(KST)를 기본으로 쓰고, 업로드가 밀려서 데이터 자체가 어제보다 오래됐으면(아직 어제치가
+  // 안 들어왔으면) 실제 있는 가장 최근 날짜로 폴백합니다.
+  const yesterdayKST = yesterdayDateKeyKST();
+  const asOfDate =
+    yesterdayKST >= earliestOverall && yesterdayKST <= latestRowDate
+      ? yesterdayKST
+      : yesterdayKST > latestRowDate
+      ? latestRowDate
+      : earliestOverall;
   const asOfDateObj = parseDate(asOfDate)!;
 
-  // MARK 2026-09-22: "일간" 블록만 원하는 날짜를 골라볼 수 있게 합니다(기본값=최신 데이터
-  // 날짜=보통 어제) — 주간/월간/전월/연간은 그대로 "지금 기준" 리포트라 dailyDate와 무관하게
-  // asOfDate를 계속 씁니다. 형식이 틀리거나 데이터 범위(가장 이른 날짜~asOfDate) 밖이면
-  // 조용히 무시하고 최신 날짜로 폴백합니다(첫 파일은 과거 조회가 아예 안 됐던 것과 달리,
-  // 이제 쌓인 데이터 안에서는 자유롭게 과거 하루를 골라볼 수 있습니다).
-  const earliestOverall = rows.reduce((min, r) => (r.date < min ? r.date : min), rows[0].date);
+  // MARK 2026-09-22: "일간" 블록만 원하는 날짜를 골라볼 수 있게 합니다(기본값=asOfDate=보통 어제)
+  // — 주간/월간/전월/연간은 그대로 "지금 기준" 리포트라 dailyDate와 무관하게 asOfDate를 계속
+  // 씁니다. 형식이 틀리거나 데이터 범위(가장 이른 날짜~asOfDate) 밖이면 조용히 무시하고 최신
+  // 날짜로 폴백합니다(첫 파일은 과거 조회가 아예 안 됐던 것과 달리, 이제 쌓인 데이터 안에서는
+  // 자유롭게 과거 하루를 골라볼 수 있습니다).
   const requestedDailyDate = options.dailyDate && SALES_SUMMARY_DATE_RE.test(options.dailyDate) ? options.dailyDate : "";
   const dailyDate = requestedDailyDate && requestedDailyDate >= earliestOverall && requestedDailyDate <= asOfDate ? requestedDailyDate : asOfDate;
   const prevYearDailyDate = dateAddDays(dailyDate, -365);
@@ -4406,7 +4449,15 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     });
   }
 
-  stores.sort((a, b) => b.weekly.actual - a.weekly.actual);
+  // MARK 2026-09-24: 기존엔 주간 실적 내림차순이었는데, 소천님 요청으로 채널구분(로드샵→
+  // 백화점→쇼핑몰→아울렛→위탁) → 점포코드 오름차순으로 변경했습니다.
+  stores.sort((a, b) => {
+    const rankDiff = channelGroupRank(a.channelGroup) - channelGroupRank(b.channelGroup);
+    if (rankDiff !== 0) return rankDiff;
+    const codeDiff = naturalCompare(a.channelCode || "", b.channelCode || "");
+    if (codeDiff !== 0) return codeDiff;
+    return a.storeName < b.storeName ? -1 : a.storeName > b.storeName ? 1 : 0;
+  });
 
   return { asOfDate, dailyDate, customPeriod, stores, meta };
 }

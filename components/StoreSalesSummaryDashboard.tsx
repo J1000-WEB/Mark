@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
-import { extractSalesSummaryRows, type SalesSummaryDailyRow } from "@/lib/salesSummaryUpload";
 
 function won(n: number) {
   return `${Math.round(n || 0).toLocaleString("ko-KR")}원`;
@@ -44,11 +43,6 @@ type StoreSalesSummaryRow = {
 type CustomPeriodInfo = { start: string; end: string; prevYearStart: string; prevYearEnd: string } | null;
 
 export default function StoreSalesSummaryDashboard() {
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [error, setError] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [asOfDate, setAsOfDate] = useState("");
   const [stores, setStores] = useState<StoreSalesSummaryRow[]>([]);
@@ -125,49 +119,6 @@ export default function StoreSalesSummaryDashboard() {
     load({ date: next, rangeStart: rangeStartInput && rangeEndInput ? rangeStartInput : undefined, rangeEnd: rangeStartInput && rangeEndInput ? rangeEndInput : undefined });
   }
 
-  async function runUpload() {
-    if (!file) return;
-    setUploading(true);
-    setError("");
-    try {
-      const XLSX = await import("xlsx");
-      setProgress("파일 읽는 중...");
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true });
-      const sheets = wb.SheetNames.map((name) => ({
-        name,
-        rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" }) as any[][],
-      }));
-
-      setProgress("데이터 추출 중...");
-      const rows: SalesSummaryDailyRow[] = extractSalesSummaryRows(sheets);
-      if (!rows.length) throw new Error("매출 데이터를 하나도 못 찾았어요. 파일 형식을 확인해주세요.");
-
-      setProgress(`저장 중... (${rows.length.toLocaleString("ko-KR")}행)`);
-      const res = await fetch("/api/sales-summary-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, fileName: file.name }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "저장 실패");
-
-      setProgress(
-        `완료! 이번 업로드 ${data.newRowCount.toLocaleString("ko-KR")}행(${data.newStartDate}~${data.newEndDate}) 반영 · ` +
-        `누적 ${data.storeCount}개 매장 ${data.rowCount.toLocaleString("ko-KR")}행(${data.startDate}~${data.endDate})`
-      );
-      await load({
-        date: dailyDate || undefined,
-        rangeStart: rangeStartInput && rangeEndInput ? rangeStartInput : undefined,
-        rangeEnd: rangeStartInput && rangeEndInput ? rangeEndInput : undefined,
-      });
-    } catch (e: any) {
-      setError(e?.message || "업로드 실패");
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function runDriveImport() {
     setDriveImporting(true);
     setDriveError("");
@@ -215,33 +166,6 @@ export default function StoreSalesSummaryDashboard() {
                 : "아직 업로드된 데이터가 없어요"}
             </p>
           </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-sm font-black text-slate-700">전체매출 파일 업로드</p>
-          <p className="mt-1 text-xs font-semibold text-slate-400">
-            전체매출(매장×날짜별 실적/목표) 파일을 그대로 올려주세요 — 월별 시트가 여러 개 있어도 전부 자동으로 읽어요.
-            매일 새로 다운받은 전체를 다시 올릴 필요 없이, 어제 하루치만 다운받아 올리셔도 기존에 쌓인 데이터 위에 자동으로 이어서 기록돼요
-            (같은 날짜를 다시 올리면 그 날짜만 최신 값으로 갱신되고 나머지는 그대로 유지돼요).
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="text-sm font-semibold"
-            />
-            <button
-              type="button"
-              disabled={!file || uploading}
-              onClick={runUpload}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
-            >
-              {uploading ? "업로드 중..." : "업로드"}
-            </button>
-            {progress && <span className="text-xs font-bold text-slate-500">{progress}</span>}
-          </div>
-          {error && <p className="mt-2 text-sm font-black text-red-600">⚠ {error}</p>}
         </div>
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">

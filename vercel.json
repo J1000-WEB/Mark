@@ -106,6 +106,10 @@
     "app/api/sales-summary-drive-import/route.ts": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "app/api/rt-suggestions/route.ts": {
+      "memory": 2048,
+      "maxDuration": 120
     }
   },
   "crons": [

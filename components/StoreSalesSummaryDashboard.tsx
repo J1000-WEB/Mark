@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 
+// MARK 2026-09-24: "글씨가 너무많아서 한판에 안보여서" 요청 — 표 안 금액이 다 9자리라
+// 한 화면에 다 안 들어와서, 원 단위 대신 천원 단위로 줄여서 표시합니다(234,555,000원 →
+// 234,555). 정확한 원 단위가 필요하면 나중에 다시 켤 수 있게 여기 한 군데만 고치면 됩니다.
 function won(n: number) {
-  return `${Math.round(n || 0).toLocaleString("ko-KR")}원`;
+  return `${Math.round((n || 0) / 1000).toLocaleString("ko-KR")}`;
 }
 
 function wonOrDash(n: number | null | undefined) {
@@ -39,23 +42,44 @@ function heatBg(value: number, range: { min: number; max: number }): CSSProperti
   return { backgroundColor: `hsl(${hue.toFixed(0)}, 72%, 90%)` };
 }
 
+// MARK 2026-09-25: 표 전체에서 반복되는 셀 클래스 — 줄바꿈으로 행 높이가 들쭉날쭉해지는 걸
+// 막기 위해 항상 whitespace-nowrap을 쓰고, 숫자는 tabular-nums로 자릿수 폭을 고정합니다
+// ("열간격/행간격이 깨지지 않고 일정하게" 요청).
+const TD_NUM = "whitespace-nowrap px-2 py-2 text-right tabular-nums";
+const TH_NUM = "whitespace-nowrap px-2 py-1 text-right font-bold tabular-nums";
+
+// MARK 2026-09-25: 기간마다 목표/실적 필드 이름이 다릅니다(일간/주간/전월/기간비교는
+// target·actual, 이번달은 periodTarget·actual, 연간은 ytdTarget·ytdActual) — 백엔드
+// (lib/dataBuilder.ts StoreSalesSummaryRow)와 정확히 같은 이름을 씁니다. 공통 필드만
+// PeriodCommon으로 묶고, target/actual류는 각 기간 타입에서 실제 이름 그대로 선언합니다.
+type PeriodCommon = {
+  achievementRate: number | null;
+  avgReceiptAmount: number | null;
+  receiptCount: number;
+  prevYearAmount: number;
+  prevYearReceiptCount: number;
+  prevYearAvgReceiptAmount: number | null;
+  yoyGrowthRate: number | null;
+};
+
 type StoreSalesSummaryRow = {
   storeName: string;
   channelGroup: string;
   channelCode: string;
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null; fullMonthTarget: number };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  customPeriod?: { start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null };
+  daily: PeriodCommon & { date: string; target: number; actual: number; qty: number };
+  weekly: PeriodCommon & { start: string; end: string; target: number; actual: number; prevWeekAmount: number; wowGrowthRate: number | null };
+  monthly: PeriodCommon & { month: string; periodTarget: number; actual: number; progressRate: number; fullMonthTarget: number };
+  prevMonth: PeriodCommon & { month: string; target: number; actual: number };
+  annual: PeriodCommon & { year: number; ytdTarget: number; ytdActual: number; progressRate: number };
+  customPeriod?: PeriodCommon & { start: string; end: string; target: number; actual: number; qty: number; prevYearStart: string; prevYearEnd: string };
 };
 
 // MARK 2026-09-25: "맨 상단에 매출 총합" 요청 — 지금 화면에 보이는(필터 적용된) 매장들을
 // 합산한 가상의 "합계" 줄을 만듭니다. 객단가는 매장별 객단가를 단순평균하면 안 되고(매장마다
 // 거래 규모가 다름) 반드시 "합계 매출금액 / 합계 영수건수"로 다시 계산해야 정확하므로, 매장별
-// receiptCount를 그대로 합산해서 씁니다. 달성률/전년比/전주比도 같은 이유로 비율의 평균이 아니라
-// 합계끼리 다시 나눠서 계산합니다.
+// receiptCount를 그대로 합산해서 씁니다(전년 객단가도 같은 이유로 전년 영수건수를 합산해서
+// 다시 계산). 달성률/전년比/전주比도 같은 이유로 비율의 평균이 아니라 합계끼리 다시 나눠서
+// 계산합니다.
 type PeriodAgg = {
   target: number;
   actual: number;
@@ -63,19 +87,22 @@ type PeriodAgg = {
   avgReceiptAmount: number | null;
   receiptCount: number;
   prevYearAmount: number;
+  prevYearReceiptCount: number;
+  prevYearAvgReceiptAmount: number | null;
   yoyGrowthRate: number | null;
   prevWeekAmount: number;
   wowGrowthRate: number | null;
   qty: number;
 };
 
-function aggregatePeriod(
-  rows: { target: number; actual: number; receiptCount: number; prevYearAmount: number; prevWeekAmount?: number; qty?: number }[]
-): PeriodAgg {
+type AggregatableRow = PeriodCommon & { target: number; actual: number; prevWeekAmount?: number; qty?: number };
+
+function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
   let target = 0;
   let actual = 0;
   let receiptCount = 0;
   let prevYearAmount = 0;
+  let prevYearReceiptCount = 0;
   let prevWeekAmount = 0;
   let qty = 0;
   for (const r of rows) {
@@ -83,17 +110,32 @@ function aggregatePeriod(
     actual += r.actual || 0;
     receiptCount += r.receiptCount || 0;
     prevYearAmount += r.prevYearAmount || 0;
+    prevYearReceiptCount += r.prevYearReceiptCount || 0;
     prevWeekAmount += r.prevWeekAmount || 0;
     qty += r.qty || 0;
   }
   const achievementRate = target ? actual / target : null;
   const avgReceiptAmount = receiptCount > 0 ? actual / receiptCount : null;
+  const prevYearAvgReceiptAmount = prevYearReceiptCount > 0 ? prevYearAmount / prevYearReceiptCount : null;
   const yoyGrowthRate = prevYearAmount ? (actual - prevYearAmount) / prevYearAmount : actual > 0 ? null : 0;
   const wowGrowthRate = prevWeekAmount ? (actual - prevWeekAmount) / prevWeekAmount : actual > 0 ? null : 0;
-  return { target, actual, achievementRate, avgReceiptAmount, receiptCount, prevYearAmount, yoyGrowthRate, prevWeekAmount, wowGrowthRate, qty };
+  return {
+    target,
+    actual,
+    achievementRate,
+    avgReceiptAmount,
+    receiptCount,
+    prevYearAmount,
+    prevYearReceiptCount,
+    prevYearAvgReceiptAmount,
+    yoyGrowthRate,
+    prevWeekAmount,
+    wowGrowthRate,
+    qty,
+  };
 }
 
-function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | null {
+function buildTotalRow(rows: StoreSalesSummaryRow[], label: string): StoreSalesSummaryRow | null {
   if (!rows.length) return null;
   const daily = aggregatePeriod(rows.map((s) => s.daily));
   const weekly = aggregatePeriod(rows.map((s) => s.weekly));
@@ -104,7 +146,7 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
   const customPeriod = customSource.length ? aggregatePeriod(customSource) : null;
 
   return {
-    storeName: "합계",
+    storeName: label,
     channelGroup: "",
     channelCode: "",
     daily: {
@@ -116,6 +158,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       avgReceiptAmount: daily.avgReceiptAmount,
       receiptCount: daily.receiptCount,
       prevYearAmount: daily.prevYearAmount,
+      prevYearReceiptCount: daily.prevYearReceiptCount,
+      prevYearAvgReceiptAmount: daily.prevYearAvgReceiptAmount,
       yoyGrowthRate: daily.yoyGrowthRate,
     },
     weekly: {
@@ -129,6 +173,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       prevWeekAmount: weekly.prevWeekAmount,
       wowGrowthRate: weekly.wowGrowthRate,
       prevYearAmount: weekly.prevYearAmount,
+      prevYearReceiptCount: weekly.prevYearReceiptCount,
+      prevYearAvgReceiptAmount: weekly.prevYearAvgReceiptAmount,
       yoyGrowthRate: weekly.yoyGrowthRate,
     },
     monthly: {
@@ -140,6 +186,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       receiptCount: monthly.receiptCount,
       progressRate: rows[0].monthly.progressRate,
       prevYearAmount: monthly.prevYearAmount,
+      prevYearReceiptCount: monthly.prevYearReceiptCount,
+      prevYearAvgReceiptAmount: monthly.prevYearAvgReceiptAmount,
       yoyGrowthRate: monthly.yoyGrowthRate,
       fullMonthTarget: rows.reduce((sum, r) => sum + (r.monthly.fullMonthTarget || 0), 0),
     },
@@ -151,6 +199,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       avgReceiptAmount: prevMonth.avgReceiptAmount,
       receiptCount: prevMonth.receiptCount,
       prevYearAmount: prevMonth.prevYearAmount,
+      prevYearReceiptCount: prevMonth.prevYearReceiptCount,
+      prevYearAvgReceiptAmount: prevMonth.prevYearAvgReceiptAmount,
       yoyGrowthRate: prevMonth.yoyGrowthRate,
     },
     annual: {
@@ -162,6 +212,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
       receiptCount: annual.receiptCount,
       progressRate: rows[0].annual.progressRate,
       prevYearAmount: annual.prevYearAmount,
+      prevYearReceiptCount: annual.prevYearReceiptCount,
+      prevYearAvgReceiptAmount: annual.prevYearAvgReceiptAmount,
       yoyGrowthRate: annual.yoyGrowthRate,
     },
     ...(customPeriod && rows[0].customPeriod
@@ -178,6 +230,8 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
             prevYearStart: rows[0].customPeriod.prevYearStart,
             prevYearEnd: rows[0].customPeriod.prevYearEnd,
             prevYearAmount: customPeriod.prevYearAmount,
+            prevYearReceiptCount: customPeriod.prevYearReceiptCount,
+            prevYearAvgReceiptAmount: customPeriod.prevYearAvgReceiptAmount,
             yoyGrowthRate: customPeriod.yoyGrowthRate,
           },
         }
@@ -187,12 +241,23 @@ function buildTotalRow(rows: StoreSalesSummaryRow[]): StoreSalesSummaryRow | nul
 
 type CustomPeriodInfo = { start: string; end: string; prevYearStart: string; prevYearEnd: string } | null;
 
+// MARK 2026-09-25: "점포별로 실적순으로 나열" 요청 — 기본(채널구분→점포코드) 외에
+// 일간/주간/이번달 실적 기준 내림차순 정렬을 고를 수 있게 합니다.
+type SortMode = "default" | "daily" | "weekly" | "monthly";
+const SORT_OPTIONS: { key: SortMode; label: string }[] = [
+  { key: "default", label: "기본순서" },
+  { key: "daily", label: "일간실적순" },
+  { key: "weekly", label: "주간실적순" },
+  { key: "monthly", label: "이번달실적순" },
+];
+
 export default function StoreSalesSummaryDashboard() {
   const [loading, setLoading] = useState(true);
   const [asOfDate, setAsOfDate] = useState("");
   const [stores, setStores] = useState<StoreSalesSummaryRow[]>([]);
   const [meta, setMeta] = useState<any>(null);
   const [groupFilter, setGroupFilter] = useState("전체");
+  const [sortMode, setSortMode] = useState<SortMode>("default");
 
   // MARK 2026-09-22: "일간" 블록 날짜선택 + 커스텀 기간비교 조회.
   const [dailyDate, setDailyDate] = useState(""); // 빈 값 = 최신 날짜(기본값)
@@ -202,6 +267,7 @@ export default function StoreSalesSummaryDashboard() {
   const [rangeError, setRangeError] = useState("");
 
   // MARK 2026-09-23: 객단가(매출금액/영수건수) — 기본은 접어두고 토글로 펼쳐볼 수 있게.
+  // MARK 2026-09-25: "전년 객단가도 비교(이것도 접히게)" — 같은 토글에 묶어서 같이 접고 폅니다.
   const [showAvgReceipt, setShowAvgReceipt] = useState(false);
 
   // MARK 2026-09-23: 구글드라이브에 올려둔 "전체매출" 파일을 수동으로 지금 바로 가져오기
@@ -294,10 +360,51 @@ export default function StoreSalesSummaryDashboard() {
     return ["전체", ...Array.from(set)];
   }, [stores]);
 
+  // MARK 2026-09-25: 구분별(로드샵/백화점 등) 소계를 만들 때 쓸 그룹 순서 — 백엔드가 이미
+  // 채널구분 우선순위로 정렬해서 내려주므로, 원본 stores에서 처음 등장하는 순서를 그대로 쓰면
+  // 됩니다(정렬모드로 화면 순서가 바뀌어도 소계 그룹 순서는 항상 이 기준을 씁니다).
+  const groupOrder = useMemo(() => {
+    const seen: string[] = [];
+    for (const s of stores) {
+      if (s.channelGroup && !seen.includes(s.channelGroup)) seen.push(s.channelGroup);
+    }
+    return seen;
+  }, [stores]);
+
   const filteredStores = groupFilter === "전체" ? stores : stores.filter((s) => s.channelGroup === groupFilter);
 
+  // MARK 2026-09-25: "점포별 실적순 정렬" — 기본은 백엔드가 내려준 순서(채널구분→점포코드)
+  // 그대로, 실적순을 고르면 해당 기간 실적(매출금액) 내림차순으로 다시 정렬합니다.
+  const sortedStores = useMemo(() => {
+    if (sortMode === "default") return filteredStores;
+    const list = [...filteredStores];
+    list.sort((a, b) => {
+      const av = sortMode === "daily" ? a.daily.actual : sortMode === "weekly" ? a.weekly.actual : a.monthly.actual;
+      const bv = sortMode === "daily" ? b.daily.actual : sortMode === "weekly" ? b.weekly.actual : b.monthly.actual;
+      return bv - av;
+    });
+    return list;
+  }, [filteredStores, sortMode]);
+
   // MARK 2026-09-25: 지금 보이는(필터 적용된) 매장 기준 합계 — 필터를 바꾸면 합계도 같이 바뀜.
-  const totalRow = useMemo(() => buildTotalRow(filteredStores), [filteredStores]);
+  const totalRow = useMemo(
+    () => buildTotalRow(filteredStores, groupFilter === "전체" ? `전체 매장 (${filteredStores.length}개)` : `${groupFilter} (${filteredStores.length}개)`),
+    [filteredStores, groupFilter]
+  );
+
+  // MARK 2026-09-25: "전체합계 밑에 구분별 매출 합계" 요청 — "전체"를 보고 있을 때만 의미가
+  // 있어서(이미 특정 구분으로 필터링했으면 총합=그 구분 합계라 중복), groupFilter==="전체"일
+  // 때만 구분별 소계 줄을 만듭니다.
+  const subtotalRows = useMemo(() => {
+    if (groupFilter !== "전체") return [] as { group: string; row: StoreSalesSummaryRow }[];
+    const out: { group: string; row: StoreSalesSummaryRow }[] = [];
+    for (const group of groupOrder) {
+      const rows = filteredStores.filter((s) => s.channelGroup === group);
+      const row = buildTotalRow(rows, `${group} 소계 (${rows.length}개)`);
+      if (row) out.push({ group, row });
+    }
+    return out;
+  }, [filteredStores, groupOrder, groupFilter]);
 
   // MARK 2026-09-25: "이대로가면 이번달 착지금액" — 지금까지의 하루 평균 페이스가 월말까지
   // 그대로 이어진다고 가정한 추정치입니다(누적실적 ÷ 이번달 경과율). 이번달 전체 목표가
@@ -312,7 +419,7 @@ export default function StoreSalesSummaryDashboard() {
 
   // MARK 2026-09-25: "금액 높낮이에 따라 빨강~초록" 요청 — 일간/주간/이번달 실적을 지금
   // 화면에 보이는 매장들 사이에서 상대적으로 비교해 색을 입힙니다(가장 낮은 매장이 빨강,
-  // 가장 높은 매장이 초록, 그 사이는 그라데이션). 합계 줄은 스케일을 왜곡하니 제외합니다.
+  // 가장 높은 매장이 초록, 그 사이는 그라데이션). 합계/소계 줄은 스케일을 왜곡하니 제외합니다.
   const heatRanges = useMemo(() => {
     const range = (vals: number[]) => (vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min: 0, max: 0 });
     return {
@@ -322,6 +429,75 @@ export default function StoreSalesSummaryDashboard() {
     };
   }, [filteredStores]);
 
+  const colSpanPerBlock = showAvgReceipt ? 6 : 4;
+  const blockCount = customPeriod ? 6 : 5;
+  // MARK 2026-09-24: 구분 열(64px)을 없애서 최소폭도 그만큼 줄였습니다.
+  const tableMinWidth = showAvgReceipt ? (customPeriod ? 3336 : 2836) : customPeriod ? 2236 : 1836;
+
+  function PeriodHeaderGroup({ title, bg = "" }: { title: string; bg?: string }) {
+    return (
+      <th colSpan={colSpanPerBlock} className={`border-l border-slate-700 px-2 py-1 text-center font-black whitespace-nowrap ${bg}`}>
+        {title}
+      </th>
+    );
+  }
+
+  function PeriodSubHeaders({ bg = "" }: { bg?: string }) {
+    return (
+      <>
+        <th className={`border-l border-slate-700 ${TH_NUM} ${bg}`}>목표</th>
+        <th className={`${TH_NUM} ${bg}`}>실적</th>
+        {showAvgReceipt && (
+          <>
+            <th className={`${TH_NUM} text-indigo-200 ${bg}`}>객단가</th>
+            <th className={`${TH_NUM} text-purple-200 ${bg}`}>전년객단가</th>
+          </>
+        )}
+        <th className={`${TH_NUM} ${bg}`}>달성률</th>
+        <th className={`${TH_NUM} ${bg}`}>전년比</th>
+      </>
+    );
+  }
+
+  // MARK 2026-09-25: 기간마다 목표/실적 필드 이름이 달라서(이번달=periodTarget, 연간=ytdTarget/
+  // ytdActual 등), 호출하는 쪽에서 항상 target/actual로 정규화해서 넘깁니다 — 이 컴포넌트는
+  // target/actual만 그대로 씁니다(합계/소계 줄 전용 — 매장별 실적 줄은 히트맵 때문에 직접 작성).
+  function PeriodCells({
+    p,
+    bg = "",
+  }: {
+    p: PeriodCommon & { target: number; actual: number };
+    bg?: string;
+  }) {
+    return (
+      <>
+        <td className={`border-t border-l border-slate-100 ${TD_NUM} ${bg}`}>{won(p.target)}</td>
+        <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${bg}`}>{won(p.actual)}</td>
+        {showAvgReceipt && (
+          <>
+            <td className={`border-t border-slate-100 ${TD_NUM} text-indigo-600 ${bg}`}>{wonOrDash(p.avgReceiptAmount)}</td>
+            <td className={`border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>{wonOrDash(p.prevYearAvgReceiptAmount)}</td>
+          </>
+        )}
+        <td className={`border-t border-slate-100 ${TD_NUM} ${bg}`}>{pct(p.achievementRate)}</td>
+        <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${growthColor(p.yoyGrowthRate)} ${bg}`}>{growthPct(p.yoyGrowthRate)}</td>
+      </>
+    );
+  }
+
+  function AggRowCells({ row, bg }: { row: StoreSalesSummaryRow; bg: string }) {
+    return (
+      <>
+        <PeriodCells p={row.daily} bg={bg} />
+        <PeriodCells p={row.weekly} bg={bg} />
+        {customPeriod && row.customPeriod && <PeriodCells p={row.customPeriod} bg={bg} />}
+        <PeriodCells p={{ ...row.monthly, target: row.monthly.periodTarget }} bg={bg} />
+        <PeriodCells p={row.prevMonth} bg={bg} />
+        <PeriodCells p={{ ...row.annual, target: row.annual.ytdTarget, actual: row.annual.ytdActual }} bg={bg} />
+      </>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-[1600px] px-4 pt-6">
@@ -330,7 +506,9 @@ export default function StoreSalesSummaryDashboard() {
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-slate-400">STORE SALES SUMMARY</p>
-            <h1 className="mt-1 text-xl font-black text-slate-900">매출 (점포별)</h1>
+            <h1 className="mt-1 text-xl font-black text-slate-900">
+              매출 (점포별) <span className="text-xs font-bold text-slate-400">· 금액 단위: 천원</span>
+            </h1>
             <p className="mt-1 text-xs font-semibold text-slate-400">
               {meta
                 ? `마지막 업로드: ${meta.uploadedAt}(${meta.newStartDate || meta.startDate}~${meta.newEndDate || meta.endDate}, ${(meta.newRowCount || 0).toLocaleString("ko-KR")}행) · 누적 ${meta.storeCount}개 매장 · ${meta.startDate}~${meta.endDate}(${meta.rowCount.toLocaleString("ko-KR")}행)`
@@ -345,7 +523,7 @@ export default function StoreSalesSummaryDashboard() {
             {landingEstimate && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-right">
                 <p className="text-[11px] font-black text-emerald-700">이대로가면 {landingEstimate.month.slice(5)}월 착지</p>
-                <p className="mt-0.5 text-lg font-black text-emerald-900">{won(landingEstimate.landingAmount)}</p>
+                <p className="mt-0.5 text-lg font-black text-emerald-900">{won(landingEstimate.landingAmount)}천원</p>
                 {landingEstimate.landingAchievementRate !== null && (
                   <p className="mt-0.5 text-[11px] font-bold text-emerald-600">월목표대비 {pct(landingEstimate.landingAchievementRate)}</p>
                 )}
@@ -489,161 +667,197 @@ export default function StoreSalesSummaryDashboard() {
                   showAvgReceipt ? "bg-indigo-600 text-white" : "border border-slate-200 bg-white text-slate-600"
                 }`}
               >
-                객단가 {showAvgReceipt ? "숨기기 ▲" : "보기 ▼"}
+                객단가/전년객단가 {showAvgReceipt ? "숨기기 ▲" : "보기 ▼"}
               </button>
             </div>
 
+            {/* MARK 2026-09-25: "점포별로 실적순으로 나열" 요청 — 정렬 기준을 고르면 왼쪽
+                순위(행번호) 열도 그 기준으로 다시 매겨집니다. */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black text-slate-500">정렬:</span>
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setSortMode(opt.key)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-black ${
+                    sortMode === opt.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             <p className="mt-3 text-xs font-bold text-slate-400">
-              기준일: {asOfDate}{dailyDate && dailyDate !== asOfDate ? ` · 일간 조회일: ${dailyDate}` : ""} · 신장률이 "신규"인 경우는 비교 기간에 그 매장이 아직 없었다는 뜻이에요. · 일간/주간/이번달 실적 색상은 지금 보이는 매장들 사이의 상대 비교예요(낮음 🔴 ~ 높음 🟢).
+              기준일: {asOfDate}{dailyDate && dailyDate !== asOfDate ? ` · 일간 조회일: ${dailyDate}` : ""} · 금액은 전부 천원 단위예요(원 단위 생략, 예: 234,555 = 234,555,000원). · 신장률이 "신규"인 경우는 비교 기간에 그 매장이 아직 없었다는 뜻이에요. · 일간/주간/이번달 실적 색상은 지금 보이는 매장들 사이의 상대 비교예요(낮음 🔴 ~ 높음 🟢).
             </p>
 
             <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-              <table className={`${customPeriod ? (showAvgReceipt ? "min-w-[2600px]" : "min-w-[2200px]") : showAvgReceipt ? "min-w-[2200px]" : "min-w-[1800px]"} w-full border-collapse text-xs`}>
+              <table className="w-full border-collapse text-xs" style={{ minWidth: tableMinWidth }}>
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    <th rowSpan={2} className="sticky left-0 z-10 bg-slate-900 px-3 py-2 text-left font-black">구분</th>
-                    <th rowSpan={2} className="sticky left-[56px] z-10 bg-slate-900 px-3 py-2 text-left font-black">매장명</th>
-                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">일간</th>
-                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">주간</th>
-                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">이번달(기간)</th>
-                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">전월</th>
-                    <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 px-2 py-1 text-center font-black">연간(누계)</th>
-                    {customPeriod && (
-                      <th colSpan={showAvgReceipt ? 5 : 4} className="border-l border-slate-700 bg-blue-900 px-2 py-1 text-center font-black">
-                        기간비교 ({customPeriod.start}~{customPeriod.end})
-                      </th>
-                    )}
+                    <th rowSpan={2} className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap bg-slate-900 px-2 py-2 text-center font-black">
+                      #
+                    </th>
+                    {/* MARK 2026-09-24: "구분 열은 지워달라(어차피 정렬순서로 알 수 있으니까)"
+                        요청으로 구분(로드샵/백화점 등) 열을 없앴습니다 — 소계 줄 라벨에 구분명을
+                        같이 넣어서 정보는 유지합니다. */}
+                    <th rowSpan={2} className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap bg-slate-900 px-3 py-2 text-left font-black">
+                      매장명
+                    </th>
+                    <PeriodHeaderGroup title="일간" />
+                    <PeriodHeaderGroup title="주간" />
+                    {customPeriod && <PeriodHeaderGroup title={`기간비교 (${customPeriod.start}~${customPeriod.end})`} bg="bg-blue-900" />}
+                    <PeriodHeaderGroup title="이번달(기간)" />
+                    <PeriodHeaderGroup title="전월" />
+                    <PeriodHeaderGroup title="연간(누계)" />
                   </tr>
                   <tr className="bg-slate-800 text-white">
-                    <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
-                    <th className="px-2 py-1 text-right font-bold">실적</th>
-                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                    <th className="px-2 py-1 text-right font-bold">달성률</th>
-                    <th className="px-2 py-1 text-right font-bold">전년比</th>
-                    <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
-                    <th className="px-2 py-1 text-right font-bold">실적</th>
-                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                    <th className="px-2 py-1 text-right font-bold">달성률</th>
-                    <th className="px-2 py-1 text-right font-bold">전년比</th>
-                    <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">기간목표</th>
-                    <th className="px-2 py-1 text-right font-bold">실적</th>
-                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                    <th className="px-2 py-1 text-right font-bold">달성률</th>
-                    <th className="px-2 py-1 text-right font-bold">전년比</th>
-                    <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">목표</th>
-                    <th className="px-2 py-1 text-right font-bold">실적</th>
-                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                    <th className="px-2 py-1 text-right font-bold">달성률</th>
-                    <th className="px-2 py-1 text-right font-bold">전년比</th>
-                    <th className="border-l border-slate-700 px-2 py-1 text-right font-bold">기간목표</th>
-                    <th className="px-2 py-1 text-right font-bold">실적</th>
-                    {showAvgReceipt && <th className="px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                    <th className="px-2 py-1 text-right font-bold">달성률</th>
-                    <th className="px-2 py-1 text-right font-bold">전년比</th>
-                    {customPeriod && (
-                      <>
-                        <th className="border-l border-slate-700 bg-blue-950 px-2 py-1 text-right font-bold">목표</th>
-                        <th className="bg-blue-950 px-2 py-1 text-right font-bold">실적</th>
-                        {showAvgReceipt && <th className="bg-blue-950 px-2 py-1 text-right font-bold text-indigo-200">객단가</th>}
-                        <th className="bg-blue-950 px-2 py-1 text-right font-bold">달성률</th>
-                        <th className="bg-blue-950 px-2 py-1 text-right font-bold">전년동기比</th>
-                      </>
-                    )}
+                    <PeriodSubHeaders />
+                    <PeriodSubHeaders />
+                    {customPeriod && <PeriodSubHeaders bg="bg-blue-950" />}
+                    <PeriodSubHeaders />
+                    <PeriodSubHeaders />
+                    <PeriodSubHeaders />
                   </tr>
                 </thead>
                 <tbody>
                   {totalRow && (
                     <tr className="bg-amber-50/80 ring-1 ring-inset ring-amber-200">
-                      <td className="sticky left-0 z-10 border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-500">합계</td>
-                      <td className="sticky left-[56px] z-10 border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
-                        {groupFilter === "전체" ? "전체 매장" : groupFilter} ({filteredStores.length}개)
+                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-2 py-2 text-center font-black text-slate-400">
+                        -
                       </td>
-
-                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.daily.target)}</td>
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.daily.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.daily.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.daily.achievementRate)}</td>
-                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.daily.yoyGrowthRate)}`}>{growthPct(totalRow.daily.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.weekly.target)}</td>
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.weekly.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.weekly.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.weekly.achievementRate)}</td>
-                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.weekly.yoyGrowthRate)}`}>{growthPct(totalRow.weekly.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.monthly.periodTarget)}</td>
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.monthly.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.monthly.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.monthly.achievementRate)}</td>
-                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.monthly.yoyGrowthRate)}`}>{growthPct(totalRow.monthly.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.prevMonth.target)}</td>
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.prevMonth.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.prevMonth.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.prevMonth.achievementRate)}</td>
-                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.prevMonth.yoyGrowthRate)}`}>{growthPct(totalRow.prevMonth.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-200 px-2 py-2 text-right font-bold">{won(totalRow.annual.ytdTarget)}</td>
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-black">{won(totalRow.annual.ytdActual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-200 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.annual.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-200 px-2 py-2 text-right font-bold">{pct(totalRow.annual.achievementRate)}</td>
-                      <td className={`border-t border-slate-200 px-2 py-2 text-right font-bold ${growthColor(totalRow.annual.yoyGrowthRate)}`}>{growthPct(totalRow.annual.yoyGrowthRate)}</td>
-
-                      {customPeriod && (
-                        <>
-                          <td className="border-t border-l border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold">{won(totalRow.customPeriod?.target || 0)}</td>
-                          <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-black">{won(totalRow.customPeriod?.actual || 0)}</td>
-                          {showAvgReceipt && <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold text-indigo-700">{wonOrDash(totalRow.customPeriod?.avgReceiptAmount ?? null)}</td>}
-                          <td className="border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold">{pct(totalRow.customPeriod?.achievementRate ?? null)}</td>
-                          <td className={`border-t border-blue-200 bg-blue-100/60 px-2 py-2 text-right font-bold ${growthColor(totalRow.customPeriod?.yoyGrowthRate ?? null)}`}>{growthPct(totalRow.customPeriod?.yoyGrowthRate ?? null)}</td>
-                        </>
-                      )}
+                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
+                        {totalRow.storeName}
+                      </td>
+                      <AggRowCells row={totalRow} bg="bg-amber-50/60" />
                     </tr>
                   )}
-                  {filteredStores.map((s, i) => (
+
+                  {subtotalRows.map(({ group, row }) => (
+                    <tr key={`subtotal-${group}`} className="bg-sky-50/70 ring-1 ring-inset ring-sky-100">
+                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-2 py-2 text-center font-black text-slate-400">
+                        -
+                      </td>
+                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-3 py-2 font-black text-slate-900">
+                        {row.storeName}
+                      </td>
+                      <AggRowCells row={row} bg="bg-sky-50/50" />
+                    </tr>
+                  ))}
+
+                  {sortedStores.map((s, i) => (
                     <tr key={s.storeName} className={i % 2 ? "bg-slate-50" : "bg-white"}>
-                      <td className="sticky left-0 z-10 border-t border-slate-100 bg-inherit px-3 py-2 font-bold text-slate-500">{s.channelGroup}</td>
-                      <td className="sticky left-[56px] z-10 border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">{s.storeName}</td>
+                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-100 bg-inherit px-2 py-2 text-center font-bold text-slate-400">
+                        {i + 1}
+                      </td>
+                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
+                        {s.storeName}
+                      </td>
 
-                      <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.daily.target)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.daily.actual, heatRanges.daily)}>{won(s.daily.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.daily.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.daily.yoyGrowthRate)}`}>{growthPct(s.daily.yoyGrowthRate)}</td>
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.daily.target)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.daily.actual, heatRanges.daily)}
+                      >
+                        {won(s.daily.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.daily.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.daily.yoyGrowthRate)}`}>
+                        {growthPct(s.daily.yoyGrowthRate)}
+                      </td>
 
-                      <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.weekly.target)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.weekly.actual, heatRanges.weekly)}>{won(s.weekly.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.weekly.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.weekly.yoyGrowthRate)}`}>{growthPct(s.weekly.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.monthly.periodTarget)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold" style={heatBg(s.monthly.actual, heatRanges.monthly)}>{won(s.monthly.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.monthly.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.monthly.yoyGrowthRate)}`}>{growthPct(s.monthly.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.prevMonth.target)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.prevMonth.actual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.prevMonth.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.prevMonth.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.prevMonth.yoyGrowthRate)}`}>{growthPct(s.prevMonth.yoyGrowthRate)}</td>
-
-                      <td className="border-t border-l border-slate-100 px-2 py-2 text-right">{won(s.annual.ytdTarget)}</td>
-                      <td className="border-t border-slate-100 px-2 py-2 text-right font-bold">{won(s.annual.ytdActual)}</td>
-                      {showAvgReceipt && <td className="border-t border-slate-100 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.annual.avgReceiptAmount)}</td>}
-                      <td className="border-t border-slate-100 px-2 py-2 text-right">{pct(s.annual.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 px-2 py-2 text-right font-bold ${growthColor(s.annual.yoyGrowthRate)}`}>{growthPct(s.annual.yoyGrowthRate)}</td>
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.weekly.target)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.weekly.actual, heatRanges.weekly)}
+                      >
+                        {won(s.weekly.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.weekly.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.weekly.yoyGrowthRate)}`}>
+                        {growthPct(s.weekly.yoyGrowthRate)}
+                      </td>
 
                       {customPeriod && (
                         <>
-                          <td className="border-t border-l border-blue-100 bg-blue-50/40 px-2 py-2 text-right">{won(s.customPeriod?.target || 0)}</td>
-                          <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right font-bold">{won(s.customPeriod?.actual || 0)}</td>
-                          {showAvgReceipt && <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right text-indigo-600">{wonOrDash(s.customPeriod?.avgReceiptAmount ?? null)}</td>}
-                          <td className="border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right">{pct(s.customPeriod?.achievementRate ?? null)}</td>
-                          <td className={`border-t border-blue-100 bg-blue-50/40 px-2 py-2 text-right font-bold ${growthColor(s.customPeriod?.yoyGrowthRate ?? null)}`}>{growthPct(s.customPeriod?.yoyGrowthRate ?? null)}</td>
+                          <td className="border-t border-l border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.customPeriod?.target || 0)}</td>
+                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.customPeriod?.actual || 0)}</td>
+                          {showAvgReceipt && (
+                            <>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">
+                                {wonOrDash(s.customPeriod?.avgReceiptAmount ?? null)}
+                              </td>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
+                                {wonOrDash(s.customPeriod?.prevYearAvgReceiptAmount ?? null)}
+                              </td>
+                            </>
+                          )}
+                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.customPeriod?.achievementRate ?? null)}</td>
+                          <td
+                            className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.customPeriod?.yoyGrowthRate ?? null)}`}
+                          >
+                            {growthPct(s.customPeriod?.yoyGrowthRate ?? null)}
+                          </td>
                         </>
                       )}
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.monthly.periodTarget)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.monthly.actual, heatRanges.monthly)}
+                      >
+                        {won(s.monthly.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.monthly.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.monthly.yoyGrowthRate)}`}>
+                        {growthPct(s.monthly.yoyGrowthRate)}
+                      </td>
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.prevMonth.target)}</td>
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.prevMonth.actual)}</td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.prevMonth.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.prevMonth.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.prevMonth.yoyGrowthRate)}`}>
+                        {growthPct(s.prevMonth.yoyGrowthRate)}
+                      </td>
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.annual.ytdTarget)}</td>
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.annual.ytdActual)}</td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.annual.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.annual.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.annual.yoyGrowthRate)}`}>
+                        {growthPct(s.annual.yoyGrowthRate)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

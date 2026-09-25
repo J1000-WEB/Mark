@@ -48,6 +48,62 @@ function heatBg(value: number, range: { min: number; max: number }): CSSProperti
 const TD_NUM = "whitespace-nowrap px-2 py-2 text-right tabular-nums";
 const TH_NUM = "whitespace-nowrap px-2 py-1 text-right font-bold tabular-nums";
 
+// MARK 2026-09-24: "이름을 짧게 줄여서 보여줄래?" 요청 — 모바일 표 폭을 줄이기 위해 매장명을
+// 지정해주신 짧은 이름으로 바꿔서 보여줍니다. lib/dataBuilder.ts의 normalizeStoreKey()와
+// 같은 규칙으로 정규화한 뒤 매칭해서, 업로드 원본 표기가 "오프라인_" 접두어나 공백/점 유무로
+// 조금 달라도 잘 잡히게 했습니다. 목록에 없는 매장은 원래 이름을 그대로 보여줘요(화이트리스트에
+// 새 매장이 추가되면 여기도 같이 추가해주면 됩니다).
+function normalizeStoreKeyFE(storeName: string) {
+  const raw = String(storeName || "").trim();
+  return raw
+    .replace(/^오프라인[_\s-]*/i, "")
+    .replace(/점$/g, "")
+    .replace(/[\s_\-·.()]/g, "")
+    .toLowerCase();
+}
+
+const STORE_SHORT_NAMES: Record<string, string> = {
+  "성수플래그십": "성수",
+  "신사플래그십": "신사",
+  "한남플래그십": "한남",
+  "서울숲플래그십": "서울숲",
+  "포시즌아울렛신사": "포시즌",
+  "신세계센텀시티": "센텀",
+  "신세계광주": "광주",
+  "롯데백화점평촌": "평촌",
+  "롯데백화점광복": "광복",
+  "신세계의정부": "의정부",
+  "신세계대전": "대전",
+  "현대백화점신촌": "신촌",
+  "lf스퀘어광양": "광양",
+  "아이파크몰용산": "용산",
+  "스타필드고양": "고양",
+  "현대커넥트청주": "청주",
+  "스타필드빌리지운정": "운정",
+  "타임스퀘어영등포": "영등포",
+  "롯데아울렛서울역": "서울역",
+  "현대아울렛송도": "송도",
+  "롯데아울렛김해": "김해",
+  "롯데아울렛동부산": "동부산",
+  "현대아울렛남양주": "남양주",
+  "팩토리아울렛용인": "용인",
+  "롯데면세": "롯데 면세",
+  "무신사강남": "무신사(강남)",
+  "무신사대구": "무신사(대구)",
+  "무신사백&캡클럽서울숲": "무신사(서울숲)",
+  "무신사성수": "무신사(성수)",
+  "무신사수원": "무신사(수원)",
+  "무신사은평": "무신사(은평)",
+  "무신사홍대": "무신사(홍대)",
+  "무신사송도": "무신사(송도)",
+  "한컬렉션": "한컬렉션",
+};
+
+function shortStoreName(storeName: string): string {
+  const key = normalizeStoreKeyFE(storeName);
+  return STORE_SHORT_NAMES[key] || storeName;
+}
+
 // MARK 2026-09-25: 기간마다 목표/실적 필드 이름이 다릅니다(일간/주간/전월/기간비교는
 // target·actual, 이번달은 periodTarget·actual, 연간은 ytdTarget·ytdActual) — 백엔드
 // (lib/dataBuilder.ts StoreSalesSummaryRow)와 정확히 같은 이름을 씁니다. 공통 필드만
@@ -276,11 +332,17 @@ export default function StoreSalesSummaryDashboard() {
   const [driveMessage, setDriveMessage] = useState("");
   const [driveError, setDriveError] = useState("");
 
+  // MARK 2026-09-24: "기간을 따로 안 고르면 기본으로 이번주 월요일~어제가 보이면 좋겠다"
+  // 요청 — 서버가 이제 rangeStart/rangeEnd를 아예 안 보내면 기본으로 이번주 기간비교를
+  // 계산해서 내려줍니다. noRange 옵션은 서버에도 남겨뒀지만(나중에 "완전히 끄기"가 필요할
+  // 수도 있어서) 지금 프론트에서는 안 씁니다 — "이번주(기본)로" 버튼은 직접 고른 값만
+  // 지우고 다시 기본값이 보이게 하는 용도라 그냥 params 없이 다시 불러오면 됩니다.
+
   useEffect(() => {
     load();
   }, []);
 
-  async function load(params?: { date?: string; rangeStart?: string; rangeEnd?: string }) {
+  async function load(params?: { date?: string; rangeStart?: string; rangeEnd?: string; noRange?: boolean }) {
     setLoading(true);
     setRangeError("");
     try {
@@ -289,6 +351,8 @@ export default function StoreSalesSummaryDashboard() {
       if (params?.rangeStart && params?.rangeEnd) {
         qs.set("rangeStart", params.rangeStart);
         qs.set("rangeEnd", params.rangeEnd);
+      } else if (params?.noRange) {
+        qs.set("noRange", "1");
       }
       const url = qs.toString() ? `/api/sales-summary?${qs}` : "/api/sales-summary";
       const res = await fetch(url, { cache: "no-store" });
@@ -299,6 +363,12 @@ export default function StoreSalesSummaryDashboard() {
         setStores(json.stores || []);
         setMeta(json.meta || null);
         setCustomPeriod(json.customPeriod || null);
+        // 서버가 내려준 기간(직접 고른 값이든 기본값이든)을 항상 입력칸에 반영해서
+        // 지금 어떤 기간이 보이는지 표시해줍니다.
+        if (json.customPeriod) {
+          setRangeStartInput(json.customPeriod.start || "");
+          setRangeEndInput(json.customPeriod.end || "");
+        }
         if (params?.rangeStart && params?.rangeEnd && !json.customPeriod) {
           setRangeError("기간 형식을 확인해주세요(시작일이 종료일보다 늦을 수 없어요).");
         }
@@ -319,9 +389,9 @@ export default function StoreSalesSummaryDashboard() {
   }
 
   function clearRangeQuery() {
-    setRangeStartInput("");
-    setRangeEndInput("");
     setRangeError("");
+    // rangeStart/rangeEnd를 아예 안 보내면 서버가 기본(이번주 월~어제)을 다시 계산해서
+    // 내려주고, load()가 그 값을 입력칸에도 다시 채워줍니다.
     load({ date: dailyDate });
   }
 
@@ -360,17 +430,6 @@ export default function StoreSalesSummaryDashboard() {
     return ["전체", ...Array.from(set)];
   }, [stores]);
 
-  // MARK 2026-09-25: 구분별(로드샵/백화점 등) 소계를 만들 때 쓸 그룹 순서 — 백엔드가 이미
-  // 채널구분 우선순위로 정렬해서 내려주므로, 원본 stores에서 처음 등장하는 순서를 그대로 쓰면
-  // 됩니다(정렬모드로 화면 순서가 바뀌어도 소계 그룹 순서는 항상 이 기준을 씁니다).
-  const groupOrder = useMemo(() => {
-    const seen: string[] = [];
-    for (const s of stores) {
-      if (s.channelGroup && !seen.includes(s.channelGroup)) seen.push(s.channelGroup);
-    }
-    return seen;
-  }, [stores]);
-
   const filteredStores = groupFilter === "전체" ? stores : stores.filter((s) => s.channelGroup === groupFilter);
 
   // MARK 2026-09-25: "점포별 실적순 정렬" — 기본은 백엔드가 내려준 순서(채널구분→점포코드)
@@ -386,21 +445,33 @@ export default function StoreSalesSummaryDashboard() {
     return list;
   }, [filteredStores, sortMode]);
 
-  // MARK 2026-09-25: 지금 보이는(필터 적용된) 매장 기준 합계 — 필터를 바꾸면 합계도 같이 바뀜.
+  // MARK 2026-09-24: "소계 라벨이 너무 길다(로드샵 소계 (5개) 같은 거)" 피드백으로 라벨을
+  // 그냥 구분명만(또는 전체일 땐 "합계") 나오게 짧게 바꿨습니다 — 모바일에서 안 밀려나게.
   const totalRow = useMemo(
-    () => buildTotalRow(filteredStores, groupFilter === "전체" ? `전체 매장 (${filteredStores.length}개)` : `${groupFilter} (${filteredStores.length}개)`),
+    () => buildTotalRow(filteredStores, groupFilter === "전체" ? "합계" : groupFilter),
     [filteredStores, groupFilter]
   );
 
-  // MARK 2026-09-25: "전체합계 밑에 구분별 매출 합계" 요청 — "전체"를 보고 있을 때만 의미가
-  // 있어서(이미 특정 구분으로 필터링했으면 총합=그 구분 합계라 중복), groupFilter==="전체"일
-  // 때만 구분별 소계 줄을 만듭니다.
+  // MARK 2026-09-25: 구분별(로드샵/백화점 등) 소계를 만들 때 쓸 그룹 순서 — 백엔드가 이미
+  // 채널구분 우선순위로 정렬해서 내려주므로, 원본 stores에서 처음 등장하는 순서를 그대로 쓰면
+  // 됩니다(정렬모드로 화면 순서가 바뀌어도 소계 그룹 순서는 항상 이 기준을 씁니다).
+  const groupOrder = useMemo(() => {
+    const seen: string[] = [];
+    for (const s of stores) {
+      if (s.channelGroup && !seen.includes(s.channelGroup)) seen.push(s.channelGroup);
+    }
+    return seen;
+  }, [stores]);
+
+  // MARK 2026-09-24: "전체합계 밑에 구분별 매출 합계" — "전체"를 보고 있을 때만 의미가 있어서
+  // (이미 특정 구분으로 필터링했으면 총합=그 구분 합계라 중복), groupFilter==="전체"일 때만
+  // 구분별 소계 줄을 만듭니다. 라벨은 구분명 그대로만(예: "로드샵") 씁니다.
   const subtotalRows = useMemo(() => {
     if (groupFilter !== "전체") return [] as { group: string; row: StoreSalesSummaryRow }[];
     const out: { group: string; row: StoreSalesSummaryRow }[] = [];
     for (const group of groupOrder) {
       const rows = filteredStores.filter((s) => s.channelGroup === group);
-      const row = buildTotalRow(rows, `${group} 소계 (${rows.length}개)`);
+      const row = buildTotalRow(rows, group);
       if (row) out.push({ group, row });
     }
     return out;
@@ -530,6 +601,22 @@ export default function StoreSalesSummaryDashboard() {
               </div>
             )}
 
+            {/* MARK 2026-09-24: "드라이브에서 가져오기는 버튼만 있으면 되니까 크게 차지할
+                필요 없다" 요청 — 카드 통째로 있던 걸 착지금액 카드 옆의 작은 버튼 하나로
+                줄였습니다. 결과 메시지는 버튼 밑에 작게 표시합니다. */}
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                disabled={driveImporting}
+                onClick={runDriveImport}
+                className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+              >
+                {driveImporting ? "가져오는 중..." : "🔄 드라이브 가져오기"}
+              </button>
+              {driveMessage && <span className="max-w-[220px] text-right text-[10px] font-bold text-slate-500">{driveMessage}</span>}
+              {driveError && <span className="max-w-[220px] text-right text-[10px] font-black text-red-600">⚠ {driveError}</span>}
+            </div>
+
             {/* MARK 2026-09-25: 탭 정리 요청 — 판매전체상/일간/월간을 독립 탭에서 빼서 매출 탭
                 안으로 옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
             <div className="flex flex-wrap gap-2">
@@ -555,25 +642,6 @@ export default function StoreSalesSummaryDashboard() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-sm font-black text-slate-700">구글드라이브에서 가져오기</p>
-          <p className="mt-1 text-xs font-semibold text-slate-400">
-            드라이브에 올려둔 전체매출 파일을 매일 새벽에 자동으로 가져와요. 방금 올렸다면 기다리지 않고 지금 바로 가져올 수 있어요.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={driveImporting}
-              onClick={runDriveImport}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
-            >
-              {driveImporting ? "가져오는 중..." : "지금 가져오기"}
-            </button>
-            {driveMessage && <span className="text-xs font-bold text-slate-500">{driveMessage}</span>}
-          </div>
-          {driveError && <p className="mt-2 text-sm font-black text-red-600">⚠ {driveError}</p>}
-        </div>
-
         <div className="mt-4 flex flex-wrap items-end gap-6 rounded-2xl border border-slate-200 bg-white p-4">
           <div>
             <p className="text-xs font-black text-slate-700">일간 조회 날짜</p>
@@ -592,7 +660,9 @@ export default function StoreSalesSummaryDashboard() {
 
           <div>
             <p className="text-xs font-black text-slate-700">기간 비교 조회</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">시작~끝 날짜를 고르면 그 기간 목표달성률과 전년동기 신장률을 같이 볼 수 있어요.</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+              기본은 이번주 월요일~어제예요. 다른 기간을 보고 싶으면 시작~끝 날짜를 골라서 조회하면 그 기간 목표달성률과 전년동기 신장률을 같이 볼 수 있어요.
+            </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input
                 type="date"
@@ -624,7 +694,7 @@ export default function StoreSalesSummaryDashboard() {
                   onClick={clearRangeQuery}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-500"
                 >
-                  기간비교 지우기
+                  이번주(기본)로
                 </button>
               )}
             </div>
@@ -753,7 +823,7 @@ export default function StoreSalesSummaryDashboard() {
                         {i + 1}
                       </td>
                       <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
-                        {s.storeName}
+                        {shortStoreName(s.storeName)}
                       </td>
 
                       <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.daily.target)}</td>

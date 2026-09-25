@@ -4318,17 +4318,19 @@ export interface StoreSalesSummaryRow {
   // MARK 2026-09-25: 매출탭 상단 "합계" 줄에서 객단가를 (매장별 객단가의 단순평균이 아니라)
   // 매출금액합계/영수건수합계로 정확히 계산할 수 있도록, 원본 영수건수(receiptCount)도 같이
   // 내려줍니다(화면에 직접 표시하진 않고, 합계 계산에만 씀).
-  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; yoyGrowthRate: number | null };
+  // MARK 2026-09-25: "전년 객단가도 비교" 요청 — prevYearAvgReceiptAmount(=전년동기
+  // 매출금액/전년동기 영수건수)를 추가하고, 합계 줄 계산용으로 prevYearReceiptCount도 같이 내려줍니다.
+  daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   // MARK 2026-09-25: fullMonthTarget = 이번달 "전체"(월말까지) 목표 — "이대로가면 착지금액"을
   // 계산할 때 착지 달성률을 비교할 분모로 씁니다(periodTarget은 asOfDate까지만이라 착지 비교엔 부적합).
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null; fullMonthTarget: number };
-  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; yoyGrowthRate: number | null };
-  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; yoyGrowthRate: number | null };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null; fullMonthTarget: number };
+  prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
+  annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
   customPeriod?: {
     start: string; end: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number;
-    prevYearStart: string; prevYearEnd: string; prevYearAmount: number; yoyGrowthRate: number | null;
+    prevYearStart: string; prevYearEnd: string; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null;
   };
 }
 
@@ -4336,6 +4338,9 @@ export interface SalesSummaryQueryOptions {
   dailyDate?: string; // "일간" 블록에서 보고 싶은 날짜(기본값=데이터상 가장 최근 날짜)
   rangeStart?: string; // 커스텀 기간비교 시작일
   rangeEnd?: string; // 커스텀 기간비교 종료일
+  noRange?: boolean; // MARK 2026-09-24: 사용자가 명시적으로 "기간비교 지우기"를 눌렀을 때만
+  // true — rangeStart/rangeEnd를 아예 안 보낸 것과 구분해서, 이때는 아래 기본기간(이번주)도
+  // 적용하지 않고 customPeriod를 null로 둡니다.
 }
 
 const SALES_SUMMARY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -4438,23 +4443,30 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   // -364일(정확히 52주 전)을 써서 요일을 맞추고 있는 것과 똑같이, 일간도 -364일로 맞춥니다.
   const prevYearDailyDate = dateAddDays(dailyDate, -364);
 
+  // 이번주(월~일) — asOfDate가 속한 주
+  const dow = asOfDateObj.getDay(); // 0=일 ... 6=토
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const weekStart = dateAddDays(asOfDate, mondayOffset);
+  const weekEnd = dateAddDays(weekStart, 6);
+
   // MARK 2026-09-22: 커스텀 기간비교 — 시작~끝 날짜를 직접 골라 그 기간의 목표달성률과
   // 전년동기 신장률을 같이 봅니다. 형식 오류거나 시작일이 종료일보다 뒤면 유효하지 않은
   // 것으로 보고 customPeriod는 null(=요청 안 한 것과 동일하게 처리).
   // MARK 2026-09-25: 여기도 위 일간과 같은 이유로 -365일이 아니라 -364일(52주 전)을 써서,
   // 예를 들어 "26-09-07(월)~26-09-13(일)"을 고르면 전년동기가 "25-09-08(월)~25-09-14(일)"처럼
   // 같은 요일로 맞춰지게 합니다.
+  // MARK 2026-09-24: "기간을 따로 안 고르면 기본값이 이번주 월요일~어제로 보이면 좋겠다" 요청
+  // — rangeStart/rangeEnd를 아예 안 보낸 요청(noRange도 안 준 경우)이면 이번주(월요일~asOfDate,
+  // 위에서 계산한 weekStart~asOfDate)를 기본 기간비교로 씁니다. 사용자가 "기간비교 지우기"를
+  // 눌러서 noRange:true로 명시한 경우에는 기본값도 적용하지 않고 null로 둡니다.
   const rangeStartValid = options.rangeStart && SALES_SUMMARY_DATE_RE.test(options.rangeStart) ? options.rangeStart : "";
   const rangeEndValid = options.rangeEnd && SALES_SUMMARY_DATE_RE.test(options.rangeEnd) ? options.rangeEnd : "";
-  const customPeriod = rangeStartValid && rangeEndValid && rangeStartValid <= rangeEndValid
-    ? { start: rangeStartValid, end: rangeEndValid, prevYearStart: dateAddDays(rangeStartValid, -364), prevYearEnd: dateAddDays(rangeEndValid, -364) }
+  const noRangeRequestedAtAll = !options.rangeStart && !options.rangeEnd && !options.noRange;
+  const effectiveRangeStart = rangeStartValid || (noRangeRequestedAtAll ? weekStart : "");
+  const effectiveRangeEnd = rangeEndValid || (noRangeRequestedAtAll ? asOfDate : "");
+  const customPeriod = effectiveRangeStart && effectiveRangeEnd && effectiveRangeStart <= effectiveRangeEnd
+    ? { start: effectiveRangeStart, end: effectiveRangeEnd, prevYearStart: dateAddDays(effectiveRangeStart, -364), prevYearEnd: dateAddDays(effectiveRangeEnd, -364) }
     : null;
-
-  // 이번주(월~일) — asOfDate가 속한 주
-  const dow = asOfDateObj.getDay(); // 0=일 ... 6=토
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const weekStart = dateAddDays(asOfDate, mondayOffset);
-  const weekEnd = dateAddDays(weekStart, 6);
   const prevWeekStart = dateAddDays(weekStart, -7);
   const prevWeekEnd = dateAddDays(weekEnd, -7);
   const prevYearWeekStart = dateAddDays(weekStart, -364); // 정확히 52주 전 = 같은 요일
@@ -4535,6 +4547,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         prevYearStart: customPeriod.prevYearStart,
         prevYearEnd: customPeriod.prevYearEnd,
         prevYearAmount: prev.amount,
+        prevYearReceiptCount: prev.receiptCount,
+        prevYearAvgReceiptAmount: avgReceiptAmount(prev.amount, prev.receiptCount),
         yoyGrowthRate: growthRate(cur.amount, prev.amount, existedBefore(customPeriod.prevYearStart)),
       };
     }
@@ -4552,6 +4566,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         avgReceiptAmount: avgReceiptAmount(dailyActual, todayRow?.receiptCount || 0),
         receiptCount: todayRow?.receiptCount || 0,
         prevYearAmount: dailyPrevYear,
+        prevYearReceiptCount: prevYearDayRow?.receiptCount || 0,
+        prevYearAvgReceiptAmount: avgReceiptAmount(dailyPrevYear, prevYearDayRow?.receiptCount || 0),
         yoyGrowthRate: growthRate(dailyActual, dailyPrevYear, existedBefore(prevYearDailyDate)),
       },
       weekly: {
@@ -4565,6 +4581,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         prevWeekAmount: weekPrev.amount,
         wowGrowthRate: growthRate(weekNow.amount, weekPrev.amount, existedBefore(prevWeekStart)),
         prevYearAmount: weekPrevYear.amount,
+        prevYearReceiptCount: weekPrevYear.receiptCount,
+        prevYearAvgReceiptAmount: avgReceiptAmount(weekPrevYear.amount, weekPrevYear.receiptCount),
         yoyGrowthRate: growthRate(weekNow.amount, weekPrevYear.amount, existedBefore(prevYearWeekStart)),
       },
       monthly: {
@@ -4576,6 +4594,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         receiptCount: monthNow.receiptCount,
         progressRate: monthProgressRate,
         prevYearAmount: monthPrevYear.amount,
+        prevYearReceiptCount: monthPrevYear.receiptCount,
+        prevYearAvgReceiptAmount: avgReceiptAmount(monthPrevYear.amount, monthPrevYear.receiptCount),
         yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
         fullMonthTarget: monthFull.target,
       },
@@ -4587,6 +4607,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         avgReceiptAmount: avgReceiptAmount(prevMonthNow.amount, prevMonthNow.receiptCount),
         receiptCount: prevMonthNow.receiptCount,
         prevYearAmount: prevMonthPrevYear.amount,
+        prevYearReceiptCount: prevMonthPrevYear.receiptCount,
+        prevYearAvgReceiptAmount: avgReceiptAmount(prevMonthPrevYear.amount, prevMonthPrevYear.receiptCount),
         yoyGrowthRate: growthRate(prevMonthNow.amount, prevMonthPrevYear.amount, existedBefore(prevYearPrevMonthStart)),
       },
       annual: {
@@ -4598,6 +4620,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         receiptCount: yearNow.receiptCount,
         progressRate: yearProgressRate,
         prevYearAmount: yearPrevYear.amount,
+        prevYearReceiptCount: yearPrevYear.receiptCount,
+        prevYearAvgReceiptAmount: avgReceiptAmount(yearPrevYear.amount, yearPrevYear.receiptCount),
         yoyGrowthRate: growthRate(yearNow.amount, yearPrevYear.amount, existedBefore(prevYearYtdStart)),
       },
       ...(customPeriodRow ? { customPeriod: customPeriodRow } : {}),

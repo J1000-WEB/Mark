@@ -502,8 +502,9 @@ export default function StoreSalesSummaryDashboard() {
 
   const colSpanPerBlock = showAvgReceipt ? 6 : 4;
   const blockCount = customPeriod ? 6 : 5;
-  // MARK 2026-09-24: 구분 열(64px)을 없애서 최소폭도 그만큼 줄였습니다.
-  const tableMinWidth = showAvgReceipt ? (customPeriod ? 3336 : 2836) : customPeriod ? 2236 : 1836;
+  // MARK 2026-09-24: 구분 열(64px) 삭제 + 매장명 열(150px→64px, 이름을 짧게 줄여서 그만큼
+  // 안 필요해짐)만큼 최소폭도 줄였습니다.
+  const tableMinWidth = showAvgReceipt ? (customPeriod ? 3250 : 2750) : customPeriod ? 2150 : 1750;
 
   function PeriodHeaderGroup({ title, bg = "" }: { title: string; bg?: string }) {
     return (
@@ -773,7 +774,7 @@ export default function StoreSalesSummaryDashboard() {
                     {/* MARK 2026-09-24: "구분 열은 지워달라(어차피 정렬순서로 알 수 있으니까)"
                         요청으로 구분(로드샵/백화점 등) 열을 없앴습니다 — 소계 줄 라벨에 구분명을
                         같이 넣어서 정보는 유지합니다. */}
-                    <th rowSpan={2} className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap bg-slate-900 px-3 py-2 text-left font-black">
+                    <th rowSpan={2} className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap bg-slate-900 px-3 py-2 text-left font-black">
                       매장명
                     </th>
                     <PeriodHeaderGroup title="일간" />
@@ -798,7 +799,7 @@ export default function StoreSalesSummaryDashboard() {
                       <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-2 py-2 text-center font-black text-slate-400">
                         -
                       </td>
-                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
+                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
                         {totalRow.storeName}
                       </td>
                       <AggRowCells row={totalRow} bg="bg-amber-50/60" />
@@ -810,7 +811,7 @@ export default function StoreSalesSummaryDashboard() {
                       <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-2 py-2 text-center font-black text-slate-400">
                         -
                       </td>
-                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-3 py-2 font-black text-slate-900">
+                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-3 py-2 font-black text-slate-900">
                         {row.storeName}
                       </td>
                       <AggRowCells row={row} bg="bg-sky-50/50" />
@@ -822,7 +823,7 @@ export default function StoreSalesSummaryDashboard() {
                       <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-100 bg-inherit px-2 py-2 text-center font-bold text-slate-400">
                         {i + 1}
                       </td>
-                      <td className="sticky left-[36px] z-10 min-w-[150px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
+                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
                         {shortStoreName(s.storeName)}
                       </td>
 

@@ -648,6 +648,121 @@ export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapsh
   return { rows, meta };
 }
 
+// MARK 2026-09-28: "온라인 재고이관이 안 돌아간다" — 원인은 이 기능이 읽던 라이브 "온오프재고현황"
+// 시트를 아무도 자동으로 갱신하지 않아서(사람이 ERP에서 수동으로 유지보수해야 하는 시트) 조용히
+// 낡은 값으로 남아있었기 때문입니다(물류가용재고_스냅샷/매장별_재고_스냅샷과 똑같은 문제,
+// 똑같은 해법). 판매데이터 업로드(재고 파일)는 이미 스타일/칼라/사이즈별 가용(온)/가용(오프)를
+// 갖고 있고 지연 알림(Upload_Alert_State)까지 있으므로, 업로드할 때마다 이 스냅샷에도 같이
+// 압축 저장해서 온라인 재고이관 전용으로 읽습니다. 사이즈 단위까지 남겨서(WAREHOUSE_SNAPSHOT은
+// 오프라인 가용재고만 사이즈 단위로 저장했는데, 여기는 온/오프 둘 다 사이즈 단위로 저장) 재고CTRL의
+// "온라인재고 이관요청"이 사이즈별로 이관 판단을 보여줄 수 있게 합니다.
+const ONLINE_TRANSFER_STOCK_SNAPSHOT_SHEET = "온라인이관_재고_스냅샷";
+const ONLINE_TRANSFER_STOCK_SNAPSHOT_META_SHEET = "온라인이관_재고_스냅샷_메타";
+const ONLINE_TRANSFER_STOCK_SNAPSHOT_HEADER = ["스타일", "스타일명", "칼라", "칼라명", "사이즈", "가용(온)", "가용(오프)"];
+const ONLINE_TRANSFER_STOCK_SNAPSHOT_META_HEADER = ["업로드일시", "행수", "원본파일명"];
+
+export type OnlineTransferStockInput = {
+  styleCode: string;
+  productName: string;
+  colorCode: string;
+  colorName: string;
+  size: string;
+  stockOnline: number;
+  stockOffline: number;
+};
+
+// 판매데이터 업로드(app/api/sales-data-upload)에서 "재고" 파일을 파싱한 직후 호출합니다.
+export async function saveOnlineTransferStockSnapshot(rows: OnlineTransferStockInput[], fileName?: string) {
+  const clean = (rows || [])
+    .map((r) => [text(r.styleCode), text(r.productName), text(r.colorCode), text(r.colorName), text(r.size), num(r.stockOnline), num(r.stockOffline)])
+    .filter((r) => r[0]);
+  if (!clean.length) {
+    throw new Error("온라인 이관용 재고 스냅샷을 저장할 데이터가 없습니다.");
+  }
+
+  const dbId = getDbSheetId();
+  await ensureSheetExistsById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_SHEET, ONLINE_TRANSFER_STOCK_SNAPSHOT_HEADER);
+  await ensureSheetExistsById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_META_SHEET, ONLINE_TRANSFER_STOCK_SNAPSHOT_META_HEADER);
+
+  await safeReplaceSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_SHEET, [ONLINE_TRANSFER_STOCK_SNAPSHOT_HEADER, ...clean]);
+
+  const uploadedAt = nowKSTDateTime();
+  await safeReplaceSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_META_SHEET, [
+    ONLINE_TRANSFER_STOCK_SNAPSHOT_META_HEADER,
+    [uploadedAt, clean.length, text(fileName)],
+  ]);
+
+  return { ok: true, rowCount: clean.length, uploadedAt };
+}
+
+export async function getOnlineTransferStockSnapshotMeta() {
+  const dbId = getDbSheetId();
+  const rows = await getSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_META_SHEET, "A2:C2").catch(() => [] as any[]);
+  const row = rows[0];
+  if (!row || !text(row[0])) return null;
+  return { uploadedAt: text(row[0]), rowCount: num(row[1]), fileName: text(row[2]) };
+}
+
+export type OnlineTransferStockSkuRow = {
+  styleCode: string;
+  productName: string;
+  color: string;
+  colorName: string;
+  size: string;
+  onlineStock: number;
+  offlineStock: number;
+};
+
+async function readOnlineTransferStockSnapshot(): Promise<{ rows: OnlineTransferStockSkuRow[]; meta: { uploadedAt: string; rowCount: number; fileName: string } | null }> {
+  const dbId = getDbSheetId();
+  const [dataRows, metaRows] = await Promise.all([
+    getSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_SHEET, "A2:G60000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_META_SHEET, "A2:C2").catch(() => [] as any[]),
+  ]);
+  const rows = dataRows
+    .filter((r) => r && text(r[0]))
+    .map((r) => ({
+      styleCode: text(r[0]),
+      productName: text(r[1]),
+      color: text(r[2]),
+      colorName: text(r[3]),
+      size: text(r[4]),
+      onlineStock: num(r[5]),
+      offlineStock: num(r[6]),
+    }));
+  const metaRow = metaRows[0];
+  const meta = metaRow && text(metaRow[0])
+    ? { uploadedAt: text(metaRow[0]), rowCount: num(metaRow[1]), fileName: text(metaRow[2]) }
+    : null;
+  return { rows, meta };
+}
+
+export type OnlineTransferStyleInventory = {
+  styleCode: string;
+  productName: string;
+  onlineStock: number;
+  offlineStock: number;
+  totalStock: number;
+  sizes: { color: string; colorName: string; size: string; onlineStock: number; offlineStock: number }[];
+};
+
+function buildOnlineTransferInventoryMap(skuRows: OnlineTransferStockSkuRow[]): Map<string, OnlineTransferStyleInventory> {
+  const map = new Map<string, OnlineTransferStyleInventory>();
+  for (const r of skuRows || []) {
+    if (!r.styleCode) continue;
+    if (!map.has(r.styleCode)) {
+      map.set(r.styleCode, { styleCode: r.styleCode, productName: r.productName, onlineStock: 0, offlineStock: 0, totalStock: 0, sizes: [] });
+    }
+    const item = map.get(r.styleCode)!;
+    if (!item.productName && r.productName) item.productName = r.productName;
+    item.onlineStock += r.onlineStock;
+    item.offlineStock += r.offlineStock;
+    item.totalStock += r.onlineStock + r.offlineStock;
+    item.sizes.push({ color: r.color, colorName: r.colorName, size: r.size, onlineStock: r.onlineStock, offlineStock: r.offlineStock });
+  }
+  return map;
+}
+
 export function aggregateProducts(rows: any[], storeName?: string, top = 10) {
   const map = new Map<string, any>();
   for (const r of rows) {
@@ -1127,8 +1242,19 @@ function buildProductAnalysisList(productRows: any[], inventoryRows: any[]) {
 }
 
 
-function buildOnlineTransferSuggestions(offlineRows: any[], onlineRows: any[], inventoryRows: any[]) {
-  const invMap = new Map(inventoryRows.map((r: any) => [r.styleCode, r]));
+function buildOnlineTransferSuggestions(
+  offlineRows: any[],
+  onlineRows: any[],
+  onlineStockMap: Map<string, OnlineTransferStyleInventory> | null,
+  legacyInventoryRows: any[]
+) {
+  // MARK 2026-09-28: "온라인 재고이관" 판단 기준을 ERP 실시간 재고시트(느리고 자주 stale)에서
+  // 판매데이터 업로드 스냅샷(사람이 직접 올려서 최신성이 보장됨, RT 파이프라인과 동일한 발상)으로
+  // 교체 — 스냅샷이 있으면 그걸 쓰고, 없으면(아직 한 번도 안 올렸으면) 기존 방식으로 폴백합니다.
+  const invMap: Map<string, any> =
+    onlineStockMap && onlineStockMap.size
+      ? onlineStockMap
+      : new Map(legacyInventoryRows.map((r: any) => [r.styleCode, r]));
   const offlineAgg = aggregateProducts(offlineRows, undefined, 9999);
   const onlineAgg = aggregateProducts(onlineRows, undefined, 9999);
   const onlineSalesMap = new Map(onlineAgg.map((r: any) => [r.styleCode, r]));
@@ -1219,7 +1345,8 @@ async function buildInventory(
   productRows: any[],
   inventoryRows: any[],
   companyTopProducts: any[],
-  storeStockSnapshot?: { rows: StoreStockSnapshotRow[]; meta: any } | null
+  storeStockSnapshot?: { rows: StoreStockSnapshotRow[]; meta: any } | null,
+  onlineTransferStock?: { rows: OnlineTransferStockSkuRow[]; meta: any } | null
 ) {
   const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
   const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
@@ -1229,10 +1356,12 @@ async function buildInventory(
   const invMap = new Map(inventoryRows.map((r) => [r.styleCode, r]));
   const allProducts = aggregateProducts(coreProducts, undefined, 9999);
 
+  const onlineTransferInventoryMap = buildOnlineTransferInventoryMap(onlineTransferStock?.rows || []);
+
   const stockoutRisk: any[] = [];
   const overstockRisk: any[] = [];
   const allocationSuggestions: any[] = [];
-  const onlineTransferSuggestions = buildOnlineTransferSuggestions(coreProducts, onlineProducts, inventoryRows);
+  const onlineTransferSuggestions = buildOnlineTransferSuggestions(coreProducts, onlineProducts, onlineTransferInventoryMap, inventoryRows);
 
   for (const p of allProducts) {
     const inv: any = invMap.get(p.styleCode);
@@ -1790,6 +1919,10 @@ async function buildInventory(
     overstockRisk: overstockRisk.sort((a, b) => b.offlineWeeks - a.offlineWeeks).slice(0, 10),
     allocationSuggestions: allocationSuggestions.sort((a, b) => b.weekAmount - a.weekAmount).slice(0, 5),
     onlineTransferSuggestions,
+    // MARK 2026-09-28: 온라인 재고이관 요청 화면(사이즈 단위 조회)에서 쓰는 스타일별×사이즈별
+    // 온/오프 가용재고 맵 — 판매데이터 업로드 스냅샷 기준(없으면 빈 배열).
+    onlineTransferInventory: [...onlineTransferInventoryMap.values()],
+    onlineTransferStockMeta: onlineTransferStock?.meta || null,
     rtSuggestions: sortedRtSuggestions.slice(0, RT_SUGGESTION_SAFETY_CAP),
     rtEligibleProductRank: RT_ELIGIBLE_RANK,
     rtSuggestionProductCount,
@@ -3983,9 +4116,10 @@ export async function buildDashboardDataFromGoogleSheet() {
   // MARK 2026-09-22: 임시로 여기서 PIP 읽기를 꺼서 OOM 원인을 격리해봤는데, 꺼도 OOM이
   // 그대로 재현돼서 범인이 아닌 걸로 확인됐습니다(진짜 원인은 loadPromotionPerformance() —
   // 아래 buildPerformanceAnalysis 관련 주석 참고). 다시 켭니다.
-  const [productRowsRaw, storeStockSnapshotForRt] = await Promise.all([
+  const [productRowsRaw, storeStockSnapshotForRt, onlineTransferStockSnapshot] = await Promise.all([
     buildProductRowsFromDailyHistory(),
     readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
+    readOnlineTransferStockSnapshot().catch(() => ({ rows: [] as OnlineTransferStockSkuRow[], meta: null })),
   ]);
   const inventoryRows = parseInventory(values[inventorySheet] || []);
   const performance = await loadPromotionPerformance();
@@ -4016,8 +4150,8 @@ export async function buildDashboardDataFromGoogleSheet() {
   const weeklyChange = rate(weeklyTotal, weeklyPrev);
   const topProduct = companyTopProducts[0];
 
-  // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지
-  const inventory = { ...(await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt)), performance };
+  // 재고CTRL은 현재 ERP 상품/재고 데이터 기준 유지 (단, 온라인 재고이관만 판매데이터 업로드 스냅샷 기준)
+  const inventory = { ...(await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt, onlineTransferStockSnapshot)), performance };
   const latestPerformance = performance?.byDate?.[performance?.latestDate || ""] || {};
   const rtBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "RT") || {};
   const promoBucket = (latestPerformance.byCategory || []).find((b: any) => b.category === "PROMOTION") || {};

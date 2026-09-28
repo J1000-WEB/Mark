@@ -15,6 +15,7 @@ import {
   buildPeriodSalesFromDailyHistory,
 } from "@/lib/salesDataUpload";
 import { saveReportSnapshot } from "@/lib/salesDataSnapshot";
+import { saveOnlineTransferStockSnapshot } from "@/lib/dataBuilder";
 import { recordUpload } from "@/lib/uploadAlertState";
 import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
@@ -127,6 +128,19 @@ export async function POST(req: Request) {
     if (stockWbs.length) {
       await recordUpload("카테고리가격").catch(() => {});
       await recordUpload("재고물류").catch(() => {});
+      // MARK 2026-09-28: 재고CTRL의 "온라인 재고이관"이 이 재고 업로드(사이즈 단위 가용재고 포함)를
+      // 그대로 소스로 쓰도록 스냅샷을 같이 저장합니다 — 실패해도 리포트 저장 자체는 막지 않습니다.
+      await saveOnlineTransferStockSnapshot(
+        stockRows.map((r) => ({
+          styleCode: r.styleCode,
+          productName: r.productName,
+          colorCode: r.colorCode,
+          colorName: r.colorName,
+          size: r.size,
+          stockOnline: r.stockOnline,
+          stockOffline: r.stockOffline,
+        }))
+      ).catch((e) => console.error("[sales-data-upload] 온라인이관 재고 스냅샷 저장 실패:", e));
     }
     if (productionWbs.length) {
       await recordUpload("생산").catch(() => {});

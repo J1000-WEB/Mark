@@ -8,13 +8,17 @@ const CHANNEL_LABEL: Record<string, string> = {
   musinsa: "무신사",
   hancollection: "한컬렉션",
   duty_free: "면세",
+  factory_yongin: "팩토리아울렛 용인점",
 };
 
-function detectChannelFromFilename(filename: string): "musinsa" | "hancollection" | "duty_free" | null {
+function detectChannelFromFilename(filename: string): "musinsa" | "hancollection" | "duty_free" | "factory_yongin" | null {
   if (filename.startsWith("pos_purchase_settlement")) return "musinsa";
   if (filename.startsWith("매출일보")) return "hancollection";
   if (filename.startsWith("매출재고조회")) return "duty_free";
   return null;
+  // 참고: 팩토리아울렛 용인점 정산서는 파일명이 일정하지 않아서 서버(consignment-upload API)가
+  // 헤더 내용으로 인식합니다. 그래서 업로드 전 미리보기에선 "알 수 없음"으로 보일 수 있어도,
+  // 업로드하면 서버가 알아서 인식해 정상 처리됩니다.
 }
 
 export default function ConsignmentUploadDashboard() {
@@ -78,7 +82,7 @@ export default function ConsignmentUploadDashboard() {
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">인샵매출업로드</h1>
-            <p className="mt-1 text-sm text-slate-500">무신사 / 한컬렉션 / 면세 EDI 원본 파일을 올리면 자동으로 가공해서 UPLOAD 시트에 쌓아요.</p>
+            <p className="mt-1 text-sm text-slate-500">무신사 / 한컬렉션 / 면세 / 팩토리아울렛 용인점 EDI 원본 파일을 올리면 자동으로 가공해서 UPLOAD 시트에 쌓아요.</p>
           </div>
           <NavTabs active="inventory" />
         </header>
@@ -179,7 +183,7 @@ export default function ConsignmentUploadDashboard() {
 
             {result.flaggedCount > 0 && (
               <div className="mt-4 rounded-2xl bg-amber-50 p-4">
-                <p className="text-xs font-black text-amber-800">아래 바코드는 15자 이상이라 품번코드가 잘못됐을 수 있어요 (UPLOAD 시트에도 노란색으로 표시해뒀어요):</p>
+                <p className="text-xs font-black text-amber-800">아래 바코드는 품번코드가 잘못됐을 수 있어요 (UPLOAD 시트에도 노란색으로 표시해뒀어요):</p>
                 <ul className="mt-2 space-y-1 text-xs font-semibold text-amber-700">
                   {result.flaggedItems.map((it: any, i: number) => (
                     <li key={i}>• {it.barcode} — {it.reason}</li>
@@ -204,6 +208,7 @@ export default function ConsignmentUploadDashboard() {
             <li>• 무신사(pos_purchase_settlement_*): 매장명으로 채널코드 조회, 바코드/수량/단가는 원본 그대로</li>
             <li>• 한컬렉션(매출일보_*): 채널코드 고정, 바코드는 밑줄(_) 뒤 제거, 15자 이상이면 노란색 표시</li>
             <li>• 면세(매출재고조회_*): 날짜 직접 지정, 수량 0인 행 제외, 단가 0이면 10원 처리, 수량 1이 아니면 1개 단위로 분할</li>
+            <li>• 팩토리아울렛 용인점(정산서, 파일명 대신 헤더로 인식): 채널코드 42005 고정, 스타일(바코드) 칼라코드/순서 자동수정, 수량 0인 행 제외</li>
           </ul>
         </Card>
       </div>

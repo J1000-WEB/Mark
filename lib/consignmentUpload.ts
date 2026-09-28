@@ -1,15 +1,30 @@
 import * as XLSX from "xlsx";
 import { getSheetValuesById, appendValuesById, getSheetPropsById, getSheetsClient } from "@/lib/googleSheets";
+import {
+  fixFullColorNameToCode,
+  fixOldStyleSizeColorOrder,
+  DEFAULT_SIZE_CODES,
+  needsBarcodeValidation,
+  isKnownBarcode,
+} from "@/lib/barcodeFix";
+import barcodeMasterList from "@/data/barcodeMaster.json";
 
 // MARK 6.8: 위탁샵(면세/한컬렉션/무신사) 인샵매출 자동 가공
 // 세 곳 다 자체 전산을 안 써서, 각자 EDI에서 받은 원본 파일을 매장이 직접 다운받아 업로드하면
 // 여기서 공통 포맷(일자/POS/채널/바코드/수량/단가)으로 변환해 UPLOAD 시트에 쌓습니다.
 
+// MARK 2026-09-28: 바코드 자동수정(칼라명→코드, 구품번 사이즈/컬러 순서 뒤바뀜 보정) 로직은
+// lib/barcodeFix.js에 있습니다 — ERP 에이전트(erp-agent/build-inshop-upload.js)와 완전히 같은
+// 로직을 쓰기 위해 그쪽으로 뺐습니다. 이 파일에서 로직을 다시 손대지 말고 barcodeFix.js를 고쳐주세요.
+// 실제 존재하는 바코드 1만8천여 개 목록(data/barcodeMaster.json)으로, S/W로 시작하는 구품번체계만
+// (G로 시작하는 신품번체계는 대상 아님) 자동수정 후에도 여전히 실제 바코드가 맞는지 검증합니다.
+const BARCODE_MASTER_SET = new Set<string>((barcodeMasterList as string[]).map((b) => String(b).toUpperCase()));
+
 export const UPLOAD_SPREADSHEET_ID = "1531ifBVtAkMWSl2IGLcydLfYRe2_L8V-xHLvGQXLd3M";
 export const UPLOAD_SHEET_NAME = "UPLOAD";
 export const STORE_CODE_SHEET_NAME = "점포코드";
 
-export type ConsignmentChannel = "musinsa" | "hancollection" | "duty_free";
+export type ConsignmentChannel = "musinsa" | "hancollection" | "duty_free" | "factory_yongin";
 
 export type UploadRow = {
   date: string; // YYYYMMDD (문자열이지만 숫자로 취급)
@@ -42,6 +57,24 @@ export function detectChannelFromFilename(filename: string): ConsignmentChannel 
   if (name.startsWith("pos_purchase_settlement")) return "musinsa";
   if (name.startsWith("매출일보")) return "hancollection";
   if (name.startsWith("매출재고조회")) return "duty_free";
+  return null;
+}
+
+// MARK 2026-09-28: 팩토리아울렛 용인점 정산서는 다운받을 때 파일명이 일정하지 않을 수 있어서,
+// 파일명으로 못 알아내면 헤더 행 내용으로 한 번 더 확인합니다(이 정산서만 갖고 있는 열 조합).
+export function detectChannelFromWorkbook(workbook: XLSX.WorkBook): ConsignmentChannel | null {
+  try {
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+    const header = (raw[0] || []).map((v) => text(v));
+    const has = (name: string) => header.includes(name);
+    if (has("매입처브랜드명") && has("반품여부") && has("수량합계") && has("스타일")) {
+      return "factory_yongin";
+    }
+  } catch {
+    // 못 읽으면 그냥 못 찾은 걸로 처리
+  }
   return null;
 }
 
@@ -102,16 +135,9 @@ export async function loadColorCodeList(): Promise<ColorCodeEntry[]> {
 }
 
 // 바코드에 풀네임 칼라명이 들어간 경우, 매칭되는 칼라코드로 치환을 시도합니다.
+// (실제 로직은 lib/barcodeFix.ts의 fixFullColorNameToCode — ERP 에이전트와 같은 함수를 씁니다.)
 export function tryAutoFixBarcode(barcode: string, colorCodeList: ColorCodeEntry[]): { fixed: string; changed: boolean; matchedName?: string } {
-  const upper = barcode.toUpperCase();
-  for (const { code, name } of colorCodeList) {
-    const idx = upper.indexOf(name);
-    if (idx >= 0) {
-      const fixed = barcode.slice(0, idx) + code + barcode.slice(idx + name.length);
-      return { fixed, changed: true, matchedName: name };
-    }
-  }
-  return { fixed: barcode, changed: false };
+  return fixFullColorNameToCode(barcode, colorCodeList);
 }
 
 // 위 시트가 비어있거나 아직 없을 때를 대비한 폴백(사용자가 준 실제 값 기준)
@@ -125,6 +151,7 @@ const FALLBACK_STORE_CODES: Record<string, string> = {
   "무신사 스토어 대구": "86001",
   "무신사 스토어 AK플라자 수원점": "92001",
   "무신사 백 & 캡클럽 서울숲": "91001",
+  "팩토리아울렛 용인점": "42005",
 };
 
 function resolveStoreCode(name: string, storeCodeMap: Map<string, string>): string {
@@ -192,7 +219,12 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
   const warnings: string[] = [];
   if (!channel) warnings.push("한컬렉션 채널코드를 점포코드 시트에서 찾지 못했습니다.");
 
-  let autoFixedCount = 0;
+  // 칼라코드 Set (fixOldStyleSizeColorOrder에서 "이 접미사가 진짜 컬러코드인지" 확인할 때 씁니다)
+  const colorCodeSet = new Set(colorCodeList.map((e) => e.code.toUpperCase()));
+
+  let colorNameFixedCount = 0; // 칼라 풀네임 → 코드 (예: BLACK → BK)
+  let orderFixedCount = 0; // 구품번 사이즈/컬러 순서 뒤바뀜 (예: WBD2L43545BKXL → WBD2L43545XLBK)
+  let stillInvalidCount = 0; // 자동수정 후에도 실제 바코드 목록에 없어서 확인 필요
 
   for (let i = headerRow + 1; i < raw.length; i++) {
     const row = raw[i];
@@ -209,22 +241,39 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
     // 밑줄(_) 뒤 부가정보 제거
     if (barcode.includes("_")) barcode = barcode.split("_")[0];
 
-    let flagged = barcode.length >= 15;
-    let flagReason: string | undefined;
     let autoFixed = false;
 
-    if (flagged && colorCodeList.length) {
-      const attempt = tryAutoFixBarcode(barcode, colorCodeList);
+    // 1) 칼라명이 코드 대신 풀네임으로 들어간 경우 자동 수정 (예: BLACK → BK)
+    //    — ERP 에이전트(build-inshop-upload.js)와 동일하게 13자 이상일 때만 시도합니다.
+    if (barcode.length >= 13 && colorCodeList.length) {
+      const attempt = fixFullColorNameToCode(barcode, colorCodeList);
       if (attempt.changed) {
         barcode = attempt.fixed;
         autoFixed = true;
-        autoFixedCount++;
-        flagged = barcode.length >= 15; // 수정 후에도 여전히 길면 계속 확인 필요로 남김
+        colorNameFixedCount++;
       }
     }
 
-    if (flagged) {
+    // 2) S/W로 시작하는 구품번체계의 사이즈/컬러 순서가 뒤집힌 경우 자동 수정
+    //    (G로 시작하는 신품번체계는 이 보정 대상이 아닙니다 — fixOldStyleSizeColorOrder가 알아서 걸러냄)
+    const orderAttempt = fixOldStyleSizeColorOrder(barcode, colorCodeSet, DEFAULT_SIZE_CODES, BARCODE_MASTER_SET);
+    if (orderAttempt.changed) {
+      barcode = orderAttempt.fixed;
+      autoFixed = true;
+      orderFixedCount++;
+    }
+
+    // 3) 확인 필요 여부 판단: (a) 여전히 너무 길거나, (b) S/W 구품번인데 자동수정 후에도
+    //    실제 바코드 1만8천여 개 목록에 없는 경우. G로 시작하는 신품번체계는 (b) 검증 대상이 아닙니다.
+    let flagged = false;
+    let flagReason: string | undefined;
+    if (barcode.length >= 15) {
+      flagged = true;
       flagReason = `바코드 ${barcode.length}자 - 품번코드 확인 필요`;
+    } else if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+      flagged = true;
+      flagReason = "실제 바코드 목록에 없는 품번코드 - 확인 필요";
+      stillInvalidCount++;
     }
 
     rows.push({
@@ -240,7 +289,94 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
     });
   }
 
-  if (autoFixedCount) warnings.push(`칼라코드 매핑으로 ${autoFixedCount}건의 품번코드를 자동 수정했습니다.`);
+  if (colorNameFixedCount) warnings.push(`칼라코드 매핑으로 ${colorNameFixedCount}건의 품번코드를 자동 수정했습니다.`);
+  if (orderFixedCount) warnings.push(`구품번 사이즈/컬러 순서가 뒤집혀있던 ${orderFixedCount}건을 자동으로 바로잡았습니다.`);
+  if (stillInvalidCount) warnings.push(`자동수정 후에도 실제 바코드 목록에 없는 품번코드가 ${stillInvalidCount}건 있어 확인이 필요합니다.`);
+
+  return { rows, warnings };
+}
+
+// ================= 팩토리아울렛 용인점 =================
+// 원본: 매장별 판매 정산서(헤더가 1번째 줄에 바로 있음)
+// D=판매일자(YYYY-MM-DD), L=스타일(바코드, 한컬렉션처럼 칼라 풀네임/순서 자동수정 필요),
+// P=수량합계(반품은 이미 마이너스로 들어옴), V=판매가
+// 채널코드는 42005로 고정(사용자 지침, 2026-09-28)
+export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<string, string>, colorCodeList: ColorCodeEntry[] = []): { rows: UploadRow[]; warnings: string[] } {
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+  const channel = resolveStoreCode("팩토리아울렛 용인점", storeCodeMap);
+  const rows: UploadRow[] = [];
+  const warnings: string[] = [];
+  if (!channel) warnings.push("팩토리아울렛 용인점 채널코드를 점포코드 시트에서 찾지 못했습니다.");
+
+  const colorCodeSet = new Set(colorCodeList.map((e) => e.code.toUpperCase()));
+  let colorNameFixedCount = 0;
+  let orderFixedCount = 0;
+  let stillInvalidCount = 0;
+
+  for (let i = 1; i < raw.length; i++) {
+    const row = raw[i];
+    if (!row || !row.length) continue;
+
+    let barcode = text(row[11]); // L열
+    if (!barcode) continue;
+
+    const dateRaw = row[3]; // D열
+    const qty = num(row[15]); // P열
+    const price = num(row[21]); // V열
+    if (!qty) continue; // 수량 0인 행은 제외
+
+    if (barcode.includes("_")) barcode = barcode.split("_")[0];
+
+    let autoFixed = false;
+
+    // 1) 칼라명이 코드 대신 풀네임으로 들어간 경우 자동 수정 (예: MELANGEGREY → MG)
+    if (barcode.length >= 13 && colorCodeList.length) {
+      const attempt = fixFullColorNameToCode(barcode, colorCodeList);
+      if (attempt.changed) {
+        barcode = attempt.fixed;
+        autoFixed = true;
+        colorNameFixedCount++;
+      }
+    }
+
+    // 2) S/W로 시작하는 구품번체계의 사이즈/컬러 순서 보정 (실제 바코드 목록으로 확인)
+    const orderAttempt = fixOldStyleSizeColorOrder(barcode, colorCodeSet, DEFAULT_SIZE_CODES, BARCODE_MASTER_SET);
+    if (orderAttempt.changed) {
+      barcode = orderAttempt.fixed;
+      autoFixed = true;
+      orderFixedCount++;
+    }
+
+    let flagged = false;
+    let flagReason: string | undefined;
+    if (barcode.length >= 15) {
+      flagged = true;
+      flagReason = `바코드 ${barcode.length}자 - 품번코드 확인 필요`;
+    } else if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+      flagged = true;
+      flagReason = "실제 바코드 목록에 없는 품번코드 - 확인 필요";
+      stillInvalidCount++;
+    }
+
+    rows.push({
+      date: parseDateLike(dateRaw),
+      pos: "P1",
+      channel,
+      barcode,
+      qty,
+      price,
+      flagged,
+      flagReason,
+      autoFixed,
+    });
+  }
+
+  if (colorNameFixedCount) warnings.push(`칼라코드 매핑으로 ${colorNameFixedCount}건의 품번코드를 자동 수정했습니다.`);
+  if (orderFixedCount) warnings.push(`구품번 사이즈/컬러 순서를 ${orderFixedCount}건 자동으로 바로잡았습니다.`);
+  if (stillInvalidCount) warnings.push(`자동수정 후에도 실제 바코드 목록에 없는 품번코드가 ${stillInvalidCount}건 있어 확인이 필요합니다.`);
 
   return { rows, warnings };
 }
@@ -301,6 +437,7 @@ export function parseByChannel(
 ) {
   if (channel === "musinsa") return parseMusinsa(workbook, storeCodeMap);
   if (channel === "hancollection") return parseHancollection(workbook, storeCodeMap, colorCodeList);
+  if (channel === "factory_yongin") return parseFactoryYongin(workbook, storeCodeMap, colorCodeList);
   return parseDutyFree(workbook, storeCodeMap, userDate);
 }
 

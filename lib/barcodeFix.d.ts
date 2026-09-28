@@ -10,6 +10,6 @@ export const DEFAULT_SIZE_CODES: string[];
 export const DEFAULT_COLOR_NAME_TO_CODE: ColorNameToCodeEntry[];
 
 export function fixFullColorNameToCode(barcode: string, nameToCodeList?: ColorNameToCodeEntry[]): FixResult;
-export function fixOldStyleSizeColorOrder(barcode: string, colorCodes?: Set<string>, sizeCodes?: string[]): FixResult;
+export function fixOldStyleSizeColorOrder(barcode: string, colorCodes?: Set<string>, sizeCodes?: string[], masterSet?: Set<string>): FixResult;
 export function needsBarcodeValidation(barcode: string): boolean;
 export function isKnownBarcode(barcode: string, masterSet?: Set<string>): boolean;

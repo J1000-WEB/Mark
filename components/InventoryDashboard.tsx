@@ -1234,19 +1234,48 @@ function ProductAnalysisSection({ data }: { data: any }) {
 
 
 
+// MARK 2026-09-28: "온라인 재고이관 요청" 조회의 재고 기준을 온오프재고현황(ERP 실시간 시트)에서
+// 판매데이터 업로드(재고 파일) 스냅샷(data.onlineTransferInventory, 사이즈 단위)으로 교체 —
+// RT 파이프라인과 같은 이유로, 사람이 직접 올린 스냅샷이 라이브 시트보다 최신성/안정성이 낫습니다.
+// 판매(weekNet/금주매출) 정보는 스냅샷에 없어서(재고만 있음) 여전히 productAnalysisList에서
+// 참고용으로만 끌어옵니다 — 이관 제안 수량 자체는 스냅샷 재고 기준으로 계산합니다.
 function AllocationLookupSection({ data }: { data: any }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<any>(null);
+  const [notFoundInSnapshot, setNotFoundInSnapshot] = useState(false);
 
-  const products = data.productAnalysisList || [];
+  const stockSnapshot: any[] = data.onlineTransferInventory || [];
+  const salesRef: any[] = data.productAnalysisList || [];
+  const snapshotMeta = data.onlineTransferStockMeta || null;
 
   function search() {
     const q = query.trim().toLowerCase();
     if (!q) return;
-    const found = products.find((p: any) => String(p.styleCode || "").toLowerCase() === q)
-      || products.find((p: any) => String(p.styleCode || "").toLowerCase().includes(q))
-      || products.find((p: any) => String(p.productName || "").toLowerCase().includes(q));
-    setSelected(found || null);
+
+    const foundStock = stockSnapshot.find((p: any) => String(p.styleCode || "").toLowerCase() === q)
+      || stockSnapshot.find((p: any) => String(p.styleCode || "").toLowerCase().includes(q))
+      || stockSnapshot.find((p: any) => String(p.productName || "").toLowerCase().includes(q));
+
+    if (foundStock) {
+      const salesInfo = salesRef.find((p: any) => p.styleCode === foundStock.styleCode);
+      setSelected({ ...foundStock, weekNet: salesInfo?.weekNet, weekAmount: salesInfo?.weekAmount, season: salesInfo?.season });
+      setNotFoundInSnapshot(false);
+      return;
+    }
+
+    // 재고 스냅샷엔 없지만 판매이력엔 있는 품번(아직 재고 파일을 안 올렸거나, 그 품번이
+    // 최근 재고 업로드 파일에 없었던 경우) — 검토는 못 해줘도 "찾긴 했다"는 걸 알려줍니다.
+    const foundSales = salesRef.find((p: any) => String(p.styleCode || "").toLowerCase() === q)
+      || salesRef.find((p: any) => String(p.styleCode || "").toLowerCase().includes(q))
+      || salesRef.find((p: any) => String(p.productName || "").toLowerCase().includes(q));
+    if (foundSales) {
+      setSelected({ styleCode: foundSales.styleCode, productName: foundSales.productName, season: foundSales.season, sizes: [], onlineStock: 0, offlineStock: 0, totalStock: 0 });
+      setNotFoundInSnapshot(true);
+      return;
+    }
+
+    setSelected(null);
+    setNotFoundInSnapshot(false);
   }
 
   const onlineStock = Number(selected?.onlineStock || 0);
@@ -1256,7 +1285,8 @@ function AllocationLookupSection({ data }: { data: any }) {
   const offlineWeeks = weekNet > 0 ? offlineStock / weekNet : offlineStock > 0 ? 999 : 0;
   const targetStock = weekNet > 0 ? Math.ceil(weekNet * 3) : 0;
   const needQty = selected ? Math.max(0, targetStock - offlineStock) : 0;
-  const suggestQty = selected ? Math.max(0, Math.min(needQty, onlineStock)) : 0;
+  const suggestQty = selected && !notFoundInSnapshot ? Math.max(0, Math.min(needQty, onlineStock)) : 0;
+  const sizes: any[] = selected?.sizes || [];
 
   return (
     <Card title="온라인재고 이관 요청" tone="purple">
@@ -1273,11 +1303,19 @@ function AllocationLookupSection({ data }: { data: any }) {
         </button>
       </div>
 
+      {snapshotMeta?.uploadedAt ? (
+        <p className="mt-3 text-xs font-bold text-emerald-600">
+          ✓ 판매데이터 업로드(재고 파일) {snapshotMeta.uploadedAt} 업로드분 기준으로 사이즈 단위까지 조회합니다.
+        </p>
+      ) : (
+        <p className="mt-3 text-xs font-bold text-amber-600">
+          ⚠ 아직 재고 스냅샷이 없어요 — "판매데이터 제안" 탭에서 재고 파일을 올리면 사이즈 단위 이관 조회가 가능해져요.
+        </p>
+      )}
+
       {!selected ? (
         <div className="mt-4 rounded-2xl bg-white/70 p-5 text-sm font-semibold leading-6 text-slate-600">
-          품번을 입력하면 온오프재고현황의 스타일별 합산 재고를 기준으로 온라인 → 오프라인 이관 가능 수량을 검토합니다.
-          <br />
-          기준 재고: R열 가용(온) / S열 가용(오프) / T열 가용(합계)
+          품번을 입력하면 판매데이터 업로드(재고 파일)의 사이즈 단위 가용재고를 기준으로 온라인 → 오프라인 이관 가능 수량을 검토합니다.
         </div>
       ) : (
         <div className="mt-5 space-y-4">
@@ -1285,35 +1323,82 @@ function AllocationLookupSection({ data }: { data: any }) {
             <p className="text-sm text-slate-500">{selected.season || "-"} · {selected.styleCode}</p>
             <h3 className="mt-1 text-2xl font-black">{selected.productName}</h3>
             <p className="mt-2 text-sm font-semibold text-slate-600">
-              스타일 단위 합산 기준 · 금주 판매 {fmtNum(weekNet)}개 · 금주매출 {won(selected.weekAmount)}
+              스타일 합산(사이즈별 상세는 아래) · 금주 판매 {fmtNum(weekNet)}개 · 금주매출 {won(selected.weekAmount)}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <Stat label="온라인 가용" value={`${fmtNum(onlineStock)}개`} colorClass="text-blue-600" />
-            <Stat label="오프라인 가용" value={`${fmtNum(offlineStock)}개`} colorClass="text-emerald-600" />
-            <Stat label="총 가용" value={`${fmtNum(totalStock)}개`} />
-            <Stat label="오프라인 재고주수" value={stockWeekText(offlineWeeks)} colorClass={stockWeekClass(offlineWeeks)} />
-            <Stat label="이관 제안" value={`${fmtNum(suggestQty)}개`} colorClass={suggestQty > 0 ? "text-red-600" : "text-slate-500"} />
-          </div>
+          {notFoundInSnapshot ? (
+            <div className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-700">
+              ⚠ 이 품번은 최근 업로드된 재고 스냅샷에서 찾지 못했어요(재고 파일에 없었거나 품번이 다를 수 있어요) — 이관 제안을 계산할 수 없습니다.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                <Stat label="온라인 가용" value={`${fmtNum(onlineStock)}개`} colorClass="text-blue-600" />
+                <Stat label="오프라인 가용" value={`${fmtNum(offlineStock)}개`} colorClass="text-emerald-600" />
+                <Stat label="총 가용" value={`${fmtNum(totalStock)}개`} />
+                <Stat label="오프라인 재고주수" value={stockWeekText(offlineWeeks)} colorClass={stockWeekClass(offlineWeeks)} />
+                <Stat label="이관 제안" value={`${fmtNum(suggestQty)}개`} colorClass={suggestQty > 0 ? "text-red-600" : "text-slate-500"} />
+              </div>
 
-          <ReasonBox title="이관 판단">
-            {suggestQty > 0 ? (
-              <>
-                <p>
-                  오프라인 목표재고를 최근 주간판매의 3주분으로 보면 목표 {fmtNum(targetStock)}개,
-                  현재 오프라인 가용 {fmtNum(offlineStock)}개로 부족분은 {fmtNum(needQty)}개입니다.
-                </p>
-                <p className="mt-1">
-                  온라인 가용 {fmtNum(onlineStock)}개 중 최대 {fmtNum(suggestQty)}개를 오프라인 이관 요청 후보로 볼 수 있습니다.
-                </p>
-              </>
-            ) : (
-              <p>
-                현재 기준으로는 온라인 가용 부족 또는 오프라인 재고주수 충분으로 자동 이관 제안 수량이 없습니다.
-              </p>
-            )}
-          </ReasonBox>
+              <ReasonBox title="이관 판단">
+                {suggestQty > 0 ? (
+                  <>
+                    <p>
+                      오프라인 목표재고를 최근 주간판매의 3주분으로 보면 목표 {fmtNum(targetStock)}개,
+                      현재 오프라인 가용 {fmtNum(offlineStock)}개로 부족분은 {fmtNum(needQty)}개입니다.
+                    </p>
+                    <p className="mt-1">
+                      온라인 가용 {fmtNum(onlineStock)}개 중 최대 {fmtNum(suggestQty)}개를 오프라인 이관 요청 후보로 볼 수 있습니다.
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    현재 기준으로는 온라인 가용 부족 또는 오프라인 재고주수 충분으로 자동 이관 제안 수량이 없습니다.
+                  </p>
+                )}
+              </ReasonBox>
+
+              {sizes.length > 0 && (
+                <ReasonBox title="사이즈별 상세 (칼라/사이즈 단위)">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-semibold">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500">
+                          <th className="py-2 pr-3">칼라</th>
+                          <th className="py-2 pr-3">사이즈</th>
+                          <th className="py-2 pr-3 text-right">온라인 가용</th>
+                          <th className="py-2 pr-3 text-right">오프라인 가용</th>
+                          <th className="py-2 pr-3 text-right">사이즈별 이관 제안</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sizes
+                          .slice()
+                          .sort((a: any, b: any) => Number(b.onlineStock || 0) - Number(a.onlineStock || 0))
+                          .map((s: any, i: number) => {
+                            // 스타일 전체 이관 제안 수량을, 사이즈별 온라인 가용재고 비중대로 나눠서
+                            // 참고용으로 보여줍니다(스냅샷엔 사이즈별 판매량이 없어서 정확한 수요
+                            // 기반 배분은 아니고, 온라인 재고가 많은 사이즈 위주로 배분됩니다).
+                            const share = onlineStock > 0 ? Number(s.onlineStock || 0) / onlineStock : 0;
+                            const sizeSuggest = Math.min(Number(s.onlineStock || 0), Math.round(suggestQty * share));
+                            return (
+                              <tr key={`${s.color}-${s.size}-${i}`} className="border-b border-slate-100 last:border-0">
+                                <td className="py-2 pr-3">{s.colorName || s.color || "-"}</td>
+                                <td className="py-2 pr-3">{s.size || "-"}</td>
+                                <td className="py-2 pr-3 text-right text-blue-600">{fmtNum(s.onlineStock)}개</td>
+                                <td className="py-2 pr-3 text-right text-emerald-600">{fmtNum(s.offlineStock)}개</td>
+                                <td className="py-2 pr-3 text-right font-black text-red-600">{sizeSuggest > 0 ? `${fmtNum(sizeSuggest)}개` : "-"}</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </ReasonBox>
+              )}
+            </>
+          )}
         </div>
       )}
     </Card>

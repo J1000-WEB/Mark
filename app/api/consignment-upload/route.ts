@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import {
   detectChannelFromFilename,
+  detectChannelFromWorkbook,
   loadStoreCodeMap,
   loadColorCodeList,
   parseByChannel,
@@ -22,11 +23,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "파일이 없습니다." }, { status: 400 });
     }
 
-    const channel = detectChannelFromFilename(file.name);
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array", cellDates: true });
+
+    // 파일명으로 못 알아내면, 헤더 내용으로 한 번 더 확인합니다(예: 팩토리아울렛 용인점 정산서는
+    // 다운받을 때 파일명이 일정하지 않을 수 있어서).
+    const channel = detectChannelFromFilename(file.name) || detectChannelFromWorkbook(workbook);
     if (!channel) {
       return NextResponse.json({
         ok: false,
-        error: `파일명으로 어떤 위탁샵인지 확인하지 못했습니다: ${file.name} (무신사=pos_purchase_settlement로 시작, 한컬렉션=매출일보로 시작, 면세=매출재고조회로 시작)`,
+        error: `파일명/내용으로 어떤 위탁샵인지 확인하지 못했습니다: ${file.name} (무신사=pos_purchase_settlement로 시작, 한컬렉션=매출일보로 시작, 면세=매출재고조회로 시작, 팩토리아울렛 용인점=정산서 헤더로 인식)`,
       }, { status: 400 });
     }
 
@@ -34,11 +40,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, needsDate: true, channel, error: "면세 파일은 날짜를 먼저 지정해야 합니다." }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array", cellDates: true });
-
     const storeCodeMap = await loadStoreCodeMap();
-    const colorCodeList = channel === "hancollection" ? await loadColorCodeList() : [];
+    const colorCodeList = channel === "hancollection" || channel === "factory_yongin" ? await loadColorCodeList() : [];
     const { rows, warnings } = parseByChannel(channel, workbook, storeCodeMap, userDate, colorCodeList);
 
     if (!rows.length) {

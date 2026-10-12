@@ -32,6 +32,21 @@ function growthColor(n: number | null) {
   return n >= 0 ? "text-blue-600" : "text-rose-600";
 }
 
+// MARK 2026-10-12: "전년比 계산할 때 금액, 금액차이도 접었다 폈다 보고싶다" 요청 —
+// 전년금액(prevYearAmount)은 이미 서버가 내려주고 있어서, 금액차이(actual-prevYearAmount)만
+// 클라이언트에서 계산해서 같이 보여줍니다. 부호(+/-)는 growthColor와 같은 파랑/빨강 기준.
+function diffWon(actual: number | null | undefined, prevYearAmount: number | null | undefined) {
+  if (!Number.isFinite(actual) || !Number.isFinite(prevYearAmount)) return "-";
+  const diff = Number(actual) - Number(prevYearAmount);
+  const sign = diff >= 0 ? "+" : "";
+  return `${sign}${won(diff)}`;
+}
+
+function diffColor(actual: number | null | undefined, prevYearAmount: number | null | undefined) {
+  if (!Number.isFinite(actual) || !Number.isFinite(prevYearAmount)) return "text-slate-400";
+  return Number(actual) - Number(prevYearAmount) >= 0 ? "text-blue-600" : "text-rose-600";
+}
+
 // MARK 2026-09-25: 실적 금액을 같은 열(일간/주간/이번달) 안에서 상대적으로 비교해
 // 빨강(낮음)~초록(높음) 그라데이션 배경을 입히는 헬퍼. min===max(매장이 1개뿐이거나 전부
 // 같은 값)면 색을 안 입혀서 의미 없는 붉은색/초록색이 나오지 않게 합니다.
@@ -326,6 +341,10 @@ export default function StoreSalesSummaryDashboard() {
   // MARK 2026-09-25: "전년 객단가도 비교(이것도 접히게)" — 같은 토글에 묶어서 같이 접고 폅니다.
   const [showAvgReceipt, setShowAvgReceipt] = useState(false);
 
+  // MARK 2026-10-12: "전년比 계산할 때 금액, 금액차이도 접었다 폈다 보고싶다" 요청 — 객단가
+  // 토글과 같은 방식으로, 기본은 접어두고 눌러서 "전년금액"/"금액차이" 두 열을 펼쳐봅니다.
+  const [showYoyDetail, setShowYoyDetail] = useState(false);
+
   // MARK 2026-09-23: 구글드라이브에 올려둔 "전체매출" 파일을 수동으로 지금 바로 가져오기
   // (자동으로는 매일 새벽 cron이 같은 걸 호출함 — app/api/sales-summary-drive-import).
   const [driveImporting, setDriveImporting] = useState(false);
@@ -500,11 +519,15 @@ export default function StoreSalesSummaryDashboard() {
     };
   }, [filteredStores]);
 
-  const colSpanPerBlock = showAvgReceipt ? 6 : 4;
+  const colSpanPerBlock = (showAvgReceipt ? 6 : 4) + (showYoyDetail ? 2 : 0);
   const blockCount = customPeriod ? 6 : 5;
   // MARK 2026-09-24: 구분 열(64px) 삭제 + 매장명 열(150px→64px, 이름을 짧게 줄여서 그만큼
   // 안 필요해짐)만큼 최소폭도 줄였습니다.
-  const tableMinWidth = showAvgReceipt ? (customPeriod ? 3250 : 2750) : customPeriod ? 2150 : 1750;
+  // MARK 2026-10-12: showYoyDetail 켜지면 블록당 2열(전년금액/금액차이)씩 더 넓어지므로
+  // blockCount만큼(기간비교 포함 여부에 따라 5~6개) 폭도 같이 늘립니다.
+  const tableMinWidth =
+    (showAvgReceipt ? (customPeriod ? 3250 : 2750) : customPeriod ? 2150 : 1750) +
+    (showYoyDetail ? blockCount * 170 : 0);
 
   function PeriodHeaderGroup({ title, bg = "" }: { title: string; bg?: string }) {
     return (
@@ -527,6 +550,12 @@ export default function StoreSalesSummaryDashboard() {
         )}
         <th className={`${TH_NUM} ${bg}`}>달성률</th>
         <th className={`${TH_NUM} ${bg}`}>전년比</th>
+        {showYoyDetail && (
+          <>
+            <th className={`${TH_NUM} text-purple-200 ${bg}`}>전년금액</th>
+            <th className={`${TH_NUM} text-amber-200 ${bg}`}>금액차이</th>
+          </>
+        )}
       </>
     );
   }
@@ -553,6 +582,12 @@ export default function StoreSalesSummaryDashboard() {
         )}
         <td className={`border-t border-slate-100 ${TD_NUM} ${bg}`}>{pct(p.achievementRate)}</td>
         <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${growthColor(p.yoyGrowthRate)} ${bg}`}>{growthPct(p.yoyGrowthRate)}</td>
+        {showYoyDetail && (
+          <>
+            <td className={`border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>{wonOrDash(p.prevYearAmount)}</td>
+            <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${diffColor(p.actual, p.prevYearAmount)} ${bg}`}>{diffWon(p.actual, p.prevYearAmount)}</td>
+          </>
+        )}
       </>
     );
   }
@@ -740,6 +775,15 @@ export default function StoreSalesSummaryDashboard() {
               >
                 객단가/전년객단가 {showAvgReceipt ? "숨기기 ▲" : "보기 ▼"}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowYoyDetail((v) => !v)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-black ${
+                  showYoyDetail ? "bg-amber-600 text-white" : "border border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                전년금액/금액차이 {showYoyDetail ? "숨기기 ▲" : "보기 ▼"}
+              </button>
             </div>
 
             {/* MARK 2026-09-25: "점포별로 실적순으로 나열" 요청 — 정렬 기준을 고르면 왼쪽
@@ -844,6 +888,14 @@ export default function StoreSalesSummaryDashboard() {
                       <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.daily.yoyGrowthRate)}`}>
                         {growthPct(s.daily.yoyGrowthRate)}
                       </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.daily.actual, s.daily.prevYearAmount)}`}>
+                            {diffWon(s.daily.actual, s.daily.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
 
                       <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.weekly.target)}</td>
                       <td
@@ -862,6 +914,14 @@ export default function StoreSalesSummaryDashboard() {
                       <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.weekly.yoyGrowthRate)}`}>
                         {growthPct(s.weekly.yoyGrowthRate)}
                       </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.weekly.actual, s.weekly.prevYearAmount)}`}>
+                            {diffWon(s.weekly.actual, s.weekly.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
 
                       {customPeriod && (
                         <>
@@ -883,6 +943,18 @@ export default function StoreSalesSummaryDashboard() {
                           >
                             {growthPct(s.customPeriod?.yoyGrowthRate ?? null)}
                           </td>
+                          {showYoyDetail && (
+                            <>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
+                                {wonOrDash(s.customPeriod?.prevYearAmount ?? null)}
+                              </td>
+                              <td
+                                className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}`}
+                              >
+                                {diffWon(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}
+                              </td>
+                            </>
+                          )}
                         </>
                       )}
 
@@ -903,6 +975,14 @@ export default function StoreSalesSummaryDashboard() {
                       <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.monthly.yoyGrowthRate)}`}>
                         {growthPct(s.monthly.yoyGrowthRate)}
                       </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.monthly.actual, s.monthly.prevYearAmount)}`}>
+                            {diffWon(s.monthly.actual, s.monthly.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
 
                       <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.prevMonth.target)}</td>
                       <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.prevMonth.actual)}</td>
@@ -916,6 +996,14 @@ export default function StoreSalesSummaryDashboard() {
                       <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.prevMonth.yoyGrowthRate)}`}>
                         {growthPct(s.prevMonth.yoyGrowthRate)}
                       </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.prevMonth.actual, s.prevMonth.prevYearAmount)}`}>
+                            {diffWon(s.prevMonth.actual, s.prevMonth.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
 
                       <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.annual.ytdTarget)}</td>
                       <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.annual.ytdActual)}</td>
@@ -929,6 +1017,14 @@ export default function StoreSalesSummaryDashboard() {
                       <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.annual.yoyGrowthRate)}`}>
                         {growthPct(s.annual.yoyGrowthRate)}
                       </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.annual.ytdActual, s.annual.prevYearAmount)}`}>
+                            {diffWon(s.annual.ytdActual, s.annual.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>

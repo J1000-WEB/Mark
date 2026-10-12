@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { Readable } from "stream";
 
 function getPrivateKey() {
   const raw = process.env.GOOGLE_PRIVATE_KEY || "";
@@ -566,4 +567,41 @@ export async function uploadTextFileToDrive(fileName: string, content: string, m
 
   const fileId = res.data.id;
 return res.data;
+}
+
+// MARK 2026-10-12: "라운딩" 탭 사진 첨부용 — uploadTextFileToDrive와 같은 패턴인데
+// 바이너리(이미지)를 올립니다. googleapis는 media.body에 Buffer를 바로 못 받고
+// 스트림을 요구해서 Readable.from()으로 감쌉니다. 클라이언트에서 이미 리사이즈/압축한
+// JPEG만 받는 걸 전제로 합니다(원본 그대로 올리면 Vercel 요청 본문 한도에 걸릴 수 있음 —
+// app/api/upload-style-channel-sheet 등에서 쓰던 "청크 2MB 목표" 원칙과 같은 이유).
+export async function uploadBinaryFileToDrive(fileName: string, buffer: Buffer, mimeType: string) {
+  const drive = await getDriveClient();
+  const folderId = getDriveFolderId();
+
+  const res = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [folderId],
+      mimeType,
+    },
+    media: {
+      mimeType,
+      body: Readable.from(buffer),
+    },
+    fields: "id,name,mimeType",
+  });
+
+  return res.data;
+}
+
+// drive.file 스코프로 만든 파일은 그 서비스계정이 직접 다시 읽을 수 있습니다(공유 설정을
+// 안 바꿔도 됨) — 사진을 화면에 보여줄 때 공개 링크 대신 이 함수로 서버를 통해 내려줍니다.
+export async function downloadDriveFileWritable(fileId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  const drive = await getDriveClient();
+  const metaRes = await drive.files.get({ fileId, fields: "mimeType,name" });
+  const dataRes = await drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+  return {
+    buffer: Buffer.from(dataRes.data as ArrayBuffer),
+    mimeType: metaRes.data.mimeType || "application/octet-stream",
+  };
 }

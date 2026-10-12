@@ -344,6 +344,25 @@ export function buildProductMaster(rows: Row[]) {
   if (!rows?.length) return { byStyle, byColor };
 
   // 스타일별 채널별 입고판매재고현황은 2~3행이 다단 헤더이고 실제 데이터는 4행부터입니다.
+  //
+  // MARK 2026-10-02: "위탁추천 가용재고/매장상세 합산재고가 이상하다" 제보로 실제 파일
+  // (619열, 2026-10-02자)의 3행 다단헤더를 직접 열어서 대조해보니, 아래 열 번호들이 전부
+  // 밀려 있었습니다(아마 "사이즈" 열이 스타일정보 블록에 추가되면서 한 칸씩 밀렸는데 여기만
+  // 안 고쳐진 것으로 보입니다 — components/InventoryDashboard.tsx의 STOCK_COL은 이미
+  // 24→25로 고쳐져 있었습니다). 실제 헤더 기준 올바른 위치:
+  //   r[21~25] = 물류(기획/입고/출반/기타/재고), r[26~27] = 채널(판매/재고), r[28] = 합계(재고)
+  //   r[29~33] = 온라인팀(일간/일간금액/주간/누적/재고), r[34~38] = 오프라인팀(동일 5열)
+  // 품번 QBD2U98012/SI, WBD3L04503/GR 실데이터로 아래 값들을 검증했습니다:
+  //   - whStock(물류 재고) = r[25] — 이사님이 말씀하신 "탭 정상창고" 값과 정확히 일치
+  //   - cumulativeSalesQty(전체기간 누적판매) = r[26](채널 판매) — 온라인팀/오프라인팀/
+  //     글로벌팀/기타 4개 팀의 "누적"(r[32]+r[37]+r[42]+r[47])을 더한 값과 정확히 일치해서
+  //     채널 판매 열이 이미 그 합계를 담고 있다는 걸 확인했습니다.
+  //   - totalStock(합계 재고) = r[28] ("합계" 그룹의 "재고")
+  //   - onlineStock/offlineStock = 온라인팀/오프라인팀 블록의 "재고"(5번째 열) = r[33]/r[38]
+  // cumulativeSalesAmount(누적판매금액)는 이 시트에 "누적금액"에 대응하는 열이 아예 없어서
+  // (블록당 5개 지표가 일간/일간금액/주간/누적/재고뿐이라 "누적"은 금액이 아니라 수량입니다)
+  // 정확한 값을 못 찾았습니다 — 기존 값도 틀려있었던 자리라 일단 그대로 두지만, 이 필드를
+  // 쓰는 화면이 있다면 별도로 다시 확인이 필요합니다.
   for (const r of rows.slice(3)) {
     const style = text(r[13]);
     if (!style) continue;
@@ -364,11 +383,11 @@ export function buildProductMaster(rows: Row[]) {
       cost: num(r[17]),
       tagPrice: num(r[18]),
       salePrice: num(r[19]),
-      whStock: num(r[24]),
-      totalStock: num(r[27]),
-      onlineStock: num(r[31]),
-      offlineStock: num(r[35]),
-      cumulativeSalesQty: num(r[25]),
+      whStock: num(r[25]),
+      totalStock: num(r[28]),
+      onlineStock: num(r[33]),
+      offlineStock: num(r[38]),
+      cumulativeSalesQty: num(r[26]),
       cumulativeSalesAmount: num(r[34]) + num(r[30]) + num(r[38]),
     };
 

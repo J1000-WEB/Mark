@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 import DailySalesPanel from "@/components/DailySalesPanel";
+import SalesVoiceBriefing from "@/components/SalesVoiceBriefing";
+import { buildDailyBriefing, buildWeeklyBriefing } from "@/lib/salesBriefingScript";
 import { Card, Empty, Kpi, ProductList, StoreMiniList } from "@/components/Shared";
 import {
   badMonthly,
@@ -346,6 +348,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   const [weeklySnapshots, setWeeklySnapshots] = useState<any[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
   const [weeklyMode, setWeeklyMode] = useState<"snapshot" | "live">("live");
+  const [dailyDetail, setDailyDetail] = useState<any>(null);
 
   function normalizeWeeklyPayload(payload: any, snapshotMeta?: any) {
     const next = { ...(markData as any), ...(payload || {}) };
@@ -589,6 +592,25 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   const selectedReviewStore = reviewStore || weeklyGood[0]?.storeName || weeklyBad[0]?.storeName || "";
   const selectedStoreRow = core.find((r) => r.storeName === selectedReviewStore);
 
+  // MARK 2026-10-15: 일간/주간 음성 브리핑 대본 — 화면에 보이는 숫자만으로 만듭니다.
+  const briefingChapters = useMemo(() => {
+    if (active === "daily") return buildDailyBriefing({ totals: coreTotals, coreRows: core, shopRows, detail: dailyDetail });
+    if (active === "weekly") {
+      const cur = dashboardData?.weekly?.currentPeriod;
+      const periodText = cur?.start && cur?.end ? `${formatMdLabel(cur.start).replace("/", "월 ")}일부터 ${formatMdLabel(cur.end).replace("/", "월 ")}일까지,` : "";
+      return buildWeeklyBriefing({
+        totals: coreTotals,
+        coreRows: core,
+        shopRows,
+        weekly: dashboardData?.weekly,
+        targetAvailable: Boolean(dashboardData?.weekly?.weeklyTargetSummary?.available),
+        periodText,
+      });
+    }
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, dashboardData, dailyDetail]);
+
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -726,9 +748,26 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           )}
         </section>
 
-        {active === "daily" && <DailySalesPanel />}
+        {active === "daily" && (
+          <SalesVoiceBriefing
+            title="일간 매출 브리핑"
+            subtitle={dailyDetail?.sourceDate ? `기준일 ${dailyDetail.sourceDate}` : "전일 기준"}
+            chapters={briefingChapters}
+            prefKey="mark_voice_daily"
+          />
+        )}
 
-        {active === "weekly" && <Briefing lines={dashboardData.weekly?.aiBriefing || []} />}
+        {active === "daily" && <DailySalesPanel onData={setDailyDetail} />}
+
+        {/* MARK 2026-10-15: 기존 "주간 AI 브리핑" 카드는 음성 브리핑 안의 "AI 추가 인사이트" 챕터로 합쳤습니다. */}
+        {active === "weekly" && (
+          <SalesVoiceBriefing
+            title="주간 매출 브리핑"
+            subtitle={weeklyMode === "snapshot" ? "저장 스냅샷 기준" : "실시간 집계 기준"}
+            chapters={briefingChapters}
+            prefKey="mark_voice_weekly"
+          />
+        )}
 
         {active !== "monthly" && (
           <section className={`grid items-start gap-6 lg:grid-cols-2 ${active === "weekly" ? "lg:[&>section]:min-h-[1040px]" : ""}`}>

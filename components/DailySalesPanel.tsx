@@ -41,7 +41,7 @@ function RowList({ rows, mode }: { rows: any[]; mode: "product" | "channel" | "r
   );
 }
 
-export default function DailySalesPanel() {
+export default function DailySalesPanel({ onData }: { onData?: (data: any) => void } = {}) {
   const [data, setData] = useState<any>(null);
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
@@ -78,6 +78,12 @@ export default function DailySalesPanel() {
       setSaving(false);
     }
   }
+
+  // MARK 2026-10-15: 음성 브리핑(상품 TOP/결품위험)이 같은 데이터를 쓰도록 부모에게 넘겨줍니다.
+  useEffect(() => {
+    if (data && onData) onData(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   useEffect(() => {
     load(false).catch(() => setStatus("Daily Sales 데이터를 불러오지 못했습니다."));

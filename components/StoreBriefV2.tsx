@@ -841,6 +841,45 @@ export default function StoreBriefV2({
   const [cards, setCards] = useState<any>(null);
   const [status, setStatus] = useState("");
 
+  // MARK 2026-10-15: "매출 브리핑을 음성으로 듣고 싶다" 요청 — 이미 텍스트로 만들어져 있는
+  // 일간/주간 AI 브리핑(todayAiBriefing/weeklyAiBriefing)을 그대로 소리내어 읽어줍니다.
+  // 새 서버/유료 TTS 없이, 브라우저 내장 Web Speech API(SpeechSynthesis)로 바로 재생합니다 —
+  // 추가 비용·연동 없이 대부분의 브라우저(크롬/엣지/사파리)에서 한국어 음성이 바로 됩니다.
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+
+  function speakText(key: string, text: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
+    window.speechSynthesis.cancel(); // 다른 브리핑이 재생 중이면 먼저 멈추고 새로 시작
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ko-KR";
+    utterance.rate = 1.0;
+    // 기기에 한국어 음성이 여러 개 있으면 그중 하나를 명시적으로 골라줍니다(일부 브라우저가
+    // lang만으로는 기본 영어 음성을 쓰는 경우가 있어서) — 없으면 그냥 기본값으로 재생.
+    const koVoice = window.speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith("ko"));
+    if (koVoice) utterance.voice = koVoice;
+    utterance.onend = () => setSpeakingKey((cur) => (cur === key ? null : cur));
+    utterance.onerror = () => setSpeakingKey((cur) => (cur === key ? null : cur));
+    window.speechSynthesis.speak(utterance);
+    setSpeakingKey(key);
+  }
+
+  function stopSpeaking() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSpeakingKey(null);
+  }
+
+  function toggleSpeak(key: string, text: string) {
+    if (speakingKey === key) stopSpeaking();
+    else speakText(key, text);
+  }
+
+  // 컴포넌트가 사라질 때(다른 매장으로 전환 등) 재생 중인 음성도 같이 멈춥니다.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    };
+  }, []);
+
   useEffect(() => {
     // MARK 6.83: 매장별 고정 링크(/store/[code])는 매장 목록 API를 부를 필요가 없습니다
     // (드롭다운을 안 보여주니까요) — fixedStoreName이 있으면 건너뜁니다.
@@ -943,6 +982,30 @@ export default function StoreBriefV2({
                   {(cards.todayAiBriefing || []).map((line: string, i: number) => (
                     <div key={i} style={{ fontSize: 13, color: "#78350F", lineHeight: 1.55 }}>💡 {line}</div>
                   ))}
+                  {(cards.todayAiBriefing || []).length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const weatherLine = cards.todayWeatherTip?.text ? `${cards.todayWeatherTip.text} ` : "";
+                        const text = `${storeName} 오늘의 브리핑입니다. ${weatherLine}${(cards.todayAiBriefing || []).join(" ")}`;
+                        toggleSpeak("daily", text);
+                      }}
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 2,
+                        padding: "7px 14px",
+                        borderRadius: 999,
+                        border: "1px solid #FDE68A",
+                        background: speakingKey === "daily" ? "#92400E" : "#fff",
+                        color: speakingKey === "daily" ? "#fff" : "#92400E",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {speakingKey === "daily" ? "⏸ 정지" : "🔊 음성으로 듣기"}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1059,6 +1122,27 @@ export default function StoreBriefV2({
                     {cards.weeklyAiBriefing.map((line: string, i: number) => (
                       <div key={i} style={{ fontSize: 13, color: "#3730A3", lineHeight: 1.5 }}>💡 {line}</div>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = `${storeName} 전주(${cards.lastWeekLabel || ""}) 매출 브리핑입니다. ${(cards.weeklyAiBriefing || []).join(" ")}`;
+                        toggleSpeak("weekly", text);
+                      }}
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 2,
+                        padding: "7px 14px",
+                        borderRadius: 999,
+                        border: "1px solid #C7D2FE",
+                        background: speakingKey === "weekly" ? "#3730A3" : "#fff",
+                        color: speakingKey === "weekly" ? "#fff" : "#3730A3",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {speakingKey === "weekly" ? "⏸ 정지" : "🔊 음성으로 듣기"}
+                    </button>
                   </div>
                 )}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

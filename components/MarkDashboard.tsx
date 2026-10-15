@@ -12,7 +12,6 @@ import {
   badWeekly,
   goodMonthly,
   goodWeekly,
-  markData,
   fmtNum,
   mergeRows,
   pct,
@@ -338,12 +337,25 @@ function weeklyDisplayLabel(weekly: any, fallbackLabel = "") {
   return String(fallbackLabel || weekly?.periodLabel || "").replace(/분석기간:\s*차주\(([^)]+)\)\s*\/\s*비교기간:\s*전주\(([^)]+)\)/, "분석기간: 실제 기간 미확인 / 비교기간: 실제 기간 미확인");
 }
 
+// MARK 2026-10-15: 예전엔 화면을 처음 그릴 때와 API 실패 시 lib/mark-data.json(옛 엑셀에서 뽑은
+// 예시 숫자)을 그대로 보여줬습니다. 그래서 /api/data가 느리거나 실패하면 "어제 매출"이 실제와
+// 다른 예시 값(8,835만원 등)으로 보이는 문제가 있었습니다. 이제는 빈 상태로 시작하고, 실제
+// 데이터가 오기 전/실패 시에는 숫자 대신 상태 안내를 보여줍니다.
+const EMPTY_DASHBOARD: any = {
+  daily: { periodLabel: "", current: [], compare: [] },
+  weekly: { periodLabel: "", current: [], compare: [], companyTopProducts: [], storeTopProducts: {}, productStoreNames: [], aiBriefing: [] },
+  monthly: { periodLabel: "", current: [], compare: [], year: [] },
+  inventory: {},
+};
+
 export default function MarkDashboard({ active }: { active: "daily" | "weekly" | "monthly" }) {
-  const [dashboardData, setDashboardData] = useState<any>(markData);
-  const [dataStatus, setDataStatus] = useState("내장 데이터");
+  const [dashboardData, setDashboardData] = useState<any>(EMPTY_DASHBOARD);
+  const [dataStatus, setDataStatus] = useState("실제 데이터 불러오는 중...");
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
-  const [store, setStore] = useState(markData.weekly?.productStoreNames?.[0] || "");
+  const [store, setStore] = useState("");
   const [reviewStore, setReviewStore] = useState("");
   const [weeklySnapshots, setWeeklySnapshots] = useState<any[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
@@ -351,9 +363,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   const [dailyDetail, setDailyDetail] = useState<any>(null);
 
   function normalizeWeeklyPayload(payload: any, snapshotMeta?: any) {
-    const next = { ...(markData as any), ...(payload || {}) };
+    const next = { ...EMPTY_DASHBOARD, ...(payload || {}) };
     if (payload?.weekly) next.weekly = payload.weekly;
-    if (payload?.inventory) next.inventory = { ...(markData as any).inventory, ...payload.inventory };
+    if (payload?.inventory) next.inventory = { ...payload.inventory };
     if (payload?.sources) next.sources = payload.sources;
     next.source = snapshotMeta ? "weekly-snapshot" : "weekly-live";
     next.snapshotMeta = snapshotMeta || {};
@@ -462,9 +474,12 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
       }
     }
 
-    const res = await fetch("/api/data", { cache: "no-store" });
-    const d = await res.json();
-    setDashboardData(d);
+    // 일간은 가벼운 전용 경로(scope=daily), 월간은 기존 전체 경로를 씁니다.
+    const d = await fetchJsonSafe(active === "daily" ? "/api/data?scope=daily" : "/api/data", { cache: "no-store" });
+    if (!d || d.ok === false || d.source === "fallback") {
+      throw new Error(d?.googleError || d?.error || "실제 매출 데이터를 불러오지 못했습니다.");
+    }
+    setDashboardData({ ...EMPTY_DASHBOARD, ...d });
     setDataStatus(
       d.source === "weekly-snapshot"
         ? "Weekly_Snapshot 기준 데이터"
@@ -489,6 +504,11 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         body: JSON.stringify({ type: `dashboard-${active}` }),
       });
       await loadDashboard();
+      setLoadState("ready");
+      setLoadError("");
+    } catch (e: any) {
+      setLoadError(e?.message || "데이터를 불러오지 못했습니다.");
+      setLoadState("error");
     } finally {
       setRefreshing(false);
     }
@@ -567,7 +587,17 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   }
 
   useEffect(() => {
-    loadDashboard().catch(() => setDataStatus("내장 데이터"));
+    setLoadState("loading");
+    setLoadError("");
+    loadDashboard()
+      .then(() => setLoadState("ready"))
+      .catch((e: any) => {
+        setDashboardData(EMPTY_DASHBOARD);
+        setLoadError(e?.message || "데이터를 불러오지 못했습니다.");
+        setDataStatus("불러오기 실패");
+        setLoadState("error");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   const pageData = dashboardData?.[active] || { current: [], compare: [], year: [], periodLabel: "" };
@@ -592,9 +622,15 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
   const selectedReviewStore = reviewStore || weeklyGood[0]?.storeName || weeklyBad[0]?.storeName || "";
   const selectedStoreRow = core.find((r) => r.storeName === selectedReviewStore);
 
+  // MARK 2026-10-15: 일간 비교일은 요일 규칙(화/수/목/일=전일, 금/토/월=전주 동요일)을 따릅니다.
+  // 예전엔 KPI 문구가 항상 "전주 동요일"로 고정돼 있어서 실제 비교 기준과 달랐습니다.
+  const hs = dashboardData?.historySource || {};
+  const dailyCompareText = hs.compareLabel
+    ? `${hs.compareLabel}${hs.compareDate ? `(${formatMdLabel(hs.compareDate)})` : ""}`
+    : "비교일";
   // MARK 2026-10-15: 일간/주간 음성 브리핑 대본 — 화면에 보이는 숫자만으로 만듭니다.
   const briefingChapters = useMemo(() => {
-    if (active === "daily") return buildDailyBriefing({ totals: coreTotals, coreRows: core, shopRows, detail: dailyDetail });
+    if (active === "daily") return buildDailyBriefing({ totals: coreTotals, coreRows: core, shopRows, detail: dailyDetail, compareText: hs.compareLabel === "전일" ? "그 전날" : "전주 같은 요일", baseDate: hs.latestDate });
     if (active === "weekly") {
       const cur = dashboardData?.weekly?.currentPeriod;
       const periodText = cur?.start && cur?.end ? `${formatMdLabel(cur.start).replace("/", "월 ")}일부터 ${formatMdLabel(cur.end).replace("/", "월 ")}일까지,` : "";
@@ -622,7 +658,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
               {active === "monthly" && "월간 매출대시보드"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {active === "daily" && "일별 매출 흐름과 전주 동요일 비교를 확인합니다."}
+              {active === "daily" && "어제 매출을 비교일(화·수·목·일은 전일, 금·토·월은 전주 동요일)과 비교합니다."}
               {active === "weekly" && "주간 매출, 점포별 흐름, 상품 반응을 확인합니다."}
               {active === "monthly" && "월간 누적 매출과 전월/전년 흐름을 확인합니다."}
             </p>
@@ -678,9 +714,11 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           </div>
         </header>
 
-        <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
-          {active === "weekly" ? weeklyDisplayLabel(dashboardData.weekly, pageData.periodLabel) : pageData.periodLabel}
-        </section>
+        {loadState === "ready" && (
+          <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
+            {active === "weekly" ? weeklyDisplayLabel(dashboardData.weekly, pageData.periodLabel) : pageData.periodLabel}
+          </section>
+        )}
 
         {active === "weekly" && (
           <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
@@ -723,11 +761,29 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
           </section>
         )}
 
+        {loadState !== "ready" && (
+          <section className={`rounded-3xl p-5 shadow-sm ${loadState === "error" ? "border border-rose-200 bg-rose-50" : "border border-slate-200 bg-white"}`}>
+            {loadState === "loading" ? (
+              <>
+                <p className="text-sm font-black text-slate-700">실제 매출 데이터를 불러오는 중이에요…</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">다 불러오기 전에는 숫자를 보여주지 않아요(예전처럼 예시 숫자가 섞여 보이지 않도록).</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-black text-rose-700">⚠ 실제 매출 데이터를 불러오지 못했어요</p>
+                <p className="mt-1 text-xs font-semibold text-rose-600">{loadError}</p>
+                <button type="button" onClick={refreshSnapshot} className="mt-3 rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white">다시 시도</button>
+              </>
+            )}
+          </section>
+        )}
+
+        {loadState === "ready" && (
         <section className="grid gap-4 md:grid-cols-4">
           {active === "daily" ? (
             <>
               <Kpi title="일 목표" value={won(coreTotals.dayTarget)} tone="blue" />
-              <Kpi title="일 매출" value={won(coreTotals.daySales)} sub={`전주 동요일 대비 ${pct(coreTotals.dayChange)}`} tone="green" />
+              <Kpi title="일 매출" value={won(coreTotals.daySales)} sub={`${dailyCompareText} 대비 ${pct(coreTotals.dayChange)}`} tone="green" />
               <Kpi title="일 달성률" value={pct(coreTotals.dayRate)} tone="purple" />
               <Kpi title="월 누적 매출" value={won(coreTotals.monthSales)} sub={pct(coreTotals.monthRate)} tone="orange" />
             </>
@@ -747,8 +803,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
             </>
           )}
         </section>
+        )}
 
-        {active === "daily" && (
+        {loadState === "ready" && active === "daily" && (
           <SalesVoiceBriefing
             title="일간 매출 브리핑"
             subtitle={dailyDetail?.sourceDate ? `기준일 ${dailyDetail.sourceDate}` : "전일 기준"}
@@ -760,7 +817,7 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
         {active === "daily" && <DailySalesPanel onData={setDailyDetail} />}
 
         {/* MARK 2026-10-15: 기존 "주간 AI 브리핑" 카드는 음성 브리핑 안의 "AI 추가 인사이트" 챕터로 합쳤습니다. */}
-        {active === "weekly" && (
+        {loadState === "ready" && active === "weekly" && (
           <SalesVoiceBriefing
             title="주간 매출 브리핑"
             subtitle={weeklyMode === "snapshot" ? "저장 스냅샷 기준" : "실시간 집계 기준"}

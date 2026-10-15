@@ -4209,6 +4209,48 @@ export async function buildDashboardDataFromGoogleSheet() {
   };
 }
 
+// MARK 2026-10-15: 일간 탭 전용 가벼운 경로(/api/data?scope=daily).
+// 예전엔 일간 탭 KPI 4칸을 그리려고 재고CTRL·RT·프로모션 성과까지 전부 계산하는 /api/data를
+// 통째로 불렀고, 그게 느리거나 죽으면 화면이 조용히 "내장 예시 데이터(mark-data.json)"를
+// 그대로 보여줬습니다(→ 어제 매출이 실제와 다르게 크게 보이는 원인). 여기서는 일간 매출에
+// 필요한 두 소스(Daily_Sales_History + 일간매출(26년))만 읽고, 아래 전체 경로와 완전히 같은
+// 규칙(mergeStoreDailyAmounts / buildDailyStoreSalesDashboardRows)으로 계산합니다.
+export async function buildDailyDashboardData() {
+  const [history, dailyStoreSales] = await Promise.all([loadDashboardDailyHistory(), loadDailyStoreSalesFromMarkDb()]);
+  const historyRows = (history.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
+  const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
+  const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
+  const currentDate = yesterdayDateKeyKST();
+  const { compareDate, compareLabel } = getComparisonDateForDaily(currentDate);
+  const dailyAmountMap = mergeStoreDailyAmounts(
+    coreHistoryRows.filter((r: any) => r.date === currentDate || r.date === compareDate),
+    dailyStoreRows.filter((r: any) => r.date === currentDate || r.date === compareDate)
+  );
+  const stores = dailyStoreRows.length
+    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, compareDate, dailyAmountMap)
+    : buildHistoryStoreRows(historyRows, currentDate);
+  return {
+    source: "daily-sales-history",
+    updatedAt: new Date().toISOString(),
+    historySource: {
+      sheetName: history.sheetName,
+      latestDate: currentDate,
+      compareDate,
+      // 기준일(어제) 입장에서 비교일이 "그 전날"이면 "전일", 7일 전이면 "전주 동요일"
+      compareLabel: compareLabel === "어제" ? "전일" : compareLabel,
+      rows: historyRows.length,
+      storeSalesSheetName: dailyStoreSales.sheetName || "",
+      storeSalesRows: dailyStoreRows.length,
+      storeSalesSource: dailyStoreRows.length ? "일간매출(26년)" : "Daily_Sales_History fallback",
+    },
+    daily: {
+      periodLabel: `기준일자: ${currentDate} / 비교일자: ${compareDate || "-"} · ${dailyStoreRows.length ? "일간매출(26년)+Daily_Sales_History" : "Daily_Sales_History"} 기준`,
+      current: stores?.dailyCur || [],
+      compare: stores?.dailyCmp || [],
+    },
+  };
+}
+
 export function getFallbackData() {
   return fallback as any;
 }

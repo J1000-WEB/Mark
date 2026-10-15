@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBuilder";
+import { buildDailyDashboardData, buildDashboardDataFromGoogleSheet, getFallbackData } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +13,21 @@ export const revalidate = 0;
 // 더 늘어났기 때문에 여유를 넉넉히 둡니다.
 export const maxDuration = 300;
 
-export async function GET() {
+export async function GET(req: Request) {
+  // MARK 2026-10-15: 일간 탭은 가벼운 전용 경로만 씁니다. 실패하면 예시 데이터로 감추지 않고
+  // 에러를 그대로 돌려줍니다(화면에서 "불러오기 실패"로 표시).
+  if (new URL(req.url).searchParams.get("scope") === "daily") {
+    try {
+      const data = await buildDailyDashboardData();
+      return NextResponse.json({ ok: true, ...data }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    } catch (error: any) {
+      console.error("Daily dashboard data load failed:", error);
+      return NextResponse.json(
+        { ok: false, source: "error", error: error?.message || "일간 매출 데이터를 불러오지 못했습니다." },
+        { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
+    }
+  }
   try {
     const data = await buildDashboardDataFromGoogleSheet();
     return NextResponse.json(data, {

@@ -139,13 +139,17 @@ export function buildDailyBriefing(input: {
   coreRows: any[];
   shopRows: any[];
   detail?: any; // /api/daily-sales 결과 (topProducts/topChannels/stockoutRisk/sourceDate)
+  compareText?: string; // "그 전날" | "전주 같은 요일"
+  baseDate?: string; // 매출 기준일 (YYYY-MM-DD)
 }): BriefingChapter[] {
   const { totals, coreRows, detail } = input;
+  const cmp = input.compareText || "비교일";
   const chapters: BriefingChapter[] = [];
   const daySales = n(totals.daySales);
   const dayTarget = n(totals.dayTarget);
   const dayRate = n(totals.dayRate);
-  const dateText = detail?.sourceDate ? `${String(detail.sourceDate).replace(/^(\d{4})-?(\d{2})-?(\d{2}).*$/, (_m, _y, mm, dd) => `${Number(mm)}월 ${Number(dd)}일`)}` : "어제";
+  const baseDate = input.baseDate || detail?.sourceDate;
+  const dateText = baseDate ? `${String(baseDate).replace(/^(\d{4})-?(\d{2})-?(\d{2}).*$/, (_m, _y, mm, dd) => `${Number(mm)}월 ${Number(dd)}일`)}` : "어제";
 
   // 1. 한줄 요약
   const head: string[] = [];
@@ -160,7 +164,7 @@ export function buildDailyBriefing(input: {
             : `일 목표 ${sayWon(dayTarget)} 대비 ${sayPct(dayRate)}로, 목표에는 ${sayWon(dayTarget - daySales)} 못 미쳤습니다.`
       );
     }
-    head.push(`전주 같은 요일과 비교하면 ${changePhrase(n(totals.dayChange))}.`);
+    head.push(`${cmp}과 비교하면 ${changePhrase(n(totals.dayChange))}.`);
   } else {
     head.push("아직 집계된 일 매출이 없습니다. 데이터 새로고침 후 다시 들어주세요.");
   }
@@ -191,7 +195,7 @@ export function buildDailyBriefing(input: {
       const byChange = [...comparable].sort((a, b) => n(b.dayChangeRate) - n(a.dayChangeRate));
       const best = byChange[0];
       const worst = byChange[byChange.length - 1];
-      if (n(best.dayChangeRate) > 0) storeLines.push(`전주 같은 요일보다 가장 많이 오른 곳은 ${best.storeName}, ${sayPct(best.dayChangeRate, 0)} 상승입니다.`);
+      if (n(best.dayChangeRate) > 0) storeLines.push(`${cmp}보다 가장 많이 오른 곳은 ${best.storeName}, ${sayPct(best.dayChangeRate, 0)} 상승입니다.`);
       if (n(worst.dayChangeRate) < 0) storeLines.push(`가장 많이 빠진 곳은 ${worst.storeName}, ${sayPct(worst.dayChangeRate, 0)} 하락입니다.`);
     }
   }

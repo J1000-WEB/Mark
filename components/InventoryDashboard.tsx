@@ -2378,31 +2378,71 @@ function StoreRequestRtSection() {
 // 문제가 생겨도 나머지 대시보드에는 영향이 없습니다. 실패하면(/api/data처럼 조용히 내장
 // 데이터로 감추지 않고) 실제 에러 메시지를 그대로 보여줍니다.
 function RtControlSection() {
-  const [rtData, setRtData] = useState<any>(null);
+  // MARK 2026-10-19: RT 제안은 무거운 계산이라 탭을 열 때 자동으로 계산하지 않습니다.
+  // 열면 "저장된 결과"만 읽고(가벼움), 계산은 버튼을 눌렀을 때만 해서 그날 결과로 저장합니다.
+  const [rtData, setRtData] = useState<any>(null); // 저장분(또는 방금 계산한 결과)
+  const [savedDates, setSavedDates] = useState<string[]>([]);
   const [rtLoading, setRtLoading] = useState(true);
+  const [computing, setComputing] = useState(false);
+  const [computeSec, setComputeSec] = useState(0);
   const [rtError, setRtError] = useState("");
+  const [rtNotice, setRtNotice] = useState("");
   const [rtFilter, setRtFilter] = useState("all");
   const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
   const [rtSavingKey, setRtSavingKey] = useState("");
 
-  async function loadRtSuggestions(refresh = false) {
+  async function loadSaved(date?: string) {
     setRtLoading(true);
     setRtError("");
     try {
-      const res = await fetch(`/api/rt-suggestions${refresh ? "?refresh=1" : ""}`, { cache: "no-store" });
+      const res = await fetch(`/api/rt-suggestions${date ? `?date=${encodeURIComponent(date)}` : ""}`, { cache: "no-store" });
       const body = await res.json().catch(() => null);
       if (!body) throw new Error(`서버 응답을 읽지 못했습니다 (status ${res.status})`);
-      if (!res.ok || !body.ok) throw new Error(body.error || `RT 이동 제안 조회 실패 (status ${res.status})`);
-      setRtData(body);
+      if (!res.ok || !body.ok) throw new Error(body.error || `저장된 RT 제안 조회 실패 (status ${res.status})`);
+      setRtData(body.saved);
+      setSavedDates(body.savedDates || []);
+      setRtStatusMap({});
     } catch (e: any) {
-      setRtError(e?.message || "RT 이동 제안을 불러오지 못했습니다.");
+      setRtError(e?.message || "저장된 RT 제안을 불러오지 못했습니다.");
     } finally {
       setRtLoading(false);
     }
   }
 
+  async function computeNow() {
+    if (computing) return;
+    if (rtData?.isToday && !window.confirm("오늘 이미 계산한 RT 제안이 있어요. 최신 데이터로 다시 계산해서 오늘 결과를 교체할까요?")) return;
+    setComputing(true);
+    setComputeSec(0);
+    setRtError("");
+    setRtNotice("");
+    const startedAt = Date.now();
+    const timer = setInterval(() => setComputeSec(Math.round((Date.now() - startedAt) / 1000)), 1000);
+    try {
+      const res = await fetch("/api/rt-suggestions", { method: "POST", cache: "no-store" });
+      const raw = await res.text();
+      let body: any = null;
+      try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+      if (!body) {
+        throw new Error(res.status === 504 || /<!doctype/i.test(raw)
+          ? "계산이 서버 제한시간(5분)을 넘겨 중단됐어요. 잠시 후 다시 눌러주세요."
+          : `서버 응답을 읽지 못했습니다 (status ${res.status})`);
+      }
+      if (!res.ok || !body.ok) throw new Error(body.error || `RT 이동 제안 계산 실패 (status ${res.status})`);
+      setRtData(body.saved);
+      setSavedDates(body.savedDates || []);
+      setRtStatusMap({});
+      setRtNotice(body.saveError ? `계산은 됐지만 저장에 실패했어요: ${body.saveError}` : "");
+    } catch (e: any) {
+      setRtError(e?.message || "RT 이동 제안을 계산하지 못했습니다.");
+    } finally {
+      clearInterval(timer);
+      setComputing(false);
+    }
+  }
+
   useEffect(() => {
-    loadRtSuggestions();
+    loadSaved();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2432,62 +2472,85 @@ function RtControlSection() {
   }
 
   const rtSuggestions = rtData?.rtSuggestions || [];
+  const shortDate = (d: string) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
 
   return (
     <section className="space-y-4 rounded-3xl border-2 border-slate-900/10 bg-slate-50/60 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-black text-slate-900">🔁 RT</h2>
-          <p className="text-xs font-semibold text-slate-500">RT 이동 제안 + 점포요청 RT — 나머지 대시보드와 완전히 분리된 전용 데이터로 동작해요.</p>
+          <p className="text-xs font-semibold text-slate-500">RT 이동 제안은 버튼을 눌렀을 때만 계산하고, 그날 결과를 저장해 둬요. 탭을 열면 저장된 결과를 바로 보여줘요.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => loadRtSuggestions(true)}
-          disabled={rtLoading}
-          className="h-9 rounded-full border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-        >
-          {rtLoading ? "불러오는 중..." : "🔄 RT 제안 새로고침"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {savedDates.length > 0 && (
+            <select
+              value={rtData?.savedDate || ""}
+              onChange={(e) => loadSaved(e.target.value)}
+              disabled={rtLoading || computing}
+              className="h-9 rounded-full border border-slate-300 bg-white px-3 text-xs font-black text-slate-700"
+              aria-label="저장된 날짜 선택"
+            >
+              {savedDates.map((d) => <option key={d} value={d}>{shortDate(d)} 계산분</option>)}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={computeNow}
+            disabled={computing || rtLoading}
+            className="h-9 rounded-full bg-slate-900 px-4 text-xs font-black text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            {computing ? `계산 중... ${computeSec}초` : rtData?.isToday ? "🔄 다시 계산(오늘분 교체)" : "▶ 오늘 RT 제안 계산하기"}
+          </button>
+        </div>
       </div>
+
+      {computing && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-bold text-blue-700">
+          판매이력과 PIP 매장 재고를 읽어 RT 제안을 계산하고 있어요. 보통 1~2분 걸려요 — 끝나면 오늘 결과로 저장돼서, 다음부터는 바로 열려요.
+        </div>
+      )}
 
       {rtError && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-black text-red-700">🚨 RT 이동 제안을 불러오지 못했습니다</p>
+          <p className="text-sm font-black text-red-700">🚨 RT 이동 제안 오류</p>
           <p className="mt-1 whitespace-pre-line text-xs font-bold text-red-600">{rtError}</p>
           <button
             type="button"
-            onClick={() => loadRtSuggestions(true)}
+            onClick={() => loadSaved()}
             className="mt-3 h-9 rounded-full bg-red-600 px-4 text-xs font-black text-white hover:bg-red-700"
           >
-            다시 시도
+            저장된 결과 다시 불러오기
           </button>
         </div>
       )}
 
+      {rtNotice && <p className="text-xs font-bold text-amber-600">⚠ {rtNotice}</p>}
+
       {rtLoading && !rtData && !rtError && (
-        <p className="text-sm font-bold text-slate-400">RT 이동 제안 불러오는 중...</p>
+        <p className="text-sm font-bold text-slate-400">저장된 RT 제안 불러오는 중...</p>
       )}
 
-      {rtData?.computedAt && (
-        <p className="text-[11px] font-bold text-slate-400">
-          계산 시각 {rtData.computedAt}
-          {rtData.cached ? ` · 저장된 결과(${Math.max(1, Math.round((rtData.cacheAgeSec || 0) / 60))}분 전 계산) — 최신으로 다시 계산하려면 "RT 제안 새로고침"` : rtData.computeMs ? ` · 계산 ${Math.round(rtData.computeMs / 1000)}초` : ""}
-        </p>
+      {!rtLoading && !computing && !rtData && !rtError && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
+          <p className="text-sm font-black text-slate-700">아직 저장된 RT 제안이 없어요</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">위의 "▶ 오늘 RT 제안 계산하기"를 눌러주세요.</p>
+        </div>
       )}
 
       {rtData && (
-        rtData.rtStockSource === "pip" ? (
-          <p className="text-xs font-bold text-emerald-600">
-            ✓ 아래 RT 제안(호조/부진)은 PIP 매장별 재고 스냅샷 기준입니다{rtData.rtPipUpdatedAt ? ` (${rtData.rtPipUpdatedAt} 업로드분)` : ""}.
-          </p>
-        ) : (
-          <p className="text-xs font-bold text-amber-600">
-            ⚠ 아직 PIP 재고 스냅샷이 없어서, 아래 RT 제안은 최근 판매이력으로 추정한 재고를 기준으로 계산됐어요. "판매데이터 제안" 탭에서 PIP 파일을 올리면 더 정확해져요.
-          </p>
-        )
+        <div className={`rounded-2xl p-3 text-xs font-bold ${rtData.isToday ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          {rtData.isToday ? "✓ 오늘" : `⚠ ${shortDate(rtData.savedDate)}`} 계산분 · {rtData.savedAt} 계산 · 제안 {Number(rtData.count ?? rtSuggestions.length).toLocaleString("ko-KR")}건
+          {rtData.computeMs ? ` · 계산 ${Math.round(rtData.computeMs / 1000)}초` : ""}
+          {!rtData.isToday && " — 오늘 기준으로 보려면 \"오늘 RT 제안 계산하기\"를 눌러주세요."}
+          <span className="mt-1 block font-semibold opacity-80">
+            {rtData.rtStockSource === "pip"
+              ? `재고 기준: PIP 매장별 재고 스냅샷${rtData.rtPipUpdatedAt ? ` (${rtData.rtPipUpdatedAt} 업로드분)` : ""}`
+              : "재고 기준: PIP 스냅샷이 없어 최근 판매이력으로 추정한 재고"}
+          </span>
+        </div>
       )}
 
-      {(rtData || !rtError) && (
+      {rtData && (
         <RTSuggestionSection
           items={rtSuggestions}
           statusMap={rtStatusMap}

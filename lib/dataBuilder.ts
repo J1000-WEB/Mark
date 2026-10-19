@@ -2004,25 +2004,16 @@ async function loadCompanyTopProductsFromHistory(currentDate: string, preloadedF
 // (3) buildInventory에서 프로모션·상품분석·온라인이관·전사지시를 전부 계산한 뒤 버리고 있었습니다.
 // → Daily_Sales_History는 합집합 구간 한 번만 읽고, 온오프재고현황 읽기를 빼고, buildInventory는
 //   rtOnly로 RT 엔진만 돌립니다. 계산 규칙(RT 엔진 자체)은 그대로입니다.
-// 또한 결과를 서버 인스턴스 메모리에 10분 캐시하고, 동시에 들어온 요청은 같은 계산을 공유합니다
-// ("🔄 RT 제안 새로고침"은 refresh=1로 캐시를 건너뜀).
-const RT_CACHE_TTL_MS = 10 * 60 * 1000;
-let rtCache: { at: number; data: any } | null = null;
+// MARK 2026-10-19(2): 계산은 사용자가 버튼을 눌렀을 때만 하고 결과는 날짜별로 시트에 저장합니다
+// (lib/rtSuggestionStore.ts). 여기서는 같은 순간 버튼이 두 번 눌려도 계산이 한 번만 돌도록
+// 진행 중인 계산만 공유합니다.
 let rtInFlight: Promise<any> | null = null;
 
-export async function buildRtSuggestions(opts: { refresh?: boolean } = {}) {
-  if (!opts.refresh && rtCache && Date.now() - rtCache.at < RT_CACHE_TTL_MS) {
-    return { ...rtCache.data, cached: true, cacheAgeSec: Math.round((Date.now() - rtCache.at) / 1000) };
-  }
+export async function buildRtSuggestions() {
   if (rtInFlight) return rtInFlight;
-  rtInFlight = computeRtSuggestions()
-    .then((data) => {
-      rtCache = { at: Date.now(), data };
-      return { ...data, cached: false, cacheAgeSec: 0 };
-    })
-    .finally(() => {
-      rtInFlight = null;
-    });
+  rtInFlight = computeRtSuggestions().finally(() => {
+    rtInFlight = null;
+  });
   return rtInFlight;
 }
 

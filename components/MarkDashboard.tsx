@@ -481,7 +481,9 @@ export default function MarkDashboard({ active }: { active: "daily" | "weekly" |
     }
     setDashboardData({ ...EMPTY_DASHBOARD, ...d });
     setDataStatus(
-      d.source === "weekly-snapshot"
+      d.source === "sales-summary"
+        ? `매출탭과 같은 원본(점포별 매출 업로드)${d.historySource?.uploadMeta?.uploadedAt ? ` · ${d.historySource.uploadMeta.uploadedAt} 업로드` : ""}`
+        : d.source === "weekly-snapshot"
         ? "Weekly_Snapshot 기준 데이터"
         : d.source === "daily-sales-history"
           ? "Daily_Sales_History 기준 데이터"

@@ -4247,43 +4247,89 @@ export async function buildDashboardDataFromGoogleSheet() {
 }
 
 // MARK 2026-10-15: 일간 탭 전용 가벼운 경로(/api/data?scope=daily).
-// 예전엔 일간 탭 KPI 4칸을 그리려고 재고CTRL·RT·프로모션 성과까지 전부 계산하는 /api/data를
-// 통째로 불렀고, 그게 느리거나 죽으면 화면이 조용히 "내장 예시 데이터(mark-data.json)"를
-// 그대로 보여줬습니다(→ 어제 매출이 실제와 다르게 크게 보이는 원인). 여기서는 일간 매출에
-// 필요한 두 소스(Daily_Sales_History + 일간매출(26년))만 읽고, 아래 전체 경로와 완전히 같은
-// 규칙(mergeStoreDailyAmounts / buildDailyStoreSalesDashboardRows)으로 계산합니다.
+// MARK 2026-10-19: 원본을 "매출탭(점포별)"과 똑같은 소스로 바꿨습니다 — 점포별 매출 업로드
+// 스냅샷(readSalesSummarySnapshot, 매장×날짜별 실적+목표 한 시트)을 한 번만 읽고, 매출탭과 같은
+// 점포 화이트리스트/제외코드를 적용합니다. 예전 경로(Daily_Sales_History + 일간매출(26년) 병합)는
+// 무겁고 자주 안 불러와졌고, 매출탭과 숫자가 달라질 여지도 있었습니다. 이제 일간 탭 숫자는
+// 매출탭 "일간" 블록과 같은 원본에서 나옵니다.
+// 비교일은 기존 일간 규칙(화/수/목/일=전일, 금/토/월=전주 동요일)을 그대로 씁니다.
 export async function buildDailyDashboardData() {
-  const [history, dailyStoreSales] = await Promise.all([loadDashboardDailyHistory(), loadDailyStoreSalesFromMarkDb()]);
-  const historyRows = (history.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
-  const coreHistoryRows = historyRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
-  const dailyStoreRows = (dailyStoreSales.rows || []).filter((r: any) => isOfflineSalesStore(r.storeName));
-  const currentDate = yesterdayDateKeyKST();
-  const { compareDate, compareLabel } = getComparisonDateForDaily(currentDate);
-  const dailyAmountMap = mergeStoreDailyAmounts(
-    coreHistoryRows.filter((r: any) => r.date === currentDate || r.date === compareDate),
-    dailyStoreRows.filter((r: any) => r.date === currentDate || r.date === compareDate)
+  const { rows: rawRows, meta } = await readSalesSummarySnapshot();
+  const rows = rawRows.filter(
+    (r) => SALES_SUMMARY_STORE_WHITELIST_KEYS.has(normalizeStoreKey(r.storeName)) && !SALES_SUMMARY_STORE_CODE_EXCLUDE.has(text(r.channelCode))
   );
-  const stores = dailyStoreRows.length
-    ? buildDailyStoreSalesDashboardRows(dailyStoreRows, currentDate, compareDate, dailyAmountMap)
-    : buildHistoryStoreRows(historyRows, currentDate);
+  if (!rows.length) throw new Error("매출탭 원본(점포별 매출 업로드)에 데이터가 없습니다. 매출탭에서 업로드 상태를 확인해주세요.");
+
+  // 기준일 = 어제(KST). 업로드가 아직 안 돼서 어제 실적이 없으면, 실적이 있는 가장 최근 날짜로.
+  const yesterday = yesterdayDateKeyKST();
+  const actualDates = rows.filter((r) => r.amount !== 0).map((r) => r.date);
+  const latestActual = actualDates.reduce((max, d) => (d > max ? d : max), "");
+  const currentDate = latestActual && latestActual < yesterday ? latestActual : yesterday;
+  const { compareDate, compareLabel } = getComparisonDateForDaily(currentDate);
+
+  const d = parseDate(currentDate)!;
+  const dow = d.getDay();
+  const weekStart = dateAddDays(currentDate, dow === 0 ? -6 : 1 - dow);
+  const prevWeekStart = dateAddDays(weekStart, -7);
+  const prevWeekSameDay = dateAddDays(currentDate, -7);
+  const monthStart = firstDayOfMonth(currentDate);
+  const monthEnd = lastDayOfMonth(monthStart);
+  const prevMonthStart = `${previousMonthKey(currentDate)}-01`;
+  const prevMonthEnd = lastDayOfMonth(prevMonthStart);
+  const prevMonthSameDayRaw = dateAddDays(prevMonthStart, Number(currentDate.slice(8, 10)) - 1);
+  const prevMonthSameDay = prevMonthSameDayRaw > prevMonthEnd ? prevMonthEnd : prevMonthSameDayRaw; // 31일 → 전월 말일
+
+  const byStore = new Map<string, SalesSummaryDailyRow[]>();
+  for (const r of rows) {
+    if (!byStore.has(r.storeName)) byStore.set(r.storeName, []);
+    byStore.get(r.storeName)!.push(r);
+  }
+
+  const current: any[] = [];
+  const compare: any[] = [];
+  for (const [storeName, storeRows] of byStore.entries()) {
+    const day = sumPeriod(storeRows, currentDate, currentDate);
+    const cmpDay = sumPeriod(storeRows, compareDate, compareDate);
+    const week = sumPeriod(storeRows, weekStart, currentDate);
+    const prevWeek = sumPeriod(storeRows, prevWeekStart, prevWeekSameDay);
+    const monthToDate = sumPeriod(storeRows, monthStart, currentDate);
+    const monthFull = sumPeriod(storeRows, monthStart, monthEnd);
+    const prevMonthToDate = sumPeriod(storeRows, prevMonthStart, prevMonthSameDay);
+    // 월 목표는 월말까지 미리 입력돼 있으면 전체 월목표, 아니면 지금까지의 기간목표
+    const monthTarget = monthFull.target || monthToDate.target;
+    current.push({
+      storeName,
+      dayTarget: day.target,
+      daySales: day.amount,
+      dayRate: day.target ? (day.amount / day.target) * 100 : 0,
+      weekTarget: week.target,
+      weekSales: week.amount,
+      weekRate: week.target ? (week.amount / week.target) * 100 : 0,
+      monthTarget,
+      monthSales: monthToDate.amount,
+      monthRate: monthTarget ? (monthToDate.amount / monthTarget) * 100 : 0,
+      dayReceiptCount: day.receiptCount,
+      dayQty: day.qty,
+    });
+    compare.push({ storeName, daySales: cmpDay.amount, weekSales: prevWeek.amount, monthSales: prevMonthToDate.amount });
+  }
+
   return {
-    source: "daily-sales-history",
+    source: "sales-summary",
     updatedAt: new Date().toISOString(),
     historySource: {
-      sheetName: history.sheetName,
+      sheetName: "점포별 매출 업로드(매출탭과 동일)",
       latestDate: currentDate,
       compareDate,
       // 기준일(어제) 입장에서 비교일이 "그 전날"이면 "전일", 7일 전이면 "전주 동요일"
       compareLabel: compareLabel === "어제" ? "전일" : compareLabel,
-      rows: historyRows.length,
-      storeSalesSheetName: dailyStoreSales.sheetName || "",
-      storeSalesRows: dailyStoreRows.length,
-      storeSalesSource: dailyStoreRows.length ? "일간매출(26년)" : "Daily_Sales_History fallback",
+      uploadMeta: meta || null,
+      storeCount: current.length,
     },
     daily: {
-      periodLabel: `기준일자: ${currentDate} / 비교일자: ${compareDate || "-"} · ${dailyStoreRows.length ? "일간매출(26년)+Daily_Sales_History" : "Daily_Sales_History"} 기준`,
-      current: stores?.dailyCur || [],
-      compare: stores?.dailyCmp || [],
+      periodLabel: `기준일자: ${currentDate} / 비교일자: ${compareDate} · 매출탭(점포별 매출 업로드)과 같은 원본${currentDate < yesterday ? ` · ⚠ 어제(${yesterday}) 실적이 아직 업로드되지 않아 가장 최근 날짜로 표시` : ""}`,
+      current,
+      compare,
     },
   };
 }

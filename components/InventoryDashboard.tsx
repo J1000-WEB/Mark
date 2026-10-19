@@ -2385,11 +2385,11 @@ function RtControlSection() {
   const [rtStatusMap, setRtStatusMap] = useState<Record<string, string>>({});
   const [rtSavingKey, setRtSavingKey] = useState("");
 
-  async function loadRtSuggestions() {
+  async function loadRtSuggestions(refresh = false) {
     setRtLoading(true);
     setRtError("");
     try {
-      const res = await fetch("/api/rt-suggestions", { cache: "no-store" });
+      const res = await fetch(`/api/rt-suggestions${refresh ? "?refresh=1" : ""}`, { cache: "no-store" });
       const body = await res.json().catch(() => null);
       if (!body) throw new Error(`서버 응답을 읽지 못했습니다 (status ${res.status})`);
       if (!res.ok || !body.ok) throw new Error(body.error || `RT 이동 제안 조회 실패 (status ${res.status})`);
@@ -2442,7 +2442,7 @@ function RtControlSection() {
         </div>
         <button
           type="button"
-          onClick={loadRtSuggestions}
+          onClick={() => loadRtSuggestions(true)}
           disabled={rtLoading}
           className="h-9 rounded-full border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
         >
@@ -2456,7 +2456,7 @@ function RtControlSection() {
           <p className="mt-1 whitespace-pre-line text-xs font-bold text-red-600">{rtError}</p>
           <button
             type="button"
-            onClick={loadRtSuggestions}
+            onClick={() => loadRtSuggestions(true)}
             className="mt-3 h-9 rounded-full bg-red-600 px-4 text-xs font-black text-white hover:bg-red-700"
           >
             다시 시도
@@ -2466,6 +2466,13 @@ function RtControlSection() {
 
       {rtLoading && !rtData && !rtError && (
         <p className="text-sm font-bold text-slate-400">RT 이동 제안 불러오는 중...</p>
+      )}
+
+      {rtData?.computedAt && (
+        <p className="text-[11px] font-bold text-slate-400">
+          계산 시각 {rtData.computedAt}
+          {rtData.cached ? ` · 저장된 결과(${Math.max(1, Math.round((rtData.cacheAgeSec || 0) / 60))}분 전 계산) — 최신으로 다시 계산하려면 "RT 제안 새로고침"` : rtData.computeMs ? ` · 계산 ${Math.round(rtData.computeMs / 1000)}초` : ""}
+        </p>
       )}
 
       {rtData && (

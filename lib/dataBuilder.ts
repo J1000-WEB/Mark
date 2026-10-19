@@ -1346,10 +1346,15 @@ async function buildInventory(
   inventoryRows: any[],
   companyTopProducts: any[],
   storeStockSnapshot?: { rows: StoreStockSnapshotRow[]; meta: any } | null,
-  onlineTransferStock?: { rows: OnlineTransferStockSkuRow[]; meta: any } | null
+  onlineTransferStock?: { rows: OnlineTransferStockSkuRow[]; meta: any } | null,
+  // MARK 2026-10-19: RT 전용 엔드포인트(/api/rt-suggestions)는 RT 제안만 필요한데, 예전엔 이 함수가
+  // 프로모션 제안·상품분석·온라인이관·전사지시(이걸 위해 Daily_Sales_History 28일치를 또 읽음)까지
+  // 전부 계산한 뒤 RT 부분만 꺼내 쓰고 나머지는 버렸습니다. rtOnly면 RT 엔진만 돌리고 바로 반환합니다.
+  options: { rtOnly?: boolean } = {}
 ) {
-  const promotion = buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
-  const productAnalysisList = buildProductAnalysisList(productRows, inventoryRows);
+  const rtOnly = !!options.rtOnly;
+  const promotion = rtOnly ? null : buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
+  const productAnalysisList = rtOnly ? [] : buildProductAnalysisList(productRows, inventoryRows);
   const coreProducts = productRows.filter((r) => isCoreOfflineSalesStore(r.storeName));
   const onlineProducts = productRows.filter((r) => isOnlineChannel(r.storeName));
   const consignmentProducts = productRows.filter((r) => isOfflineSalesStore(r.storeName) && isConsignmentChannel(r.storeName));
@@ -1361,9 +1366,9 @@ async function buildInventory(
   const stockoutRisk: any[] = [];
   const overstockRisk: any[] = [];
   const allocationSuggestions: any[] = [];
-  const onlineTransferSuggestions = buildOnlineTransferSuggestions(coreProducts, onlineProducts, onlineTransferInventoryMap, inventoryRows);
+  const onlineTransferSuggestions = rtOnly ? [] : buildOnlineTransferSuggestions(coreProducts, onlineProducts, onlineTransferInventoryMap, inventoryRows);
 
-  for (const p of allProducts) {
+  for (const p of rtOnly ? [] : allProducts) {
     const inv: any = invMap.get(p.styleCode);
     if (!inv) continue;
     const weekNet = Math.max(0, Number(p.weekNet || 0));
@@ -1822,6 +1827,16 @@ async function buildInventory(
   const RT_SUGGESTION_SAFETY_CAP = 1000;
   const rtSuggestionProductCount = new Set(sortedRtSuggestions.map((s) => s.styleCode)).size;
 
+  if (rtOnly) {
+    return {
+      rtSuggestions: sortedRtSuggestions.slice(0, RT_SUGGESTION_SAFETY_CAP),
+      rtEligibleProductRank: RT_ELIGIBLE_RANK,
+      rtSuggestionProductCount,
+      rtStockSource: storeStockSnapshot?.rows?.length ? "pip" : "daily_sales_history",
+      rtPipUpdatedAt: storeStockSnapshot?.meta?.uploadedAt || null,
+    } as any;
+  }
+
   const consignmentTopProducts = aggregateProducts(consignmentProducts, undefined, 10);
   const consignmentRecommendations = (consignmentTopProducts.length ? consignmentTopProducts : companyTopProducts).slice(0, 5).map((p) => {
     const inv: any = invMap.get(p.styleCode) || {};
@@ -1932,14 +1947,14 @@ async function buildInventory(
     consignmentRecommendations,
     stockoutStoreTop5: finalize(recv).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
     overstockStoreTop5: finalize(send).sort((a: any, b: any) => b.count - a.count).slice(0, 5),
-    ...promotion,
+    ...(promotion as any),
     styleDirectives,
     productAnalysisList,
     aiBriefing: [
       `RT 이동 우선 검토 대상은 ${rtSuggestions.length}건입니다.`,
       `온라인 이관 후보는 ${onlineTransferSuggestions.length}건, 품절 위험 상품은 ${stockoutRisk.length}개입니다.`,
       `과재고 위험 상품은 ${overstockRisk.length}개로, 판매 호조 매장 이동 또는 출고 우선순위 조정이 필요합니다.`,
-      `프로모션 검토 후보는 ${promotion.promotionSuggestions.length}개이며, TOP상품/판매상승 보호 제외 ${promotion.suppressedPromotionCandidates?.length || 0}개, RT 억제 전환 후보 ${promotion.rtSuppressedPromotionCandidates?.length || 0}개입니다.`,
+      `프로모션 검토 후보는 ${promotion!.promotionSuggestions.length}개이며, TOP상품/판매상승 보호 제외 ${promotion!.suppressedPromotionCandidates?.length || 0}개, RT 억제 전환 후보 ${promotion!.rtSuppressedPromotionCandidates?.length || 0}개입니다.`,
       "RT는 전사 판매 상위 상품을 우선으로 상품 판매력 70%, 재고 부족도 20%, 점포 매출력 10% 기준으로 입고점을 선정하며, 출고점 안전재고를 남기고 다중 점포로 분산 보충합니다.",
     ],
   };
@@ -1967,52 +1982,77 @@ async function buildInventory(
 // 실제로 쓰는 건 "이번주+지난주"(14일)뿐이라, buildProductRowsFromDailyHistory()가 이미 하고
 // 있는 것과 똑같은 방식(A열로 필요한 구간만 먼저 찾고 그 구간만 읽기)으로 딱 그 14일치만
 // 따로 읽는 전용 헬퍼를 씁니다 — 같은 계산 결과를 훨씬 적게 읽고 훨씬 적게 펼쳐서 구합니다.
-async function loadCompanyTopProductsFromHistory(currentDate: string) {
+function companyTopWeekWindows(currentDate: string) {
   const weeklyAnchorMonday = mondayAfterDate(currentDate);
-  const currentWeek = weekWindowBeforeMonday(weeklyAnchorMonday, 0);
-  const prevWeek = weekWindowBeforeMonday(weeklyAnchorMonday, -1);
+  return { currentWeek: weekWindowBeforeMonday(weeklyAnchorMonday, 0), prevWeek: weekWindowBeforeMonday(weeklyAnchorMonday, -1) };
+}
+
+async function loadCompanyTopProductsFromHistory(currentDate: string, preloadedFlatRows?: any[]) {
+  const { currentWeek, prevWeek } = companyTopWeekWindows(currentDate);
   if (!currentWeek.start || !prevWeek.start) return [] as any[];
 
-  const historyId = getHistorySheetId();
-  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", prevWeek.start, currentWeek.end);
-  let raw: any[][];
-  if (range) {
-    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
-    raw = [DAILY_HISTORY_HEADER, ...tailRows];
-  } else {
-    raw = [DAILY_HISTORY_HEADER];
-  }
-  const flatRows = expandAnyDailyHistoryRows(raw || []);
+  const flatRows = (preloadedFlatRows ?? (await readDailyHistoryFlatRange(prevWeek.start, currentWeek.end)))
+    .filter((r: any) => r.date >= prevWeek.start && r.date <= currentWeek.end);
   const coreHistoryRows = flatRows.filter((r: any) => isCoreOfflineSalesStore(r.storeName));
   const historyProductRows = buildHistoryProductRows(coreHistoryRows, currentDate);
   return aggregateProducts(historyProductRows, undefined, 20);
 }
 
-export async function buildRtSuggestions() {
-  // MARK 2026-09-24: 배포 후 504(=maxDuration 안에 못 끝나서 강제종료, 즉 이 함수가 정말
-  // 오래 걸렸다는 뜻)가 발생해서, 어느 단계가 오래 걸리는지 다음번엔 Vercel 함수 로그에서
-  // 바로 보이도록 단계별로 소요시간을 남깁니다. 또한 titles/판매이력/PIP스냅샷/전사TOP20
-  // 넷 다 서로 의존관계가 없는데 기존엔 titles→재고시트 읽기를 먼저 끝내고서야 나머지 3개를
-  // 시작했습니다 — 넷 다 한번에 병렬로 돌리도록 바꿔서 그만큼 시간을 아낍니다.
+// MARK 2026-10-19: "재고CTRL RT가 너무 무거워서 안 됨" 점검 결과 — 이 함수가 RT 제안 하나를 위해
+// (1) Daily_Sales_History를 세 번(최근 7+7일 / 지난주+전전주 / buildInventory 안의 전사지시용 28일) 읽고,
+// (2) RT 계산엔 안 쓰는 온오프재고현황(A:AZ 전체)까지 읽고,
+// (3) buildInventory에서 프로모션·상품분석·온라인이관·전사지시를 전부 계산한 뒤 버리고 있었습니다.
+// → Daily_Sales_History는 합집합 구간 한 번만 읽고, 온오프재고현황 읽기를 빼고, buildInventory는
+//   rtOnly로 RT 엔진만 돌립니다. 계산 규칙(RT 엔진 자체)은 그대로입니다.
+// 또한 결과를 서버 인스턴스 메모리에 10분 캐시하고, 동시에 들어온 요청은 같은 계산을 공유합니다
+// ("🔄 RT 제안 새로고침"은 refresh=1로 캐시를 건너뜀).
+const RT_CACHE_TTL_MS = 10 * 60 * 1000;
+let rtCache: { at: number; data: any } | null = null;
+let rtInFlight: Promise<any> | null = null;
+
+export async function buildRtSuggestions(opts: { refresh?: boolean } = {}) {
+  if (!opts.refresh && rtCache && Date.now() - rtCache.at < RT_CACHE_TTL_MS) {
+    return { ...rtCache.data, cached: true, cacheAgeSec: Math.round((Date.now() - rtCache.at) / 1000) };
+  }
+  if (rtInFlight) return rtInFlight;
+  rtInFlight = computeRtSuggestions()
+    .then((data) => {
+      rtCache = { at: Date.now(), data };
+      return { ...data, cached: false, cacheAgeSec: 0 };
+    })
+    .finally(() => {
+      rtInFlight = null;
+    });
+  return rtInFlight;
+}
+
+async function computeRtSuggestions() {
   const t0 = Date.now();
   const elapsed = () => `${Date.now() - t0}ms`;
 
   const currentDate = yesterdayDateKeyKST();
-  const [titles, productRowsRaw, storeStockSnapshotForRt, companyTopProducts] = await Promise.all([
-    getSpreadsheetTitles(),
-    buildProductRowsFromDailyHistory(),
+  // buildProductRowsFromDailyHistory 기본 구간(오늘 기준 최근 7일 + 그 전 7일)과
+  // 전사 TOP20 구간(지난주 + 전전주)의 합집합을 한 번만 읽습니다.
+  const anchor = todayKST();
+  const rollingStart = addDaysKST(anchor, -13);
+  const { currentWeek, prevWeek } = companyTopWeekWindows(currentDate);
+  const since = prevWeek.start && prevWeek.start < rollingStart ? prevWeek.start : rollingStart;
+  const until = currentWeek.end && currentWeek.end > anchor ? currentWeek.end : anchor;
+
+  const [flatRows, storeStockSnapshotForRt] = await Promise.all([
+    readDailyHistoryFlatRange(since, until),
     readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
-    loadCompanyTopProductsFromHistory(currentDate),
   ]);
-  console.log(`[rt-suggestions] titles+productRows+pip+전사TOP20 완료 (${elapsed()})`);
+  console.log(`[rt-suggestions] Daily_Sales_History ${since}~${until} ${flatRows.length}행 + PIP ${storeStockSnapshotForRt.rows.length}행 (${elapsed()})`);
 
-  const inventorySheet = pickNormalizedTitle(titles, ["온오프재고현황", "온/오프재고현황", "온오프 재고 현황", "온/오프 재고 현황"], "온오프재고현황");
-  const values = await getManySheetValues([inventorySheet], "A:AZ");
-  const inventoryRows = parseInventory(values[inventorySheet] || []);
-  console.log(`[rt-suggestions] 온오프재고현황 읽기 완료, ${inventoryRows.length}행 (${elapsed()})`);
+  const [productRowsRaw, companyTopProducts] = await Promise.all([
+    buildProductRowsFromDailyHistory(anchor, 7, undefined, flatRows),
+    loadCompanyTopProductsFromHistory(currentDate, flatRows),
+  ]);
+  console.log(`[rt-suggestions] 판매집계 ${productRowsRaw.length}행, 전사TOP ${companyTopProducts.length}개 (${elapsed()})`);
 
-  const inventory = await buildInventory(productRowsRaw, inventoryRows, companyTopProducts, storeStockSnapshotForRt);
-  console.log(`[rt-suggestions] buildInventory 완료, RT 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);
+  const inventory = await buildInventory(productRowsRaw, [], companyTopProducts, storeStockSnapshotForRt, null, { rtOnly: true });
+  console.log(`[rt-suggestions] RT 엔진 완료, 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);
 
   return {
     rtSuggestions: inventory.rtSuggestions,
@@ -2020,6 +2060,8 @@ export async function buildRtSuggestions() {
     rtSuggestionProductCount: inventory.rtSuggestionProductCount,
     rtStockSource: inventory.rtStockSource,
     rtPipUpdatedAt: inventory.rtPipUpdatedAt,
+    computedAt: nowKSTDateTime(),
+    computeMs: Date.now() - t0,
   };
 }
 
@@ -2933,7 +2975,18 @@ function addDaysKST(dateKey: string, days: number) {
 // 버그도 고쳐서, 실제로는 skuRows(컬러+사이즈별로 정확히 추적된 재고)의 합계를 쓰도록
 // 했습니다 — 한 스타일에 컬러/사이즈가 여럿이면 예전엔 그중 하나만 반영되고 나머지는
 // 무시되고 있었습니다. 이건 읽는 데이터량과 무관한 순수 계산 버그라 항상 켜둡니다.
-export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7, stockLookbackDays?: number) {
+// MARK 2026-10-19: Daily_Sales_History의 [since, until] 구간만 읽어서 펼친 행을 돌려줍니다.
+// RT 전용 경로에서 "최근 7+7일(판매·재고)"과 "지난주+전전주(전사 TOP20)"를 각각 따로 읽던 걸
+// 합집합 구간 한 번 읽기로 합치는 데 씁니다.
+async function readDailyHistoryFlatRange(since: string, until: string) {
+  const historyId = getHistorySheetId();
+  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", since, until);
+  if (!range) return [] as any[];
+  const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
+  return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+}
+
+export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7, stockLookbackDays?: number, preloadedFlatRows?: any[]) {
   const weekEnd = anchorDate;
   const weekStart = addDaysKST(weekEnd, -(windowDays - 1));
   const prevWeekEnd = addDaysKST(weekStart, -1);
@@ -2946,19 +2999,12 @@ export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), 
   // loadDashboardDailyHistory와 같은 이유(전체 읽기 OOM)로, 이 함수가 실제로 쓰는 구간
   // (readSince~weekEnd)만 읽습니다. 시트 이름이 고정된 "Daily_Sales_History"라
   // 포맷(압축)이 항상 보장되므로 바로 지름길을 씁니다.
-  const historyId = getHistorySheetId();
-  const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", readSince, weekEnd);
-  let raw: any[][];
-  if (range) {
-    const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
-    raw = [DAILY_HISTORY_HEADER, ...tailRows];
-  } else {
-    // MARK 2026-09-15: startRow를 못 찾은 건 "그 기간엔 데이터가 없다"는 뜻이라, 예전처럼
-    // 전체("A:ZZ")를 다시 읽지 않고 빈 결과로 안전하게 넘어갑니다(findDailyHistoryRowRangeIn
-    // 참고 — 최근 3만 행 안에서도 못 찾았다면 실제로 데이터가 없는 것과 같습니다).
-    raw = [DAILY_HISTORY_HEADER];
-  }
-  const flatRows = expandAnyDailyHistoryRows(raw || []);
+  // MARK 2026-09-15: startRow를 못 찾은 건 "그 기간엔 데이터가 없다"는 뜻이라, 예전처럼
+  // 전체("A:ZZ")를 다시 읽지 않고 빈 결과로 안전하게 넘어갑니다(findDailyHistoryRowRangeIn
+  // 참고 — 최근 3만 행 안에서도 못 찾았다면 실제로 데이터가 없는 것과 같습니다).
+  // MARK 2026-10-19: 호출부가 더 넓은 구간을 이미 읽어뒀으면(preloadedFlatRows) 그걸 씁니다 —
+  // 아래 루프가 readSince~weekEnd 밖의 행은 어차피 건너뜁니다.
+  const flatRows = preloadedFlatRows ?? (await readDailyHistoryFlatRange(readSince, weekEnd));
   const launchMap = await loadStyleLaunchMap().catch(() => new Map<string, string>());
 
   const grouped = new Map<string, any>();

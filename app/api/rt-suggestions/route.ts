@@ -14,9 +14,11 @@ const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 // MARK 2026-09-24: 재고CTRL 탭의 "RT" 칸 전용 — /api/data(대시보드 전체)와 완전히 분리된
 // RT 이동 제안 전용 엔드포인트입니다. /api/data처럼 실패를 조용히 내장 fallback으로 감추지
 // 않고, 실패하면 실제 에러 메시지를 그대로 돌려줍니다(화면에서 구체적으로 뭐가 문제인지 보여주기 위함).
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const data = await buildRtSuggestions();
+    // MARK 2026-10-19: 기본은 서버 메모리 캐시(10분) 사용, "RT 제안 새로고침" 버튼은 refresh=1로 강제 재계산.
+    const refresh = new URL(req.url).searchParams.get("refresh") === "1";
+    const data = await buildRtSuggestions({ refresh });
     return NextResponse.json({ ok: true, ...data }, { headers: NO_STORE_HEADERS });
   } catch (error: any) {
     console.error("rt-suggestions failed:", error);

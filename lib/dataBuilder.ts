@@ -510,7 +510,7 @@ function parseInventory(rows: any[][]) {
 //     화면에 "마지막 업데이트: ..."로 보여줄 수 있게 합니다.
 const WAREHOUSE_SNAPSHOT_SHEET = "물류가용재고_스냅샷";
 const WAREHOUSE_SNAPSHOT_META_SHEET = "물류가용재고_스냅샷_메타";
-const WAREHOUSE_SNAPSHOT_HEADER = ["스타일", "칼라", "사이즈", "가용재고(오프)"];
+const WAREHOUSE_SNAPSHOT_HEADER = ["스타일", "칼라", "사이즈", "가용재고(오프)", "바코드"];
 const WAREHOUSE_SNAPSHOT_META_HEADER = ["업로드일시", "행수", "원본파일명"];
 
 function nowKSTDateTime() {
@@ -524,7 +524,7 @@ function nowKSTDateTime() {
 // 뽑은 값 — 클라이언트 쪽 parseWarehouseStockWorkbook 참고).
 export async function saveWarehouseStockSnapshot(rows: any[][], fileName?: string) {
   const clean = (rows || [])
-    .map((r) => [text(r[0]), text(r[1]), text(r[2]), num(r[3])])
+    .map((r) => [text(r[0]), text(r[1]), text(r[2]), num(r[3]), text(r[4])])
     .filter((r) => r[0] && r[1] && r[2]);
   if (!clean.length) {
     throw new Error("업로드할 재고 데이터를 찾지 못했습니다. 스타일/칼라/사이즈 열을 확인해주세요.");
@@ -553,15 +553,15 @@ export async function getWarehouseStockSnapshotMeta() {
   return { uploadedAt: text(row[0]), rowCount: num(row[1]), fileName: text(row[2]) };
 }
 
-async function readWarehouseStockSnapshot() {
+export async function readWarehouseStockSnapshot() {
   const dbId = getDbSheetId();
   const [dataRows, metaRows] = await Promise.all([
-    getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_SHEET, "A2:D200000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_SHEET, "A2:E200000").catch(() => [] as any[]),
     getSheetValuesById(dbId, WAREHOUSE_SNAPSHOT_META_SHEET, "A2:C2").catch(() => [] as any[]),
   ]);
   const rows = dataRows
     .filter((r) => r && text(r[0]))
-    .map((r) => ({ styleCode: text(r[0]), color: text(r[1]), size: text(r[2]), offlineStock: num(r[3]) }));
+    .map((r) => ({ styleCode: text(r[0]), color: text(r[1]), size: text(r[2]), offlineStock: num(r[3]), barcode: text(r[4]) }));
   const metaRow = metaRows[0];
   const meta = metaRow && text(metaRow[0])
     ? { uploadedAt: text(metaRow[0]), rowCount: num(metaRow[1]), fileName: text(metaRow[2]) }

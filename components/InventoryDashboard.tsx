@@ -1846,6 +1846,8 @@ function parseWarehouseStockWorkbook(rows: any[][]): any[][] {
   const colorCol = findWarehouseCol(header, ["컬러코드", "칼라코드", "컬러", "칼라"], 7);
   const sizeCol = findWarehouseCol(header, ["사이즈코드", "사이즈"], 9);
   const offlineCol = findWarehouseCol(header, ["가용(오프)", "가용오프"], 18);
+  // MARK 2026-10-20: SKU 방식 RT의 "출고업로드"(채널/바코드/의뢰수량) 양식용 — 실제 바코드를 같이 저장합니다.
+  const barcodeCol = (header || []).findIndex((v: any) => String(v ?? "").trim() === "바코드");
   const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
 
   const out: any[][] = [];
@@ -1857,7 +1859,7 @@ function parseWarehouseStockWorkbook(rows: any[][]): any[][] {
     const size = String(row[sizeCol] ?? "").trim();
     if (!color || !size) continue;
     const offlineStock = Number(row[offlineCol] ?? 0) || 0;
-    out.push([styleCode, color, size, offlineStock]);
+    out.push([styleCode, color, size, offlineStock, barcodeCol >= 0 ? String(row[barcodeCol] ?? "").trim() : ""]);
   }
   return out;
 }
@@ -2377,37 +2379,74 @@ function StoreRequestRtSection() {
 // 따로 불러옵니다 — /api/data가 느리거나 실패해도 이 칸은 영향을 안 받고, 반대로 여기서
 // 문제가 생겨도 나머지 대시보드에는 영향이 없습니다. 실패하면(/api/data처럼 조용히 내장
 // 데이터로 감추지 않고) 실제 에러 메시지를 그대로 보여줍니다.
-// MARK 2026-10-20: RT 참고자료 ① — ERP "채널×스타일 기간판매" 파일 파서.
-// 1행: NO/채널/채널명/스타일/스타일명/…/기간판매1(전주 기간)/…/기간판매2(전전주 기간), 2행: 판매/반품/합계/판매금액 하위라벨.
-// 각 기간의 "합계"(판매-반품 = 순판매수량)와 "판매금액"만 뽑아서 판매가 있는 행만 보냅니다.
+// MARK 2026-10-20: RT 참고자료 ① — ERP "채널×스타일(또는 채널×SKU) 기간판매" 파일 파서.
+// 두 가지 형식을 다 받습니다:
+//  - 스타일 단위(전주1019.xlsx 형식): 채널/채널명/스타일/스타일명/재고/…/판매/…/기간판매1(기간)/기간판매2(기간)
+//  - SKU 단위(재고MD 엑셀 "매장재고 DB"와 같은 보고서): 위 + 칼라/사이즈/가용재고/누계판매
+// 1~2행이 병합 헤더라 열 위치가 파일마다 조금씩 달라서, 라벨로 블록 시작을 찾고 하위라벨(합계/판매금액)로 정확한 열을 잡습니다.
+// 출력은 12열 표준: [채널코드,채널명,스타일,스타일명,칼라,사이즈,재고,누계판매,전주수량,전주금액,전전주수량,전전주금액]
 function parseRtWeeklySalesWorkbook(rows: any[][]) {
-  const headerIdx = rows.findIndex((r, i) => i < 6 && (r || []).some((v) => String(v ?? "").includes("기간판매1")));
-  if (headerIdx < 0) throw new Error('"기간판매1/기간판매2" 열을 찾지 못했어요. 채널×스타일 기간판매 파일이 맞는지 확인해주세요.');
-  const header = (rows[headerIdx] || []).map((v) => String(v ?? "").trim());
-  const sub = (rows[headerIdx + 1] || []).map((v) => String(v ?? "").trim());
-  const col = (name: string) => header.findIndex((h) => h === name);
-  const chCode = col("채널"), chName = col("채널명"), style = col("스타일"), styleName = col("스타일명");
-  const p1 = header.findIndex((h) => h.startsWith("기간판매1"));
-  const p2 = header.findIndex((h) => h.startsWith("기간판매2"));
-  if (chName < 0 || style < 0 || p1 < 0 || p2 < 0) throw new Error("채널명/스타일/기간판매 열 위치를 확인하지 못했어요.");
-  const sumCol = (start: number, label: string) => {
-    for (let i = start; i < start + 4; i++) if (sub[i] === label) return i;
+  const h1 = (rows[0] || []).map((v) => String(v ?? "").trim());
+  const h2 = (rows[1] || []).map((v) => String(v ?? "").trim());
+  const width = Math.max(h1.length, h2.length);
+  const idx1 = (name: string) => h1.findIndex((h) => h === name);
+  const blockStart = (prefix: string) => {
+    const cands: number[] = [];
+    for (let i = 0; i < width; i++) if ((h1[i] || "").startsWith(prefix) || (h2[i] || "").startsWith(prefix)) cands.push(i);
+    return cands.length ? Math.min(...cands) : -1;
+  };
+  const subIn = (start: number, label: string, span = 4) => {
+    for (let i = start; i <= start + span && i < width; i++) if (h2[i] === label) return i;
     return -1;
   };
-  const p1Qty = sumCol(p1, "합계"), p1Amt = sumCol(p1, "판매금액"), p2Qty = sumCol(p2, "합계"), p2Amt = sumCol(p2, "판매금액");
+  const chCode = idx1("채널"), chName = idx1("채널명"), style = idx1("스타일"), styleName = idx1("스타일명");
+  const color = idx1("칼라"), size = idx1("사이즈");
+  const p1 = blockStart("기간판매1");
+  const p2 = blockStart("기간판매2");
+  if (chName < 0 || style < 0 || p1 < 0 || p2 < 0) throw new Error('채널명/스타일/"기간판매1·기간판매2" 열을 찾지 못했어요. ERP 기간판매 보고서 원본이 맞는지 확인해주세요.');
+  const p1Qty = subIn(p1, "합계"), p1Amt = subIn(p1, "판매금액"), p2Qty = subIn(p2, "합계"), p2Amt = subIn(p2, "판매금액");
   if ([p1Qty, p1Amt, p2Qty, p2Amt].some((x) => x < 0)) throw new Error("기간판매의 합계/판매금액 하위 열을 찾지 못했어요.");
-  const period = (h: string) => (h.match(/(\d{4}-\d{2}-\d{2}\s*~\s*\d{4}-\d{2}-\d{2})/)?.[1] || "").replace(/\s/g, "");
+  // 누계판매(SKU 파일) 또는 판매(스타일 파일) 블록의 "합계"
+  const cumStart = idx1("누계판매") >= 0 ? idx1("누계판매") : idx1("판매");
+  const cumQty = cumStart >= 0 ? subIn(cumStart, "합계", 3) : -1;
+  // 재고: 가용재고 > 재고수량 > 재고 블록의 "수량"
+  const stockCol = idx1("가용재고") >= 0 ? idx1("가용재고") : idx1("재고수량") >= 0 ? idx1("재고수량") : idx1("재고") >= 0 ? subIn(idx1("재고"), "수량", 3) : -1;
+
+  const allHeader = [...h1, ...h2].join(" ");
+  const periods = [...allHeader.matchAll(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/g)].map((m) => `${m[1]}~${m[2]}`);
+  let period1 = periods[0] || "";
+  let period2 = periods[1] || "";
+  let periodGuessed = false;
+  if (!period1 || !period2) {
+    // 파일 헤더에 기간이 없으면(재고MD 엑셀처럼 손본 파일) "오늘 기준 지난주 월~일 / 그 전주"로 추정
+    const now = new Date(Date.now() + 9 * 3600 * 1000);
+    const dow = now.getUTCDay();
+    const lastMon = new Date(now.getTime() - ((dow === 0 ? 7 : dow) + 6) * 86400000);
+    const f = (d: Date) => d.toISOString().slice(0, 10);
+    const add = (d: Date, k: number) => new Date(d.getTime() + k * 86400000);
+    period1 = `${f(lastMon)}~${f(add(lastMon, 6))}`;
+    period2 = `${f(add(lastMon, -7))}~${f(add(lastMon, -1))}`;
+    periodGuessed = true;
+  }
+
   const num = (v: any) => Number(String(v ?? "").replace(/,/g, "")) || 0;
+  const isSku = color >= 0 && size >= 0;
   const out: any[][] = [];
-  for (const r of rows.slice(headerIdx + 2)) {
+  for (const r of rows.slice(2)) {
     const st = String(r?.[style] ?? "").trim();
     const name = String(r?.[chName] ?? "").trim();
     if (!st || !name || st.includes("합계")) continue;
+    const stock = stockCol >= 0 ? num(r[stockCol]) : 0;
+    const cum = cumQty >= 0 ? num(r[cumQty]) : 0;
     const a = num(r[p1Qty]), b = num(r[p1Amt]), c = num(r[p2Qty]), d = num(r[p2Amt]);
-    if (!a && !b && !c && !d) continue;
-    out.push([String(r[chCode] ?? "").trim(), name, st, String(r[styleName] ?? "").trim(), a, b, c, d]);
+    if (!a && !b && !c && !d && !(isSku && (stock || cum))) continue;
+    out.push([
+      String(r[chCode] ?? "").trim(), name, st, String(r[styleName] ?? "").trim(),
+      isSku ? String(r[color] ?? "").trim() : "", isSku ? String(r[size] ?? "").trim() : "",
+      stock, cum, a, b, c, d,
+    ]);
   }
-  return { rows: out, period1: period(header[p1]), period2: period(header[p2]) };
+  return { rows: out, period1, period2, periodGuessed, format: isSku ? "sku" : "style" };
 }
 
 function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
@@ -2434,15 +2473,32 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
     try {
       const parsed = parseRtWeeklySalesWorkbook(await readSheet(file));
       if (!parsed.rows.length) throw new Error("판매가 있는 행을 찾지 못했어요.");
-      setMsg(`업로드 중... (${parsed.rows.length.toLocaleString("ko-KR")}행)`);
-      const res = await fetch("/api/rt-weekly-sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: parsed.rows, fileName: file.name, period1: parsed.period1, period2: parsed.period2 }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body?.ok) throw new Error(body?.error || "업로드 실패");
-      setMsg(`✓ 전주(${parsed.period1})·전전주(${parsed.period2}) 판매 ${body.rowCount.toLocaleString("ko-KR")}행 반영 — RT를 다시 계산하면 적용돼요.`);
+      const meta = { fileName: file.name, period1: parsed.period1, period2: parsed.period2, format: parsed.format };
+      // 1.5MB(UTF-8) 단위로 나눠 보냄 — SKU 파일은 수만 행이라 한 번에 보내면 413(요청 크기 초과)
+      const enc = new TextEncoder();
+      const chunks: any[][][] = [];
+      let cur: any[][] = [];
+      let bytes = 2;
+      for (const r of parsed.rows) {
+        const b = enc.encode(JSON.stringify(r)).length + 1;
+        if (cur.length && bytes + b > 1_500_000) { chunks.push(cur); cur = []; bytes = 2; }
+        cur.push(r); bytes += b;
+      }
+      if (cur.length) chunks.push(cur);
+      const post = async (payload: any) => {
+        const res = await fetch("/api/rt-weekly-sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body?.ok) throw new Error(body?.error || `업로드 실패 (status ${res.status})`);
+        return body;
+      };
+      let startRow = 2;
+      for (let i = 0; i < chunks.length; i++) {
+        setMsg(`업로드 중... (${i + 1}/${chunks.length}, ${parsed.rows.length.toLocaleString("ko-KR")}행)`);
+        const c = await post({ mode: "chunk", rows: chunks[i], startRow });
+        startRow += Number(c.written || 0);
+      }
+      const body = await post({ mode: "finish", totalRows: startRow - 2, ...meta });
+      setMsg(`✓ ${parsed.format === "sku" ? "SKU 단위" : "스타일 단위"} 판매 ${body.rowCount.toLocaleString("ko-KR")}행 반영 · 전주 ${parsed.period1} / 전전주 ${parsed.period2}${parsed.periodGuessed ? " (파일에 기간이 없어 날짜로 추정)" : ""} — RT를 다시 계산하면 적용돼요.`);
       loadMetas();
       onUploaded?.();
     } catch (e: any) {
@@ -2499,9 +2555,9 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-50 p-3">
           <p className="text-xs font-black text-slate-700">① 전주·전전주 매장별 판매</p>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">채널×스타일 기간판매 파일(기간판매1=전주, 기간판매2=전전주). 매장 판매와 전사 TOP20을 이 기준으로 계산해요.</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">ERP 기간판매 보고서(기간판매1=전주, 기간판매2=전전주). 칼라·사이즈가 있는 SKU 버전을 올리면 SKU 방식 RT도 계산돼요.</p>
           <p className="mt-2 text-[11px] font-bold text-slate-600">
-            {weeklyMeta ? `마지막 업로드: ${weeklyMeta.uploadedAt} · 전주 ${weeklyMeta.period1} / 전전주 ${weeklyMeta.period2}` : "아직 업로드 없음 — 없으면 최근 판매이력(7+7일)으로 계산해요."}
+            {weeklyMeta ? `마지막 업로드: ${weeklyMeta.uploadedAt} · ${weeklyMeta.format === "sku" ? "SKU 단위" : "스타일 단위"} · 전주 ${weeklyMeta.period1} / 전전주 ${weeklyMeta.period2}` : "아직 업로드 없음 — 없으면 최근 판매이력(7+7일)으로 계산해요."}
           </p>
           <div className="mt-2">{fileInput("weekly", "📤 판매 파일 올리기")}</div>
         </div>
@@ -2517,6 +2573,135 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
       </div>
       {msg && <p className="mt-2 text-xs font-bold text-slate-600">{msg}</p>}
     </div>
+  );
+}
+
+// MARK 2026-10-20: SKU 방식 RT(재고MD 로직) — 기존 RT와 나란히 비교.
+function RtSkuSection({ legacyData }: { legacyData: any }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [computing, setComputing] = useState(false);
+  const [sec, setSec] = useState(0);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/rt-sku", { cache: "no-store" }).then((x) => x.json());
+      if (!r?.ok) throw new Error(r?.error || "조회 실패");
+      setData(r.saved);
+    } catch (e: any) {
+      setErr(e?.message || "조회 실패");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function compute() {
+    if (computing) return;
+    setComputing(true);
+    setErr("");
+    setSec(0);
+    const t0 = Date.now();
+    const timer = setInterval(() => setSec(Math.round((Date.now() - t0) / 1000)), 1000);
+    try {
+      const res = await fetch("/api/rt-sku", { method: "POST", cache: "no-store" });
+      const raw = await res.text();
+      let body: any = null;
+      try { body = JSON.parse(raw); } catch {}
+      if (!body) throw new Error(res.status === 504 ? "서버 제한시간을 넘겼어요. 잠시 후 다시 눌러주세요." : `서버 응답을 읽지 못했어요 (status ${res.status})`);
+      if (!body.ok) throw new Error(body.error || "계산 실패");
+      setData(body.saved);
+      if (body.saveError) setErr(`계산은 됐지만 저장 실패: ${body.saveError}`);
+    } catch (e: any) {
+      setErr(e?.message || "계산 실패");
+    } finally {
+      clearInterval(timer);
+      setComputing(false);
+    }
+  }
+
+  const sm = data?.summary || {};
+  const lg = data?.legacy;
+  const legacyCount = (legacyData?.rtSuggestions || []).length;
+  const legacyQty = (legacyData?.rtSuggestions || []).reduce((a: number, x: any) => a + Number(x.suggestQty || 0), 0);
+  const fmt = (v: any) => Number(v || 0).toLocaleString("ko-KR");
+  const Stat = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
+    <div className="rounded-xl bg-white p-3">
+      <p className="text-[11px] font-bold text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-black text-slate-900">{value}</p>
+      {sub && <p className="text-[11px] font-semibold text-slate-500">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <section className="space-y-3 rounded-3xl border-2 border-indigo-200 bg-indigo-50/50 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black text-slate-900">🧪 RT · SKU 방식 (재고MD 로직) — 비교용</h2>
+          <p className="text-xs font-semibold text-slate-500">칼라·사이즈 단위로 품절임박/보충/과잉을 판정 → 창고 출고 우선(등급·순위 순) → 남는 부족분만 RT. 보내는 매장 SKU는 품절시키지 않아요.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {data && (
+            <a href={`/api/rt-sku/export${data.savedDate ? `?date=${data.savedDate}` : ""}`} className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700">
+              📥 SKU 방식 엑셀(RT업로드·출고업로드)
+            </a>
+          )}
+          <button type="button" onClick={compute} disabled={computing || loading} className="h-9 rounded-full bg-indigo-600 px-4 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+            {computing ? `계산 중... ${sec}초` : data?.isToday ? "🔄 SKU 방식 다시 계산" : "▶ SKU 방식 계산하기"}
+          </button>
+        </div>
+      </div>
+
+      {err && <p className="rounded-xl bg-red-50 p-3 text-xs font-bold text-red-600">⚠ {err}</p>}
+      {loading && !data && <p className="text-xs font-bold text-slate-400">불러오는 중...</p>}
+      {!loading && !data && !err && <p className="rounded-xl bg-white p-4 text-xs font-bold text-slate-500">아직 계산 안 함 — RT 참고자료 ①에 SKU 버전 판매 파일을 올린 뒤 "SKU 방식 계산하기"를 눌러주세요.</p>}
+
+      {data && (
+        <>
+          <p className={`text-xs font-bold ${data.isToday ? "text-emerald-700" : "text-amber-700"}`}>
+            {data.isToday ? "✓ 오늘" : `⚠ ${data.savedDate}`} 계산분 · {data.savedAt} · {Math.round((data.computeMs || 0) / 1000)}초 · 판매 {data.inputs?.sales?.period1} / {data.inputs?.sales?.period2} · 재고 {data.inputs?.pip?.used ? `PIP ${data.inputs.pip.uploadedAt}` : "업로드 파일"} · 물류 {data.inputs?.warehouse?.used ? data.inputs.warehouse.uploadedAt : "미반영"}
+          </p>
+          <div className="grid gap-2 md:grid-cols-4">
+            <Stat label="물류 출고" value={`${fmt(sm.shipCount)}줄 / ${fmt(sm.shipQty)}장`} sub={`보충 ${fmt(sm.boostShipCount)}줄 · ${fmt(sm.shipStores)}개 매장`} />
+            <Stat label="매장 간 RT (SKU)" value={`${fmt(sm.rtCount)}줄 / ${fmt(sm.rtQty)}장`} sub={`매장쌍 ${fmt(sm.rtStorePairs)}개 · 과잉매장 ${fmt(sm.rtTier1)} / 하위판매 ${fmt(sm.rtTier2)}`} />
+            <Stat label="못 채운 부족분" value={`${fmt(sm.unmetCount)}줄 / ${fmt(sm.unmetQty)}장`} sub="창고·다른 매장 모두 없음" />
+            <Stat label="판정 SKU" value={`${fmt(sm.skuEntries)}개`} sub={Object.entries(sm.statusCount || {}).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ")} />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700">
+            <p className="font-black">⚖️ 기존 방식과 비교</p>
+            <p className="mt-1">기존(품번 단위): 제안 {fmt(legacyCount)}건 / {fmt(legacyQty)}장{lg ? ` → 칼라·사이즈로 펼치면 ${fmt(lg.skuLines)}줄` : ""}</p>
+            {lg && (
+              <p className="mt-1 text-rose-600">
+                기존 방식 중 <b>보내는 매장의 SKU를 0으로 만드는데, 그 SKU가 최근 2주 그 매장에서 팔리고 있던 지시: {fmt(lg.stockoutLines)}줄 / {fmt(lg.stockoutQty)}장</b>
+              </p>
+            )}
+            <p className="mt-1 text-emerald-700">SKU 방식에서 같은 경우: {fmt(sm.senderStockoutLines)}줄 (보내는 매장은 목표재고와 품절임박 기준+1장 중 큰 값을 남김)</p>
+          </div>
+          {(data.preview?.rt || []).length > 0 && (
+            <details className="rounded-xl bg-white p-3 text-xs">
+              <summary className="cursor-pointer font-black text-slate-700">RT 미리보기 (상위 30줄 — 전체는 엑셀)</summary>
+              <div className="mt-2 max-h-80 overflow-auto">
+                <table className="w-full text-left">
+                  <thead><tr className="text-slate-500"><th>SKU</th><th>보내는 매장(재고·주수→이동후)</th><th>받는 매장(재고·주수→이동후)</th><th>수량</th></tr></thead>
+                  <tbody>
+                    {data.preview.rt.map((x: any, i: number) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1 font-bold">{x.productName} <span className="text-slate-400">{x.styleCode} {x.color}/{x.size}</span></td>
+                        <td>{x.from.storeName} ({x.from.stock}장·{x.from.weeks >= 99 ? "판매없음" : `${x.from.weeks}주`} → {x.from.afterStock}장) <span className="text-slate-400">{x.tier}</span></td>
+                        <td>{x.to.storeName} [{x.to.grade}] ({x.to.stock}장·{x.to.status} → {x.to.afterStock}장·{x.to.afterWeeks}주)</td>
+                        <td className="font-black">{x.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -2748,6 +2933,8 @@ function RtControlSection() {
           onStatus={updateRtStatus}
         />
       )}
+
+      <RtSkuSection legacyData={rtData} />
 
       <StoreRequestRtSection />
     </section>

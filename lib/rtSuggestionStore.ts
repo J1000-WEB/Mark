@@ -12,9 +12,11 @@
 
 import { getDbSheetId, getSheetsClient, getSheetValuesById, createSheetWithValuesById } from "./googleSheets";
 
-const PREFIX = "RT제안_";
+// MARK 2026-10-20: "style"=기존 방식(품번 단위), "sku"=SKU 방식(재고MD 로직) — 같은 저장 방식을 접두어만 달리해서 씁니다.
+export type RtKind = "style" | "sku";
+const PREFIX_OF: Record<RtKind, string> = { style: "RT제안_", sku: "RTSKU_" };
 const RT_KEEP_DAYS = 7;
-const TITLE_RE = /^RT제안_(\d{4}-\d{2}-\d{2})_(\d{6})$/;
+const titleRe = (kind: RtKind) => new RegExp(`^${PREFIX_OF[kind]}(\\d{4}-\\d{2}-\\d{2})_(\\d{6})$`);
 
 function kstNow() {
   const d = new Date(Date.now() + 9 * 3600 * 1000);
@@ -26,7 +28,8 @@ function kstNow() {
   };
 }
 
-async function listRtTabs() {
+async function listRtTabs(kind: RtKind = "style") {
+  const TITLE_RE = titleRe(kind);
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId: getDbSheetId(), fields: "sheets.properties(title,sheetId)" });
   return (meta.data.sheets || [])
@@ -45,9 +48,9 @@ function latestPerDate(tabs: { title: string; sheetId: number; date: string; hms
   return tabs.filter((t) => (seen.has(t.date) ? false : (seen.add(t.date), true)));
 }
 
-export async function saveRtSuggestions(result: any) {
+export async function saveRtSuggestions(result: any, kind: RtKind = "style") {
   const now = kstNow();
-  const title = `${PREFIX}${now.date}_${now.hms}`;
+  const title = `${PREFIX_OF[kind]}${now.date}_${now.hms}`;
   const items: any[] = result?.rtSuggestions || [];
   const meta = {
     savedDate: now.date,
@@ -60,13 +63,14 @@ export async function saveRtSuggestions(result: any) {
     computeMs: result?.computeMs || 0,
     diagnostics: result?.diagnostics || null,
     warehouseCovered: result?.warehouseCovered || [],
+    ...(result?.extraMeta || {}),
   };
   const values = [["meta", JSON.stringify(meta)], ...items.map((item, i) => [i + 1, JSON.stringify(item)])];
   await createSheetWithValuesById(getDbSheetId(), title, values, { rowCount: values.length + 1, columnCount: 2 });
 
   // 쓰기에 성공한 뒤에만 정리: 같은 날짜의 예전 탭 + 보관기간 지난 날짜 탭
   try {
-    const tabs = await listRtTabs();
+    const tabs = await listRtTabs(kind);
     const keepDates = new Set(latestPerDate(tabs).slice(0, RT_KEEP_DAYS).map((t) => t.date));
     const toDelete = tabs.filter((t) => t.title !== title && (t.date === now.date || !keepDates.has(t.date)));
     if (toDelete.length) {
@@ -83,8 +87,8 @@ export async function saveRtSuggestions(result: any) {
 }
 
 /** date 없으면 가장 최근 저장분. 저장분이 하나도 없으면 null */
-export async function loadSavedRtSuggestions(date?: string) {
-  const tabs = latestPerDate(await listRtTabs());
+export async function loadSavedRtSuggestions(date?: string, kind: RtKind = "style") {
+  const tabs = latestPerDate(await listRtTabs(kind));
   const savedDates = tabs.map((t) => t.date);
   const target = date ? tabs.find((t) => t.date === date) : tabs[0];
   if (!target) return { saved: null, savedDates };

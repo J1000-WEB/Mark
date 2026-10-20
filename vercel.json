@@ -111,6 +111,10 @@
       "memory": 3009,
       "maxDuration": 300
     },
+    "app/api/rt-sku/route.ts": {
+      "memory": 3009,
+      "maxDuration": 300
+    },
     "app/api/rt-suggestions/route.ts": {
       "memory": 3009,
       "maxDuration": 300

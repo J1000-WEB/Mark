@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getHistorySheetId, getDailySourceSheetId, getSheetId, getSheetsClient } from "@/lib/googleSheets";
+import { getHistorySheetId, getDailySourceSheetId, getSheetId, getSheetsClient, getDbSheetId } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -55,6 +55,14 @@ export async function GET() {
     if (!seen.has(dailySourceId)) {
       results.dailySource = await inspectSpreadsheet(dailySourceId);
       seen.add(dailySourceId);
+    }
+    // MARK 2026-10-20: RT/매장재고/물류재고 스냅샷이 저장되는 MARK_DB(getDbSheetId)도 같이 확인합니다.
+    const dbId = getDbSheetId();
+    if (!seen.has(dbId) && dbId !== baseId) {
+      results.db = await inspectSpreadsheet(dbId);
+      seen.add(dbId);
+    } else if (dbId === baseId) {
+      results.dbIsBase = true;
     }
     if (!seen.has(baseId)) {
       results.base = await inspectSpreadsheet(baseId);

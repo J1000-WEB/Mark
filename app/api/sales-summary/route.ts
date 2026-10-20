@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildStoreSalesSummary, readSalesSummarySnapshot } from "@/lib/dataBuilder";
+import { buildStoreSalesSummary, readSalesSummarySnapshot, fixCopiedClosedDaysInSalesSummary } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -96,5 +96,18 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("sales-summary GET failed:", error);
     return NextResponse.json({ ok: false, error: error?.message || "매출탭 계산 실패" }, { status: 500 });
+  }
+}
+
+// MARK 2026-10-20: 휴점일 복사값 정정 — POST { action: "fixCopiedClosedDays", dryRun?: boolean }
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.action !== "fixCopiedClosedDays") return NextResponse.json({ ok: false, error: "action이 올바르지 않습니다." }, { status: 400 });
+    const result = await fixCopiedClosedDaysInSalesSummary({ dryRun: !!body.dryRun });
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("sales-summary fix failed:", error);
+    return NextResponse.json({ ok: false, error: error?.message || "정정 실패" }, { status: 500 });
   }
 }

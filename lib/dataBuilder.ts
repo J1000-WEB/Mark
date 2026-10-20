@@ -4657,6 +4657,51 @@ export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fil
   };
 }
 
+// MARK 2026-10-20: "전년 매출에 10/7이 두 번 더해진다" 점검 결과 — 매출_일별_스냅샷에 휴점일(추석/설/백화점
+// 월요일 휴점 등) 행이 "영수건수 1건 + 다음(또는 이전) 날 금액을 그대로 복사한 값"으로 들어가 있었습니다
+// (ERP·원본 시트에는 빈칸). 그런 행의 금액·수량·영수건수를 0으로 정정합니다(목표는 그대로). 바꾸기 전 원래 행은
+// "매출_일별_스냅샷_보정백업" 탭에 남깁니다. 위탁/면세(오프라인_)는 원래 영수건수가 1로 들어와서 제외합니다.
+export async function fixCopiedClosedDaysInSalesSummary(opts: { dryRun?: boolean } = {}) {
+  const dbId = getDbSheetId();
+  const raw = await getSheetValuesById(dbId, SALES_SUMMARY_SHEET, "A2:H60000");
+  const rows = raw.map((r, i) => ({ i, date: text(r?.[0]), group: text(r?.[1]), code: text(r?.[2]), store: text(r?.[3]), qty: num(r?.[4]), amount: num(r?.[5]), receipt: num(r?.[6]), target: num(r?.[7]) }));
+  const byStore = new Map<string, Map<string, (typeof rows)[number]>>();
+  for (const r of rows) {
+    if (!r.date || !r.store) continue;
+    if (!byStore.has(r.store)) byStore.set(r.store, new Map());
+    byStore.get(r.store)!.set(r.date, r);
+  }
+  const fixes: (typeof rows)[number][] = [];
+  for (const [store, m] of byStore.entries()) {
+    if (store.startsWith("오프라인_")) continue;
+    for (const r of m.values()) {
+      if (!(r.amount > 0) || r.receipt > 1) continue;
+      const prev = dateAddDays(r.date, -1);
+      const next = dateAddDays(r.date, 1);
+      const src = [m.get(next), m.get(prev)].find((x) => x && x.amount === r.amount && x.receipt > 1);
+      if (src) fixes.push(r);
+    }
+  }
+  fixes.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const summary = { count: fixes.length, totalAmount: fixes.reduce((t, r) => t + r.amount, 0), rows: fixes.map((r) => ({ date: r.date, store: r.store, amount: r.amount, qty: r.qty, receipt: r.receipt })) };
+  if (opts.dryRun || !fixes.length) return { ok: true, applied: false, ...summary };
+
+  // 1) 백업(정정 전 원래 값)
+  const BACKUP = "매출_일별_스냅샷_보정백업";
+  const backupHeader = ["보정일시", ...SALES_SUMMARY_HEADER, "사유"];
+  await ensureSheetExistsById(dbId, BACKUP, backupHeader);
+  const prevBackup = await getSheetValuesById(dbId, BACKUP, "A1:J20000").catch(() => [] as any[]);
+  const stamp = nowKSTDateTime();
+  const backupRows = fixes.map((r) => [stamp, r.date, r.group, r.code, r.store, r.qty, r.amount, r.receipt, r.target, "휴점일에 앞/뒤 날짜 금액이 복사됨(영수 1건) → 0으로 정정"]);
+  await safeReplaceSheetValuesById(dbId, BACKUP, [...(prevBackup.length ? prevBackup : [backupHeader]), ...backupRows]);
+
+  // 2) 정정: 금액·수량·영수건수 0 (목표는 유지)
+  const fixIdx = new Set(fixes.map((r) => r.i));
+  const out = rows.map((r) => [r.date, r.group, r.code, r.store, fixIdx.has(r.i) ? 0 : r.qty, fixIdx.has(r.i) ? 0 : r.amount, fixIdx.has(r.i) ? 0 : r.receipt, r.target]);
+  await safeReplaceSheetValuesById(dbId, SALES_SUMMARY_SHEET, [SALES_SUMMARY_HEADER, ...out]);
+  return { ok: true, applied: true, backupSheet: BACKUP, ...summary };
+}
+
 export async function getSalesSummaryMeta() {
   const dbId = getDbSheetId();
   const rows = await getSheetValuesById(dbId, SALES_SUMMARY_META_SHEET, "A2:I2").catch(() => [] as any[]);

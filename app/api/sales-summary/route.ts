@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildStoreSalesSummary } from "@/lib/dataBuilder";
+import { buildStoreSalesSummary, readSalesSummarySnapshot } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,6 +13,22 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    // MARK 2026-10-20: 점검용 — ?rawDate=YYYY-MM-DD 이면 그 날짜의 원본 스냅샷 행을 그대로 돌려줍니다(중복 확인용).
+    const rawDate = searchParams.get("rawDate");
+    if (rawDate) {
+      const { rows } = await readSalesSummarySnapshot();
+      const dayRows = rows.filter((r) => r.date === rawDate);
+      const keyCount = new Map<string, number>();
+      for (const r of dayRows) keyCount.set(r.storeName, (keyCount.get(r.storeName) || 0) + 1);
+      return NextResponse.json({
+        ok: true,
+        date: rawDate,
+        rowCount: dayRows.length,
+        duplicateStores: [...keyCount.entries()].filter(([, c]) => c > 1).map(([name, c]) => ({ name, count: c, rows: dayRows.filter((r) => r.storeName === name) })),
+        totalAmount: dayRows.reduce((s, r) => s + r.amount, 0),
+        distinctDateFormats: [...new Set(rows.map((r) => (/^\d{4}-\d{2}-\d{2}$/.test(r.date) ? "YYYY-MM-DD" : r.date)))].slice(0, 20),
+      }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     const data = await buildStoreSalesSummary({
       dailyDate: searchParams.get("date") || undefined,
       rangeStart: searchParams.get("rangeStart") || undefined,

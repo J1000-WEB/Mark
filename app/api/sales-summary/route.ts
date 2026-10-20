@@ -14,6 +14,17 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     // MARK 2026-10-20: 점검용 — ?rawDate=YYYY-MM-DD 이면 그 날짜의 원본 스냅샷 행을 그대로 돌려줍니다(중복 확인용).
+    // ?checkSuspicious=1 — 영수건수 1건 이하인데 금액이 100만원 이상인 행(수기 보정/복사 의심)을 날짜별로 모읍니다.
+    if (searchParams.get("checkSuspicious") === "1") {
+      const { rows } = await readSalesSummarySnapshot();
+      const sus = rows.filter((r) => r.receiptCount <= 1 && r.amount >= 1_000_000);
+      const byDate = new Map<string, any[]>();
+      for (const r of sus) {
+        if (!byDate.has(r.date)) byDate.set(r.date, []);
+        byDate.get(r.date)!.push({ store: r.storeName, amount: r.amount, qty: r.qty, receiptCount: r.receiptCount });
+      }
+      return NextResponse.json({ ok: true, count: sus.length, dates: [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, list]) => ({ date, stores: list.length, total: list.reduce((s, x) => s + x.amount, 0), list })) }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     // ?checkSameDays=1 — 매장별로 "연속된 두 날짜의 금액·수량·건수가 완전히 같은" 행(복사 붙여넣기 의심)을 찾습니다.
     if (searchParams.get("checkSameDays") === "1") {
       const { rows } = await readSalesSummarySnapshot();

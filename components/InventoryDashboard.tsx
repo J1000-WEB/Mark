@@ -2467,11 +2467,20 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
     return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" }) as any[][];
   }
 
-  async function uploadWeekly(file: File) {
+  async function uploadWeekly(files: File[]) {
     setBusy("weekly");
-    setMsg("전주·전전주 판매 파일 읽는 중...");
+    setMsg(`전주·전전주 판매 파일 읽는 중... (${files.length}개)`);
     try {
-      const parsed = parseRtWeeklySalesWorkbook(await readSheet(file));
+      // MARK 2026-10-20: SKU 보고서가 커서 ERP에서 매장별로 나눠 받는 경우 — 여러 파일을 합쳐서 한 번에 올립니다
+      // (같은 매장×SKU가 두 파일에 겹치면 나중 파일 값 사용).
+      const parsedList = [];
+      for (const f of files) parsedList.push(parseRtWeeklySalesWorkbook(await readSheet(f)));
+      const formats = new Set(parsedList.map((p) => p.format));
+      if (formats.size > 1) throw new Error("스타일 단위 파일과 SKU 단위 파일이 섞여 있어요. 같은 종류만 같이 올려주세요.");
+      const merged = new Map<string, any[]>();
+      for (const p of parsedList) for (const r of p.rows) merged.set(`${r[1]}|${r[2]}|${r[4]}|${r[5]}`, r);
+      const file = { name: files.map((f) => f.name).join(" + ") };
+      const parsed = { ...parsedList[0], rows: [...merged.values()] };
       if (!parsed.rows.length) throw new Error("판매가 있는 행을 찾지 못했어요.");
       const meta = { fileName: file.name, period1: parsed.period1, period2: parsed.period2, format: parsed.format };
       // 1.5MB(UTF-8) 단위로 나눠 보냄 — SKU 파일은 수만 행이라 한 번에 보내면 413(요청 크기 초과)
@@ -2538,11 +2547,14 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
       <input
         type="file"
         accept=".xlsx,.xls"
+        multiple={kind === "weekly"}
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0];
+          const list = Array.from(e.target.files || []);
           e.target.value = "";
-          if (f) (kind === "weekly" ? uploadWeekly : uploadWarehouse)(f);
+          if (!list.length) return;
+          if (kind === "weekly") uploadWeekly(list);
+          else uploadWarehouse(list[0]);
         }}
       />
     </label>
@@ -2555,7 +2567,7 @@ function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-slate-50 p-3">
           <p className="text-xs font-black text-slate-700">① 전주·전전주 매장별 판매</p>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">ERP 기간판매 보고서(기간판매1=전주, 기간판매2=전전주). 칼라·사이즈가 있는 SKU 버전을 올리면 SKU 방식 RT도 계산돼요.</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">ERP 기간판매 보고서(기간판매1=전주, 기간판매2=전전주). 칼라·사이즈 SKU 버전은 매장별로 나눠 받은 파일 여러 개를 한 번에 골라 올려도 돼요(SKU 방식은 업로드 없이도 판매이력으로 계산돼요).</p>
           <p className="mt-2 text-[11px] font-bold text-slate-600">
             {weeklyMeta ? `마지막 업로드: ${weeklyMeta.uploadedAt} · ${weeklyMeta.format === "sku" ? "SKU 단위" : "스타일 단위"} · 전주 ${weeklyMeta.period1} / 전전주 ${weeklyMeta.period2}` : "아직 업로드 없음 — 없으면 최근 판매이력(7+7일)으로 계산해요."}
           </p>
@@ -2656,12 +2668,12 @@ function RtSkuSection({ legacyData }: { legacyData: any }) {
 
       {err && <p className="rounded-xl bg-red-50 p-3 text-xs font-bold text-red-600">⚠ {err}</p>}
       {loading && !data && <p className="text-xs font-bold text-slate-400">불러오는 중...</p>}
-      {!loading && !data && !err && <p className="rounded-xl bg-white p-4 text-xs font-bold text-slate-500">아직 계산 안 함 — RT 참고자료 ①에 SKU 버전 판매 파일을 올린 뒤 "SKU 방식 계산하기"를 눌러주세요.</p>}
+      {!loading && !data && !err && <p className="rounded-xl bg-white p-4 text-xs font-bold text-slate-500">아직 계산 안 함 — "SKU 방식 계산하기"를 눌러주세요. 판매는 매일 쌓이는 판매이력(전주·전전주), 재고·누계판매는 PIP 매장별 재고에서 가져와요.</p>}
 
       {data && (
         <>
           <p className={`text-xs font-bold ${data.isToday ? "text-emerald-700" : "text-amber-700"}`}>
-            {data.isToday ? "✓ 오늘" : `⚠ ${data.savedDate}`} 계산분 · {data.savedAt} · {Math.round((data.computeMs || 0) / 1000)}초 · 판매 {data.inputs?.sales?.period1} / {data.inputs?.sales?.period2} · 재고 {data.inputs?.pip?.used ? `PIP ${data.inputs.pip.uploadedAt}` : "업로드 파일"} · 물류 {data.inputs?.warehouse?.used ? data.inputs.warehouse.uploadedAt : "미반영"}
+            {data.isToday ? "✓ 오늘" : `⚠ ${data.savedDate}`} 계산분 · {data.savedAt} · {Math.round((data.computeMs || 0) / 1000)}초 · 판매 {data.inputs?.sales?.source === "upload" ? "업로드 파일" : "판매이력"} {data.inputs?.sales?.period1} / {data.inputs?.sales?.period2}{data.inputs?.sales?.cumSource === "none" ? " (누계판매 없음 — 보충 판정 안 됨)" : ""} · 재고 {data.inputs?.pip?.used ? `PIP ${data.inputs.pip.uploadedAt}` : "업로드 파일"} · 물류 {data.inputs?.warehouse?.used ? data.inputs.warehouse.uploadedAt : "미반영"}
           </p>
           <div className="grid gap-2 md:grid-cols-4">
             <Stat label="물류 출고" value={`${fmt(sm.shipCount)}줄 / ${fmt(sm.shipQty)}장`} sub={`보충 ${fmt(sm.boostShipCount)}줄 · ${fmt(sm.shipStores)}개 매장`} />

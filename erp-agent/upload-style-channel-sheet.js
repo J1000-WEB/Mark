@@ -90,7 +90,7 @@ function detectPipStoreStockColumns(pipRows) {
     const subHere = String(subRow[i] ?? "").trim();
     const subStock = String(subRow[i + 4] ?? "").trim();
     if (subHere !== "일간" || subStock !== "재고") continue; // 포맷이 다르면 건너뜀
-    result.push({ storeName: name, stockCol: i + 4 });
+    result.push({ storeName: name, stockCol: i + 4, cumCol: i + 3 }); // 블록: 일간/일간금액/주간/누적/재고
   }
   return result;
 }
@@ -106,10 +106,14 @@ function extractStoreStockRows(pipRows) {
     const color = String(r[PIP_COL.COLOR] ?? "").trim();
     const colorName = String(r[PIP_COL.COLOR_NAME] ?? "").trim();
     const size = String(r[PIP_COL.SIZE] ?? "").trim();
-    for (const { storeName, stockCol } of storeCols) {
+    for (const { storeName, stockCol, cumCol } of storeCols) {
       const stock = Math.max(0, Number(r[stockCol]) || 0);
-      if (!stock) continue;
-      out.push([styleCode, productName, color, colorName, size, storeName, stock]);
+      // MARK 2026-10-20: 8번째 열 = 누적판매(그 매장에서 그 SKU가 지금까지 팔린 수량) — SKU 방식 RT "보충" 판정용.
+      // 재고가 0이어도 누적판매가 5장 이상이면 저장(오래 품절된 인기 SKU를 찾기 위해 — SKU 방식 보충 기준과 같은 5장.
+      // 1~4장짜리까지 다 넣으면 행이 12만 개로 커져서 이 기준으로 줄임)
+      const cum = Math.max(0, Number(r[cumCol]) || 0);
+      if (!stock && cum < 5) continue;
+      out.push([styleCode, productName, color, colorName, size, storeName, stock, cum]);
     }
   }
   return { rows: out, storeCount: storeCols.length };

@@ -2,7 +2,8 @@
 // 읽어서 lib/rtSkuEngine.ts로 계산하고, 기존 방식(품번 단위) 오늘 계산분과 비교 지표를 같이 만듭니다.
 
 import { readRtWeeklySales } from "./rtWeeklySalesStore";
-import { readStoreStockSnapshot, readWarehouseStockSnapshot } from "./dataBuilder";
+import { readStoreStockSnapshot, readWarehouseStockSnapshot, readDailyHistoryFlatRange } from "./dataBuilder";
+import { periodEnd } from "./rtWeeklySalesStore";
 import { loadSavedRtSuggestions } from "./rtSuggestionStore";
 import { allocateByStock } from "./rtAllocate";
 import { runRtSkuEngine, normalizeStoreKey, RT_SKU_SETTINGS, RT_SKU_STORES } from "./rtSkuEngine";
@@ -25,12 +26,69 @@ async function doCompute() {
     readStoreStockSnapshot({ strict: true }),
     readWarehouseStockSnapshot().catch(() => ({ rows: [] as any[], meta: null })),
   ]);
-  if (!weekly.meta || weekly.meta.format !== "sku") {
-    throw new Error("SKU 방식은 칼라·사이즈가 있는 판매 파일이 필요해요. RT 참고자료 ①에 SKU 버전(재고MD 엑셀의 '매장재고 DB'와 같은 ERP 보고서)을 올려주세요.");
+  // MARK 2026-10-20(2): ERP SKU 보고서는 너무 커서 받기 어려움 → 기본은 이미 매일 쌓이는 데이터로 계산:
+  //   판매(전주·전전주) = Daily_Sales_History(매일 새벽 ERP 일간판매, 매장×SKU)
+  //   누계판매 = PIP 매장별 "누적"(새벽 매장별 재고 스냅샷 8번째 열), 재고 = PIP 재고
+  // SKU 버전 판매 파일을 (여러 개로 나눠서라도) 올려두고 기간이 최근이면 그 파일을 우선 씁니다.
+  const today = kstDate(0);
+  const fileUsable = weekly.meta?.format === "sku" && periodEnd(weekly.meta.period1) >= kstDate(-10);
+  let period1 = "", period2 = "";
+  if (weekly.meta && periodEnd(weekly.meta.period1) >= kstDate(-10) && periodEnd(weekly.meta.period2)) {
+    period1 = weekly.meta.period1;
+    period2 = weekly.meta.period2;
+  } else {
+    // 오늘 기준 지난주 월~일 / 그 전주
+    const now = new Date(`${today}T00:00:00Z`);
+    const dow = now.getUTCDay();
+    const lastMon = new Date(now.getTime() - ((dow === 0 ? 7 : dow) + 6) * 86400000);
+    const f = (d: Date) => d.toISOString().slice(0, 10);
+    const add = (d: Date, k: number) => new Date(d.getTime() + k * 86400000);
+    period1 = `${f(lastMon)}~${f(add(lastMon, 6))}`;
+    period2 = `${f(add(lastMon, -7))}~${f(add(lastMon, -1))}`;
   }
-  const sales = weekly.rows
-    .filter((r) => r.color && r.size)
-    .map((r) => ({ storeName: r.storeName, styleCode: r.styleCode, productName: r.productName, color: r.color, size: r.size, stock: r.stock, cumQty: r.cumQty, w1Qty: r.w1Qty, w2Qty: r.w2Qty }));
+  const [p1s, p1e] = period1.split("~");
+  const [p2s, p2e] = period2.split("~");
+
+  let sales: any[];
+  let salesSource: "upload" | "daily_sales_history";
+  if (fileUsable) {
+    salesSource = "upload";
+    sales = weekly.rows
+      .filter((r) => r.color && r.size)
+      .map((r) => ({ storeName: r.storeName, styleCode: r.styleCode, productName: r.productName, color: r.color, size: r.size, stock: r.stock, cumQty: r.cumQty, w1Qty: r.w1Qty, w2Qty: r.w2Qty }));
+  } else {
+    salesSource = "daily_sales_history";
+    const flat = await readDailyHistoryFlatRange(p2s, p1e, { strict: true });
+    const agg = new Map<string, any>();
+    for (const r of flat as any[]) {
+      if (!r.colorCode || !r.size || !r.styleCode) continue;
+      const inW1 = r.date >= p1s && r.date <= p1e;
+      const inW2 = r.date >= p2s && r.date <= p2e;
+      if (!inW1 && !inW2) continue;
+      const k = `${normalizeStoreKey(r.storeName)}|${String(r.styleCode).toUpperCase()}|${String(r.colorCode).toUpperCase()}|${String(r.size).toUpperCase()}`;
+      let a = agg.get(k);
+      if (!a) {
+        a = { storeName: r.storeName, styleCode: r.styleCode, productName: r.productName || "", color: r.colorCode, size: r.size, stock: 0, cumQty: 0, w1Qty: 0, w2Qty: 0 };
+        agg.set(k, a);
+      }
+      if (inW1) a.w1Qty += Number(r.qty || 0);
+      else a.w2Qty += Number(r.qty || 0);
+    }
+    // 누계판매·상품명은 PIP에서(판매가 없던 SKU도 PIP에 누적이 있으면 엔트리 생성 → "보충" 판정 가능)
+    for (const r of pip.rows) {
+      const k = `${normalizeStoreKey(r.storeName)}|${r.styleCode.toUpperCase()}|${r.color.toUpperCase()}|${r.size.toUpperCase()}`;
+      let a = agg.get(k);
+      if (!a) {
+        if (!(Number(r.cumQty || 0) > 0)) continue;
+        a = { storeName: r.storeName, styleCode: r.styleCode, productName: r.productName || "", color: r.color, size: r.size, stock: 0, cumQty: 0, w1Qty: 0, w2Qty: 0 };
+        agg.set(k, a);
+      }
+      a.cumQty = Number(r.cumQty || 0);
+      if (!a.productName) a.productName = r.productName || "";
+    }
+    sales = [...agg.values()];
+  }
+  const pipHasCum = pip.rows.some((r: any) => Number(r.cumQty || 0) > 0);
 
   // PIP는 3일 안에 올라온 것만(새벽 자동 갱신) — 아니면 업로드 파일의 재고를 씀
   const pipFresh = !!pip.meta?.uploadedAt && String(pip.meta.uploadedAt).slice(0, 10) >= kstDate(-3) && pip.rows.length > 0;
@@ -91,7 +149,13 @@ async function doCompute() {
     summary: { ...result.summary, senderStockoutLines: skuCheckStockout },
     legacy,
     inputs: {
-      sales: { uploadedAt: weekly.meta.uploadedAt, fileName: weekly.meta.fileName, period1: weekly.meta.period1, period2: weekly.meta.period2, rows: sales.length },
+      sales: {
+        source: salesSource,
+        uploadedAt: salesSource === "upload" ? weekly.meta?.uploadedAt : null,
+        fileName: salesSource === "upload" ? weekly.meta?.fileName : "Daily_Sales_History",
+        period1, period2, rows: sales.length,
+        cumSource: salesSource === "upload" ? "upload" : pipHasCum ? "pip" : "none",
+      },
       pip: { uploadedAt: pip.meta?.uploadedAt || null, used: pipFresh, rows: pip.rows.length },
       warehouse: { uploadedAt: (wh as any).meta?.uploadedAt || null, used: whFresh, rows: wh.rows.length },
     },

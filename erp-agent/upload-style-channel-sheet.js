@@ -177,8 +177,15 @@ async function saveSideSnapshots(rows, fileName) {
   }
 }
 
+// MARK 2026-10-20: CMD 창 출력은 지나가면 확인이 어려워서, 같은 내용을 erp-agent/logs/pip-upload.log에도 남깁니다.
+const LOG_FILE = path.join(__dirname, "logs", "pip-upload.log");
 function log(...args) {
-  console.log(`[스타일채널업로드] [${new Date().toLocaleString("ko-KR")}]`, ...args);
+  const line = `[스타일채널업로드] [${new Date().toLocaleString("ko-KR")}] ${args.map((a) => (typeof a === "string" ? a : String(a))).join(" ")}`;
+  console.log(line);
+  try {
+    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+    fs.appendFileSync(LOG_FILE, line + "\n", "utf8");
+  } catch {}
 }
 
 function todayString() {
@@ -269,6 +276,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("⚠ 실패:", err.message || err);
+  log("⚠ 실패:", err.message || err);
   process.exit(1);
 });

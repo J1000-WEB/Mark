@@ -3,7 +3,7 @@ import { saveStoreStockSnapshot, getStoreStockSnapshotMeta } from "@/lib/dataBui
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // MARK 2026-09-21: 점포요청 RT의 재고 정확도 개선 — 소천님이 "판매데이터 제안" 탭에 매일
 // 아침 올리시는 PIP 파일에서 매장별 재고를 뽑아(클라이언트의 extractStoreStockRows) 이

@@ -107,6 +107,10 @@
       "memory": 1024,
       "maxDuration": 60
     },
+    "app/api/store-stock-upload/route.ts": {
+      "memory": 3009,
+      "maxDuration": 300
+    },
     "app/api/rt-suggestions/route.ts": {
       "memory": 3009,
       "maxDuration": 300

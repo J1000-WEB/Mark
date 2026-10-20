@@ -621,8 +621,16 @@ export type StoreStockSnapshotRow = { styleCode: string; productName: string; co
 // 폴백으로 쓸 수 있도록 export합니다 — 원래 "금주/전주" 시트만 보고 있었는데, 그 시트에
 // 아직 안 올라온 신규 매장(예: 팩토리아울렛 용인점처럼 최근에 생긴 매장)은 칼라/사이즈별
 // 재고를 못 찾아서 승인 자체가 실패했습니다.
-export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
+export async function readStoreStockSnapshot(opts: { strict?: boolean } = {}): Promise<{ rows: StoreStockSnapshotRow[]; meta: { uploadedAt: string; rowCount: number; storeCount: number; fileName: string } | null }> {
   const dbId = getDbSheetId();
+  if (opts.strict) {
+    // RT 전용: 읽기 실패를 "재고 없음"으로 삼키지 않고 재시도 후 에러로 올립니다.
+    const [dataRows, metaRows] = await Promise.all([
+      withSheetsRetry(() => getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G120000"), "매장별_재고_스냅샷 읽기"),
+      withSheetsRetry(() => getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2"), "매장별_재고_스냅샷_메타 읽기"),
+    ]);
+    return parseStoreStockSnapshot(dataRows, metaRows);
+  }
   // MARK 2026-09-22: 실제 데이터는 PIP 24개 매장 기준 4만 행 안팎인데 "A2:G500000"으로
   // 12배 넓게 요청하고 있었습니다 — /api/data(대시보드 전체) 타임아웃 원인 조사 중 눈에 띄어서,
   // 여유(6만 행)만 남기고 좁혔습니다. 매장이 더 늘어나도 6만 행이면 한동안 충분합니다.
@@ -631,7 +639,11 @@ export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapsh
     getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G120000").catch(() => [] as any[]),
     getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2").catch(() => [] as any[]),
   ]);
-  const rows = dataRows
+  return parseStoreStockSnapshot(dataRows, metaRows);
+}
+
+function parseStoreStockSnapshot(dataRows: any[][], metaRows: any[][]) {
+  const rows: StoreStockSnapshotRow[] = (dataRows || [])
     .filter((r) => r && text(r[0]))
     .map((r) => ({
       styleCode: text(r[0]),
@@ -642,7 +654,7 @@ export async function readStoreStockSnapshot(): Promise<{ rows: StoreStockSnapsh
       storeName: text(r[5]),
       stock: num(r[6]),
     }));
-  const metaRow = metaRows[0];
+  const metaRow = (metaRows || [])[0];
   const meta = metaRow && text(metaRow[0])
     ? { uploadedAt: text(metaRow[0]), rowCount: num(metaRow[1]), storeCount: num(metaRow[2]), fileName: text(metaRow[3]) }
     : null;
@@ -2032,8 +2044,8 @@ async function computeRtSuggestions() {
   const until = currentWeek.end && currentWeek.end > anchor ? currentWeek.end : anchor;
 
   const [flatRows, storeStockSnapshotForRt] = await Promise.all([
-    readDailyHistoryFlatRange(since, until),
-    readStoreStockSnapshot().catch(() => ({ rows: [] as StoreStockSnapshotRow[], meta: null })),
+    readDailyHistoryFlatRange(since, until, { strict: true }),
+    readStoreStockSnapshot({ strict: true }),
   ]);
   console.log(`[rt-suggestions] Daily_Sales_History ${since}~${until} ${flatRows.length}행 + PIP ${storeStockSnapshotForRt.rows.length}행 (${elapsed()})`);
 
@@ -2042,6 +2054,21 @@ async function computeRtSuggestions() {
     loadCompanyTopProductsFromHistory(currentDate, flatRows),
   ]);
   console.log(`[rt-suggestions] 판매집계 ${productRowsRaw.length}행, 전사TOP ${companyTopProducts.length}개 (${elapsed()})`);
+
+  // MARK 2026-10-20: 입력이 비어 있으면 "제안 0건"을 저장하지 않고 원인을 알려줍니다.
+  const diagnostics = {
+    historyWindow: `${since}~${until}`,
+    historyFlatRows: flatRows.length,
+    historyLatestDate: flatRows.reduce((m: string, r: any) => (r.date > m ? r.date : m), ""),
+    productRows: productRowsRaw.length,
+    companyTopCount: companyTopProducts.length,
+    companyTopWindow: `${prevWeek.start}~${currentWeek.end}`,
+    pipRows: storeStockSnapshotForRt.rows.length,
+    pipUploadedAt: storeStockSnapshotForRt.meta?.uploadedAt || null,
+    pipFileName: storeStockSnapshotForRt.meta?.fileName || null,
+  };
+  if (!productRowsRaw.length) throw new Error(`최근 2주 매장 판매이력을 못 읽었어요 — RT를 계산할 수 없어 저장하지 않았어요. (${JSON.stringify(diagnostics)})`);
+  if (!companyTopProducts.length) throw new Error(`전사 판매 TOP20을 만들지 못했어요 — 저장하지 않았어요. (${JSON.stringify(diagnostics)})`);
 
   const inventory = await buildInventory(productRowsRaw, [], companyTopProducts, storeStockSnapshotForRt, null, { rtOnly: true });
   console.log(`[rt-suggestions] RT 엔진 완료, 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);
@@ -2054,6 +2081,7 @@ async function computeRtSuggestions() {
     rtPipUpdatedAt: inventory.rtPipUpdatedAt,
     computedAt: nowKSTDateTime(),
     computeMs: Date.now() - t0,
+    diagnostics,
   };
 }
 
@@ -2970,12 +2998,35 @@ function addDaysKST(dateKey: string, days: number) {
 // MARK 2026-10-19: Daily_Sales_History의 [since, until] 구간만 읽어서 펼친 행을 돌려줍니다.
 // RT 전용 경로에서 "최근 7+7일(판매·재고)"과 "지난주+전전주(전사 TOP20)"를 각각 따로 읽던 걸
 // 합집합 구간 한 번 읽기로 합치는 데 씁니다.
-async function readDailyHistoryFlatRange(since: string, until: string) {
+async function readDailyHistoryFlatRange(since: string, until: string, opts: { strict?: boolean } = {}) {
   const historyId = getHistorySheetId();
   const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", since, until);
-  if (!range) return [] as any[];
-  const tailRows = await getSheetValuesById(historyId, "Daily_Sales_History", `A${range.startRow}:ZZ${range.endRow}`).catch(() => [] as any[]);
+  if (!range) {
+    if (opts.strict) throw new Error(`Daily_Sales_History에서 ${since}~${until} 구간을 찾지 못했어요(행 범위 조회 실패 또는 해당 기간 데이터 없음).`);
+    return [] as any[];
+  }
+  const range2 = `A${range.startRow}:ZZ${range.endRow}`;
+  // MARK 2026-10-20: RT 제안이 "0건"으로 저장된 일 — 읽기 실패(구글 쿼터 등)를 빈 배열로 삼켜서
+  // "판매 0"처럼 계산된 것으로 보입니다. strict 모드(RT 전용)에서는 재시도 후 그래도 실패하면 에러로 올립니다.
+  const tailRows = opts.strict
+    ? await withSheetsRetry(() => getSheetValuesById(historyId, "Daily_Sales_History", range2), "Daily_Sales_History 읽기")
+    : await getSheetValuesById(historyId, "Daily_Sales_History", range2).catch(() => [] as any[]);
   return expandAnyDailyHistoryRows([DAILY_HISTORY_HEADER, ...tailRows]);
+}
+
+// 구글시트 읽기 재시도(쿼터 초과/일시 오류 대비): 2초, 6초 후 재시도
+async function withSheetsRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  let lastErr: any;
+  for (const waitMs of [0, 2000, 6000]) {
+    if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastErr = e;
+      console.error(`[sheets-retry] ${label} 실패(${waitMs}ms 대기 후):`, e?.message || e);
+    }
+  }
+  throw new Error(`${label} 실패: ${lastErr?.message || lastErr}`);
 }
 
 export async function buildProductRowsFromDailyHistory(anchorDate = todayKST(), windowDays = 7, stockLookbackDays?: number, preloadedFlatRows?: any[]) {

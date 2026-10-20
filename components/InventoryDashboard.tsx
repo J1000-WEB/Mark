@@ -2544,9 +2544,14 @@ function RtControlSection() {
           {!rtData.isToday && " — 오늘 기준으로 보려면 \"오늘 RT 제안 계산하기\"를 눌러주세요."}
           <span className="mt-1 block font-semibold opacity-80">
             {rtData.rtStockSource === "pip"
-              ? `재고 기준: PIP 매장별 재고 스냅샷${rtData.rtPipUpdatedAt ? ` (${rtData.rtPipUpdatedAt} 업로드분)` : ""}`
+              ? `재고 기준: PIP 매장별 재고 스냅샷${(rtData.diagnostics?.pipUploadedAt || rtData.rtPipUpdatedAt) ? ` (${rtData.diagnostics?.pipUploadedAt || rtData.rtPipUpdatedAt} 업로드분)` : " (업로드 시각 확인 안 됨)"}`
               : "재고 기준: PIP 스냅샷이 없어 최근 판매이력으로 추정한 재고"}
           </span>
+          {rtData.diagnostics && (
+            <span className="mt-1 block font-semibold opacity-70">
+              판매이력 {rtData.diagnostics.historyWindow} · {Number(rtData.diagnostics.historyFlatRows || 0).toLocaleString("ko-KR")}행(최근 {rtData.diagnostics.historyLatestDate || "-"}) · 매장×품번 {Number(rtData.diagnostics.productRows || 0).toLocaleString("ko-KR")}개 · 전사TOP {rtData.diagnostics.companyTopCount}개({rtData.diagnostics.companyTopWindow}) · PIP {Number(rtData.diagnostics.pipRows || 0).toLocaleString("ko-KR")}행
+            </span>
+          )}
         </div>
       )}
 

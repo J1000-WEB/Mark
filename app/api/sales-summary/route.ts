@@ -14,6 +14,28 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     // MARK 2026-10-20: 점검용 — ?rawDate=YYYY-MM-DD 이면 그 날짜의 원본 스냅샷 행을 그대로 돌려줍니다(중복 확인용).
+    // ?checkSameDays=1 — 매장별로 "연속된 두 날짜의 금액·수량·건수가 완전히 같은" 행(복사 붙여넣기 의심)을 찾습니다.
+    if (searchParams.get("checkSameDays") === "1") {
+      const { rows } = await readSalesSummarySnapshot();
+      const byStore = new Map<string, any[]>();
+      for (const r of rows) {
+        if (!byStore.has(r.storeName)) byStore.set(r.storeName, []);
+        byStore.get(r.storeName)!.push(r);
+      }
+      const hits: any[] = [];
+      for (const [store, list] of byStore.entries()) {
+        list.sort((a, b) => (a.date < b.date ? -1 : 1));
+        for (let i = 1; i < list.length; i++) {
+          const p = list[i - 1], c = list[i];
+          if (c.amount > 0 && c.amount === p.amount && c.qty === p.qty && c.receiptCount === p.receiptCount) {
+            hits.push({ store, dates: [p.date, c.date], amount: c.amount, qty: c.qty, receiptCount: c.receiptCount });
+          }
+        }
+      }
+      const byDatePair = new Map<string, number>();
+      for (const h of hits) byDatePair.set(h.dates.join("~"), (byDatePair.get(h.dates.join("~")) || 0) + 1);
+      return NextResponse.json({ ok: true, hitCount: hits.length, byDatePair: [...byDatePair.entries()].sort((a, b) => b[1] - a[1]), hits: hits.slice(0, 200) }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     const rawDate = searchParams.get("rawDate");
     if (rawDate) {
       const { rows } = await readSalesSummarySnapshot();

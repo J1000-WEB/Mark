@@ -59,6 +59,7 @@ export async function saveRtSuggestions(result: any) {
     rtPipUpdatedAt: result?.rtPipUpdatedAt || null,
     computeMs: result?.computeMs || 0,
     diagnostics: result?.diagnostics || null,
+    warehouseCovered: result?.warehouseCovered || [],
   };
   const values = [["meta", JSON.stringify(meta)], ...items.map((item, i) => [i + 1, JSON.stringify(item)])];
   await createSheetWithValuesById(getDbSheetId(), title, values, { rowCount: values.length + 1, columnCount: 2 });

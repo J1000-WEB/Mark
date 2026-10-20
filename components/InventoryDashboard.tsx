@@ -2377,6 +2377,149 @@ function StoreRequestRtSection() {
 // 따로 불러옵니다 — /api/data가 느리거나 실패해도 이 칸은 영향을 안 받고, 반대로 여기서
 // 문제가 생겨도 나머지 대시보드에는 영향이 없습니다. 실패하면(/api/data처럼 조용히 내장
 // 데이터로 감추지 않고) 실제 에러 메시지를 그대로 보여줍니다.
+// MARK 2026-10-20: RT 참고자료 ① — ERP "채널×스타일 기간판매" 파일 파서.
+// 1행: NO/채널/채널명/스타일/스타일명/…/기간판매1(전주 기간)/…/기간판매2(전전주 기간), 2행: 판매/반품/합계/판매금액 하위라벨.
+// 각 기간의 "합계"(판매-반품 = 순판매수량)와 "판매금액"만 뽑아서 판매가 있는 행만 보냅니다.
+function parseRtWeeklySalesWorkbook(rows: any[][]) {
+  const headerIdx = rows.findIndex((r, i) => i < 6 && (r || []).some((v) => String(v ?? "").includes("기간판매1")));
+  if (headerIdx < 0) throw new Error('"기간판매1/기간판매2" 열을 찾지 못했어요. 채널×스타일 기간판매 파일이 맞는지 확인해주세요.');
+  const header = (rows[headerIdx] || []).map((v) => String(v ?? "").trim());
+  const sub = (rows[headerIdx + 1] || []).map((v) => String(v ?? "").trim());
+  const col = (name: string) => header.findIndex((h) => h === name);
+  const chCode = col("채널"), chName = col("채널명"), style = col("스타일"), styleName = col("스타일명");
+  const p1 = header.findIndex((h) => h.startsWith("기간판매1"));
+  const p2 = header.findIndex((h) => h.startsWith("기간판매2"));
+  if (chName < 0 || style < 0 || p1 < 0 || p2 < 0) throw new Error("채널명/스타일/기간판매 열 위치를 확인하지 못했어요.");
+  const sumCol = (start: number, label: string) => {
+    for (let i = start; i < start + 4; i++) if (sub[i] === label) return i;
+    return -1;
+  };
+  const p1Qty = sumCol(p1, "합계"), p1Amt = sumCol(p1, "판매금액"), p2Qty = sumCol(p2, "합계"), p2Amt = sumCol(p2, "판매금액");
+  if ([p1Qty, p1Amt, p2Qty, p2Amt].some((x) => x < 0)) throw new Error("기간판매의 합계/판매금액 하위 열을 찾지 못했어요.");
+  const period = (h: string) => (h.match(/(\d{4}-\d{2}-\d{2}\s*~\s*\d{4}-\d{2}-\d{2})/)?.[1] || "").replace(/\s/g, "");
+  const num = (v: any) => Number(String(v ?? "").replace(/,/g, "")) || 0;
+  const out: any[][] = [];
+  for (const r of rows.slice(headerIdx + 2)) {
+    const st = String(r?.[style] ?? "").trim();
+    const name = String(r?.[chName] ?? "").trim();
+    if (!st || !name || st.includes("합계")) continue;
+    const a = num(r[p1Qty]), b = num(r[p1Amt]), c = num(r[p2Qty]), d = num(r[p2Amt]);
+    if (!a && !b && !c && !d) continue;
+    out.push([String(r[chCode] ?? "").trim(), name, st, String(r[styleName] ?? "").trim(), a, b, c, d]);
+  }
+  return { rows: out, period1: period(header[p1]), period2: period(header[p2]) };
+}
+
+function RtReferenceUploads({ onUploaded }: { onUploaded?: () => void }) {
+  const [weeklyMeta, setWeeklyMeta] = useState<any>(null);
+  const [whMeta, setWhMeta] = useState<any>(null);
+  const [busy, setBusy] = useState<"" | "weekly" | "warehouse">("");
+  const [msg, setMsg] = useState("");
+
+  function loadMetas() {
+    fetch("/api/rt-weekly-sales", { cache: "no-store" }).then((r) => r.json()).then((b) => b?.ok && setWeeklyMeta(b.meta)).catch(() => {});
+    fetch("/api/warehouse-stock-upload", { cache: "no-store" }).then((r) => r.json()).then((b) => b?.ok && setWhMeta(b.meta)).catch(() => {});
+  }
+  useEffect(loadMetas, []);
+
+  async function readSheet(file: File) {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" }) as any[][];
+  }
+
+  async function uploadWeekly(file: File) {
+    setBusy("weekly");
+    setMsg("전주·전전주 판매 파일 읽는 중...");
+    try {
+      const parsed = parseRtWeeklySalesWorkbook(await readSheet(file));
+      if (!parsed.rows.length) throw new Error("판매가 있는 행을 찾지 못했어요.");
+      setMsg(`업로드 중... (${parsed.rows.length.toLocaleString("ko-KR")}행)`);
+      const res = await fetch("/api/rt-weekly-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: parsed.rows, fileName: file.name, period1: parsed.period1, period2: parsed.period2 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "업로드 실패");
+      setMsg(`✓ 전주(${parsed.period1})·전전주(${parsed.period2}) 판매 ${body.rowCount.toLocaleString("ko-KR")}행 반영 — RT를 다시 계산하면 적용돼요.`);
+      loadMetas();
+      onUploaded?.();
+    } catch (e: any) {
+      setMsg(`⚠ ${e?.message || "업로드 실패"}`);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function uploadWarehouse(file: File) {
+    setBusy("warehouse");
+    setMsg("물류 가용재고 파일 읽는 중...");
+    try {
+      const compact = parseWarehouseStockWorkbook(await readSheet(file));
+      if (!compact.length) throw new Error("스타일/칼라/사이즈/가용(오프) 열을 찾지 못했어요. 온오프재고현황 파일이 맞는지 확인해주세요.");
+      setMsg(`업로드 중... (${compact.length.toLocaleString("ko-KR")}건)`);
+      const res = await fetch("/api/warehouse-stock-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: compact, fileName: file.name }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) throw new Error(body?.error || "업로드 실패");
+      setMsg(`✓ 물류 가용재고 ${body.rowCount.toLocaleString("ko-KR")}건 반영 — RT를 다시 계산하면 적용돼요(판매분 배분 탭과 같은 자료예요).`);
+      loadMetas();
+      onUploaded?.();
+    } catch (e: any) {
+      setMsg(`⚠ ${e?.message || "업로드 실패"}`);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const fileInput = (kind: "weekly" | "warehouse", label: string) => (
+    <label className={`inline-flex h-9 cursor-pointer items-center rounded-full border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-100 ${busy ? "pointer-events-none opacity-50" : ""}`}>
+      {busy === kind ? "업로드 중..." : label}
+      <input
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) (kind === "weekly" ? uploadWeekly : uploadWarehouse)(f);
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-sm font-black text-slate-800">📎 RT 참고자료</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">올려두면 다음 RT 계산부터 반영돼요.</p>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-black text-slate-700">① 전주·전전주 매장별 판매</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">채널×스타일 기간판매 파일(기간판매1=전주, 기간판매2=전전주). 매장 판매와 전사 TOP20을 이 기준으로 계산해요.</p>
+          <p className="mt-2 text-[11px] font-bold text-slate-600">
+            {weeklyMeta ? `마지막 업로드: ${weeklyMeta.uploadedAt} · 전주 ${weeklyMeta.period1} / 전전주 ${weeklyMeta.period2}` : "아직 업로드 없음 — 없으면 최근 판매이력(7+7일)으로 계산해요."}
+          </p>
+          <div className="mt-2">{fileInput("weekly", "📤 판매 파일 올리기")}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-xs font-black text-slate-700">② 물류 가용재고(오프)</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">온오프재고현황 파일(T열 가용(오프)). 창고에 재고가 있는 품번은 RT 대신 물류 출고로 먼저 채워요(호조 RT).</p>
+          <p className="mt-2 text-[11px] font-bold text-slate-600">
+            {whMeta ? `마지막 업로드: ${whMeta.uploadedAt} · ${Number(whMeta.rowCount || 0).toLocaleString("ko-KR")}건` : "아직 업로드 없음"}
+            {whMeta?.uploadedAt ? " (7일 지난 자료는 RT에 안 써요)" : ""}
+          </p>
+          <div className="mt-2">{fileInput("warehouse", "📤 재고 파일 올리기")}</div>
+        </div>
+      </div>
+      {msg && <p className="mt-2 text-xs font-bold text-slate-600">{msg}</p>}
+    </div>
+  );
+}
+
 function RtControlSection() {
   // MARK 2026-10-19: RT 제안은 무거운 계산이라 탭을 열 때 자동으로 계산하지 않습니다.
   // 열면 "저장된 결과"만 읽고(가벼움), 계산은 버튼을 눌렀을 때만 해서 그날 결과로 저장합니다.
@@ -2504,6 +2647,8 @@ function RtControlSection() {
         </div>
       </div>
 
+      <RtReferenceUploads />
+
       {computing && (
         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-bold text-blue-700">
           판매이력과 PIP 매장 재고를 읽어 RT 제안을 계산하고 있어요. 보통 1~2분 걸려요 — 끝나면 오늘 결과로 저장돼서, 다음부터는 바로 열려요.
@@ -2548,11 +2693,35 @@ function RtControlSection() {
               : "재고 기준: PIP 스냅샷이 없어 최근 판매이력으로 추정한 재고"}
           </span>
           {rtData.diagnostics && (
+            <span className="mt-1 block font-semibold opacity-80">
+              판매 기준: {rtData.diagnostics.salesSource === "upload"
+                ? `업로드 파일 — 전주 ${rtData.diagnostics.weeklyUpload?.period1} / 전전주 ${rtData.diagnostics.weeklyUpload?.period2}`
+                : "최근 판매이력(오늘 기준 7일 + 그 전 7일)"}
+              {" · "}물류재고: {rtData.diagnostics.warehouse?.used
+                ? `${rtData.diagnostics.warehouse.uploadedAt} 업로드분 반영 — 물류 출고로 대체 ${rtData.diagnostics.warehouseCoveredCount || 0}건/${Number(rtData.diagnostics.warehouseCoveredQty || 0).toLocaleString("ko-KR")}장`
+                : rtData.diagnostics.warehouse ? `${rtData.diagnostics.warehouse.uploadedAt} 업로드분(7일 지나 미반영)` : "미반영(업로드 없음)"}
+            </span>
+          )}
+          {rtData.diagnostics && (
             <span className="mt-1 block font-semibold opacity-70">
               판매이력 {rtData.diagnostics.historyWindow} · {Number(rtData.diagnostics.historyFlatRows || 0).toLocaleString("ko-KR")}행(최근 {rtData.diagnostics.historyLatestDate || "-"}) · 매장×품번 {Number(rtData.diagnostics.productRows || 0).toLocaleString("ko-KR")}개 · 전사TOP {rtData.diagnostics.companyTopCount}개({rtData.diagnostics.companyTopWindow}) · PIP {Number(rtData.diagnostics.pipRows || 0).toLocaleString("ko-KR")}행
             </span>
           )}
         </div>
+      )}
+
+      {rtData?.warehouseCovered?.length > 0 && (
+        <details className="rounded-2xl border border-sky-100 bg-sky-50 p-3 text-xs font-bold text-sky-800">
+          <summary className="cursor-pointer">📦 RT 대신 물류 출고로 채울 부족분 {rtData.warehouseCovered.length}건 (창고 가용재고 있음) — 펼쳐보기</summary>
+          <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
+            {rtData.warehouseCovered.map((x: any, i: number) => (
+              <div key={i} className="flex justify-between gap-2 rounded-lg bg-white px-3 py-1.5">
+                <span className="truncate">{x.productName} <span className="text-sky-500">{x.styleCode}</span> → {x.toStore}</span>
+                <span className="shrink-0">{x.qty}장 (창고 {Number(x.warehouseStock || 0).toLocaleString("ko-KR")})</span>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {rtData && (

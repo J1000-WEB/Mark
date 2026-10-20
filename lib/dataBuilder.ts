@@ -2,6 +2,7 @@ import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
+import { readRtWeeklySales, periodEnd } from "./rtWeeklySalesStore";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
 import { readFirstAvailableSheet, buildProductMaster } from "./weeklyDataProvider";
@@ -1408,7 +1409,7 @@ async function buildInventory(
   // MARK 2026-10-19: RT 전용 엔드포인트(/api/rt-suggestions)는 RT 제안만 필요한데, 예전엔 이 함수가
   // 프로모션 제안·상품분석·온라인이관·전사지시(이걸 위해 Daily_Sales_History 28일치를 또 읽음)까지
   // 전부 계산한 뒤 RT 부분만 꺼내 쓰고 나머지는 버렸습니다. rtOnly면 RT 엔진만 돌리고 바로 반환합니다.
-  options: { rtOnly?: boolean } = {}
+  options: { rtOnly?: boolean; warehouseByStyle?: Map<string, number> | null } = {}
 ) {
   const rtOnly = !!options.rtOnly;
   const promotion = rtOnly ? null : buildPromotionSuggestions(productRows, inventoryRows, companyTopProducts);
@@ -1547,6 +1548,12 @@ async function buildInventory(
   });
 
   const rtSuggestions: any[] = [];
+  // MARK 2026-10-20: RT 참고자료 ② 물류(창고) 가용재고 — 창고에서 바로 출고할 수 있는 재고가 있으면
+  // 매장 간 RT 대신 물류 출고로 보충하는 게 맞으므로, 호조 RT의 받는점포 부족수량을 창고 가용재고
+  // (스타일 합계, 온오프재고현황 T열 "가용(오프)")에서 먼저 채우고 남는 부족분만 RT로 제안합니다.
+  // 부진 RT(과잉재고 매장 → 잘 파는 매장)는 매장 재고를 소진하는 게 목적이라 창고 재고와 무관하게 그대로 둡니다.
+  const warehouseLeft = new Map<string, number>(options.warehouseByStyle ? [...options.warehouseByStyle.entries()] : []);
+  const warehouseCovered: any[] = [];
 
   for (const [styleCode, rows] of byStyle.entries()) {
     if (rows.length < 2) continue;
@@ -1659,6 +1666,16 @@ async function buildInventory(
       const twoWeekCap = Math.max(1, Math.ceil(to.weekNet * RT_TARGET_STOCK_WEEKS));
       let remainingNeed = Math.max(0, Math.min(toNeed, twoWeekCap));
       if (!remainingNeed) continue;
+
+      const whKey = styleCode.toUpperCase();
+      const whAvail = Math.max(0, Math.floor(warehouseLeft.get(whKey) || 0));
+      if (whAvail > 0) {
+        const cover = Math.min(remainingNeed, whAvail);
+        warehouseLeft.set(whKey, whAvail - cover);
+        remainingNeed -= cover;
+        warehouseCovered.push({ styleCode, productName: to.productName, toStore: to.storeName, qty: cover, toStock: to.stock, warehouseStock: whAvail });
+        if (remainingNeed <= 0) continue;
+      }
 
       for (const from of senders) {
         if (remainingNeed <= 0) break;
@@ -1901,6 +1918,7 @@ async function buildInventory(
 
   if (rtOnly) {
     return {
+      warehouseCovered: warehouseCovered.sort((a, b) => b.qty - a.qty),
       rtSuggestions: sortedRtSuggestions.slice(0, RT_SUGGESTION_SAFETY_CAP),
       rtEligibleProductRank: RT_ELIGIBLE_RANK,
       rtSuggestionProductCount,
@@ -2108,11 +2126,59 @@ async function computeRtSuggestions() {
   ]);
   console.log(`[rt-suggestions] Daily_Sales_History ${since}~${until} ${flatRows.length}행 + PIP ${storeStockSnapshotForRt.rows.length}행 (${elapsed()})`);
 
-  const [productRowsRaw, companyTopProducts] = await Promise.all([
+  const [productRowsDsh, companyTopDsh, weeklyUpload, warehouseSnap] = await Promise.all([
     buildProductRowsFromDailyHistory(anchor, 7, undefined, flatRows),
     loadCompanyTopProductsFromHistory(currentDate, flatRows),
+    readRtWeeklySales().catch((e: any) => ({ rows: [] as any[], meta: null, error: e?.message || String(e) })),
+    readWarehouseStockSnapshot().catch(() => ({ rows: [] as any[], meta: null })),
   ]);
-  console.log(`[rt-suggestions] 판매집계 ${productRowsRaw.length}행, 전사TOP ${companyTopProducts.length}개 (${elapsed()})`);
+
+  // MARK 2026-10-20: RT 참고자료 ① 전주·전전주 판매 업로드가 있으면(전주 기간이 최근 10일 안에 끝난 파일)
+  // 매장×품번 판매(금주→전주, 전주→전전주 자리)와 전사 TOP20을 그 파일 기준으로 계산합니다.
+  // 재고는 그대로 PIP 매장별 재고 스냅샷, 컬러/사이즈 비중(skuRows)은 판매이력 값을 씁니다.
+  const weeklyMeta: any = weeklyUpload.meta;
+  const weeklyUsable = !!weeklyMeta && !!weeklyUpload.rows.length && periodEnd(weeklyMeta.period1) >= addDaysKST(anchor, -10);
+  let productRowsRaw = productRowsDsh;
+  let companyTopProducts = companyTopDsh;
+  if (weeklyUsable) {
+    const fileMap = new Map<string, any>();
+    for (const r of weeklyUpload.rows) {
+      if (!isCoreOfflineSalesStore(r.storeName)) continue;
+      const key = `${normalizeStoreKey(r.storeName)}__${r.styleCode}`;
+      const prev = fileMap.get(key);
+      if (prev) {
+        prev.w1Qty += r.w1Qty; prev.w1Amount += r.w1Amount; prev.w2Qty += r.w2Qty; prev.w2Amount += r.w2Amount;
+      } else fileMap.set(key, { ...r });
+    }
+    const seen = new Set<string>();
+    const merged = productRowsDsh.map((row: any) => {
+      const key = `${normalizeStoreKey(row.storeName)}__${row.styleCode}`;
+      const f = fileMap.get(key);
+      seen.add(key);
+      return { ...row, weekNet: f?.w1Qty || 0, weekAmount: f?.w1Amount || 0, prevNet: f?.w2Qty || 0, prevAmount: f?.w2Amount || 0 };
+    });
+    for (const [key, f] of fileMap.entries()) {
+      if (seen.has(key)) continue;
+      if (!f.w1Qty && !f.w2Qty) continue;
+      merged.push({
+        season: "미지정", storeName: f.storeName, storeKey: normalizeStoreKey(f.storeName), styleCode: f.styleCode, productName: f.productName,
+        storeStock: 0, weekNet: f.w1Qty, weekAmount: f.w1Amount, prevNet: f.w2Qty, prevAmount: f.w2Amount, launchDate: "", launchTime: 0, skuRows: [],
+      });
+    }
+    productRowsRaw = merged;
+    companyTopProducts = aggregateProducts(merged.filter((r: any) => isCoreOfflineSalesStore(r.storeName)), undefined, 20);
+  }
+
+  // MARK 2026-10-20: RT 참고자료 ② 물류 가용재고(오프) — 최근 7일 안에 올린 것만 사용
+  const whMeta: any = warehouseSnap.meta;
+  const warehouseUsable = !!whMeta && !!warehouseSnap.rows.length && String(whMeta.uploadedAt).slice(0, 10) >= addDaysKST(anchor, -7);
+  const warehouseByStyle = new Map<string, number>();
+  if (warehouseUsable) {
+    for (const r of warehouseSnap.rows) {
+      if (r.offlineStock > 0) warehouseByStyle.set(r.styleCode.toUpperCase(), (warehouseByStyle.get(r.styleCode.toUpperCase()) || 0) + r.offlineStock);
+    }
+  }
+  console.log(`[rt-suggestions] 판매집계 ${productRowsRaw.length}행(${weeklyUsable ? "업로드 파일" : "판매이력"}), 전사TOP ${companyTopProducts.length}개, 물류재고 ${warehouseByStyle.size}품번 (${elapsed()})`);
 
   // MARK 2026-10-20: 입력이 비어 있으면 "제안 0건"을 저장하지 않고 원인을 알려줍니다.
   const diagnostics = {
@@ -2125,12 +2191,18 @@ async function computeRtSuggestions() {
     pipRows: storeStockSnapshotForRt.rows.length,
     pipUploadedAt: storeStockSnapshotForRt.meta?.uploadedAt || null,
     pipFileName: storeStockSnapshotForRt.meta?.fileName || null,
+    salesSource: weeklyUsable ? "upload" : "daily_sales_history",
+    weeklyUpload: weeklyMeta ? { uploadedAt: weeklyMeta.uploadedAt, period1: weeklyMeta.period1, period2: weeklyMeta.period2, fileName: weeklyMeta.fileName, used: weeklyUsable } : null,
+    warehouse: whMeta ? { uploadedAt: whMeta.uploadedAt, fileName: whMeta.fileName, styles: warehouseByStyle.size, used: warehouseUsable } : null,
   };
   if (!productRowsRaw.length) throw new Error(`최근 2주 매장 판매이력을 못 읽었어요 — RT를 계산할 수 없어 저장하지 않았어요. (${JSON.stringify(diagnostics)})`);
   if (!companyTopProducts.length) throw new Error(`전사 판매 TOP20을 만들지 못했어요 — 저장하지 않았어요. (${JSON.stringify(diagnostics)})`);
 
-  const inventory = await buildInventory(productRowsRaw, [], companyTopProducts, storeStockSnapshotForRt, null, { rtOnly: true });
+  const inventory = await buildInventory(productRowsRaw, [], companyTopProducts, storeStockSnapshotForRt, null, { rtOnly: true, warehouseByStyle: warehouseUsable ? warehouseByStyle : null });
   console.log(`[rt-suggestions] RT 엔진 완료, 제안 ${inventory.rtSuggestions?.length || 0}건 (${elapsed()})`);
+  const warehouseCovered = inventory.warehouseCovered || [];
+  (diagnostics as any).warehouseCoveredCount = warehouseCovered.length;
+  (diagnostics as any).warehouseCoveredQty = warehouseCovered.reduce((sum: number, x: any) => sum + Number(x.qty || 0), 0);
 
   return {
     rtSuggestions: inventory.rtSuggestions,
@@ -2141,6 +2213,7 @@ async function computeRtSuggestions() {
     computedAt: nowKSTDateTime(),
     computeMs: Date.now() - t0,
     diagnostics,
+    warehouseCovered: warehouseCovered.slice(0, 150),
   };
 }
 

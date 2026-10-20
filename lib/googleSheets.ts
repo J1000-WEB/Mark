@@ -334,6 +334,22 @@ export async function ensureGridRowsById(spreadsheetId: string, title: string, m
   return minRows;
 }
 
+// MARK 2026-10-20: 시트 격자를 필요한 크기로 줄입니다(워크북 1000만 셀 한도 보호). 데이터가 있는 범위보다
+// 큰 행/열만 삭제하고, 데이터 범위 안쪽은 절대 건드리지 않습니다(keepRows/keepCols는 최소 보존 크기).
+export async function trimGridById(spreadsheetId: string, title: string, keepRows: number, keepCols: number) {
+  const sheets = await getSheetsClient();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, ranges: [`'${title.replace(/'/g, "''")}'!A1`], fields: "sheets.properties(title,sheetId,gridProperties)" });
+  const props = (meta.data.sheets || []).find((x) => x.properties?.title === title)?.properties;
+  if (!props || props.sheetId === undefined || props.sheetId === null) return;
+  const rows = props.gridProperties?.rowCount || 0;
+  const cols = props.gridProperties?.columnCount || 0;
+  const requests: any[] = [];
+  const r = Math.max(2, keepRows), c = Math.max(1, keepCols);
+  if (rows > r) requests.push({ deleteDimension: { range: { sheetId: props.sheetId, dimension: "ROWS", startIndex: r, endIndex: rows } } });
+  if (cols > c) requests.push({ deleteDimension: { range: { sheetId: props.sheetId, dimension: "COLUMNS", startIndex: c, endIndex: cols } } });
+  if (requests.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+}
+
 export async function getSheetPropsById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

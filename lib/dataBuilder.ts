@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById, trimGridById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { readRtWeeklySales, periodEnd } from "./rtWeeklySalesStore";
@@ -578,7 +578,7 @@ export async function readWarehouseStockSnapshot() {
 // 소스를 재고 판단에 우선 사용하도록 합니다.
 const STORE_STOCK_SNAPSHOT_SHEET = "매장별_재고_스냅샷";
 const STORE_STOCK_SNAPSHOT_META_SHEET = "매장별_재고_스냅샷_메타";
-const STORE_STOCK_SNAPSHOT_HEADER = ["스타일", "스타일명", "칼라", "칼라명", "사이즈", "매장", "재고"];
+const STORE_STOCK_SNAPSHOT_HEADER = ["스타일", "스타일명", "칼라", "칼라명", "사이즈", "매장", "재고", "누적판매"];
 const STORE_STOCK_SNAPSHOT_META_HEADER = ["업로드일시", "행수", "매장수", "원본파일명"];
 
 // 업로드(app/api/store-stock-upload)에서 호출합니다. rows는 클라이언트에서 이미
@@ -615,8 +615,9 @@ export async function saveStoreStockSnapshot(rows: any[][], fileName?: string) {
 //   finish(totalRows) → 새 데이터보다 아래 남은 예전 행을 지우고 메타(업로드일시 등) 기록
 // 업로드 도중 잠깐 예전/새 행이 섞일 수 있지만, finish 전까지 메타가 안 바뀌므로 조회 쪽 표시는 예전 기준 그대로입니다.
 function cleanStoreStockRows(rows: any[][]) {
+  // MARK 2026-10-20: 8번째 열 = PIP "누적"(매장×SKU 누적판매) — SKU 방식 RT의 "보충"(오래 품절된 인기 SKU) 판정용
   return (rows || [])
-    .map((r) => [text(r[0]), text(r[1]), text(r[2]), text(r[3]), text(r[4]), text(r[5]), num(r[6])])
+    .map((r) => [text(r[0]), text(r[1]), text(r[2]), text(r[3]), text(r[4]), text(r[5]), num(r[6]), num(r[7])])
     .filter((r) => r[0] && r[2] && r[4] && r[5]);
 }
 
@@ -627,7 +628,7 @@ export async function saveStoreStockSnapshotChunk(rows: any[][], startRow: numbe
   const dbId = getDbSheetId();
   if (startRow === 2) {
     await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, STORE_STOCK_SNAPSHOT_HEADER);
-    await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A1:G1`, [STORE_STOCK_SNAPSHOT_HEADER]);
+    await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A1:H1`, [STORE_STOCK_SNAPSHOT_HEADER]);
   }
   // 시작 셀이 그리드 밖이면 에러가 나서, 쓰기 전에 이 청크 끝까지 행을 미리 늘려둡니다.
   await ensureGridRowsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, startRow + clean.length - 1);
@@ -643,7 +644,9 @@ export async function finishStoreStockSnapshot(totalRows: number, storeCount: nu
   const tail = await getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, `A${lastRow}:A${lastRow}`).catch(() => [] as any[]);
   if (!tail?.[0]?.[0]) throw new Error(`마지막 행(${lastRow})이 비어 있어요 — 청크 업로드가 덜 된 것 같아요. 다시 시도해주세요.`);
   const gridRows = await getSheetRowCountById(dbId, STORE_STOCK_SNAPSHOT_SHEET).catch(() => 0);
-  if (gridRows > lastRow) await clearRangeById(dbId, STORE_STOCK_SNAPSHOT_SHEET, `A${lastRow + 1}:G${gridRows}`);
+  if (gridRows > lastRow) await clearRangeById(dbId, STORE_STOCK_SNAPSHOT_SHEET, `A${lastRow + 1}:H${gridRows}`);
+  // 격자를 데이터 크기(+여유 2천 행)·8열로 줄여 워크북 셀 한도 보호(예전엔 5만 행×26열=130만 셀)
+  await trimGridById(dbId, STORE_STOCK_SNAPSHOT_SHEET, lastRow + 2000, 8).catch((e) => console.error("매장별 재고 격자 정리 실패(무시):", e));
   await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, STORE_STOCK_SNAPSHOT_META_HEADER);
   const uploadedAt = nowKSTDateTime();
   await safeReplaceSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, [
@@ -661,7 +664,7 @@ export async function getStoreStockSnapshotMeta() {
   return { uploadedAt: text(row[0]), rowCount: num(row[1]), storeCount: num(row[2]), fileName: text(row[3]) };
 }
 
-export type StoreStockSnapshotRow = { styleCode: string; productName: string; color: string; colorName: string; size: string; storeName: string; stock: number };
+export type StoreStockSnapshotRow = { styleCode: string; productName: string; color: string; colorName: string; size: string; storeName: string; stock: number; cumQty?: number };
 
 // MARK 2026-09-22: RT 승인(app/api/rt-result)의 "출고점 칼라/사이즈별 재고 배분"이 이 스냅샷을
 // 폴백으로 쓸 수 있도록 export합니다 — 원래 "금주/전주" 시트만 보고 있었는데, 그 시트에
@@ -672,7 +675,7 @@ export async function readStoreStockSnapshot(opts: { strict?: boolean } = {}): P
   if (opts.strict) {
     // RT 전용: 읽기 실패를 "재고 없음"으로 삼키지 않고 재시도 후 에러로 올립니다.
     const [dataRows, metaRows] = await Promise.all([
-      withSheetsRetry(() => getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G120000"), "매장별_재고_스냅샷 읽기"),
+      withSheetsRetry(() => getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:H150000"), "매장별_재고_스냅샷 읽기"),
       withSheetsRetry(() => getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2"), "매장별_재고_스냅샷_메타 읽기"),
     ]);
     return parseStoreStockSnapshot(dataRows, metaRows);
@@ -682,7 +685,7 @@ export async function readStoreStockSnapshot(opts: { strict?: boolean } = {}): P
   // 여유(6만 행)만 남기고 좁혔습니다. 매장이 더 늘어나도 6만 행이면 한동안 충분합니다.
   // MARK 2026-10-19: 실측 2026-10-19 PIP 기준 49,908행(24개 매장)으로 6만 행에 근접해서 12만 행으로 넓힙니다.
   const [dataRows, metaRows] = await Promise.all([
-    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:G120000").catch(() => [] as any[]),
+    getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, "A2:H150000").catch(() => [] as any[]),
     getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, "A2:D2").catch(() => [] as any[]),
   ]);
   return parseStoreStockSnapshot(dataRows, metaRows);
@@ -699,6 +702,7 @@ function parseStoreStockSnapshot(dataRows: any[][], metaRows: any[][]) {
       size: text(r[4]),
       storeName: text(r[5]),
       stock: num(r[6]),
+      cumQty: num(r[7]),
     }));
   const metaRow = (metaRows || [])[0];
   const meta = metaRow && text(metaRow[0])
@@ -3147,7 +3151,7 @@ function addDaysKST(dateKey: string, days: number) {
 // MARK 2026-10-19: Daily_Sales_History의 [since, until] 구간만 읽어서 펼친 행을 돌려줍니다.
 // RT 전용 경로에서 "최근 7+7일(판매·재고)"과 "지난주+전전주(전사 TOP20)"를 각각 따로 읽던 걸
 // 합집합 구간 한 번 읽기로 합치는 데 씁니다.
-async function readDailyHistoryFlatRange(since: string, until: string, opts: { strict?: boolean } = {}) {
+export async function readDailyHistoryFlatRange(since: string, until: string, opts: { strict?: boolean } = {}) {
   const historyId = getHistorySheetId();
   const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", since, until);
   if (!range) {

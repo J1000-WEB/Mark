@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDbSheetId, ensureSheetExistsById, getSheetValuesById, safeReplaceSheetValuesById } from "@/lib/googleSheets";
+import { getDbSheetId, ensureSheetExistsById, getSheetValuesById, safeReplaceSheetValuesById, trimGridById } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -66,6 +66,8 @@ export async function POST(req: Request) {
     const finalRows = [header, ...kept, ...newRows];
 
     await safeReplaceSheetValuesById(spreadsheetId, HISTORY_SHEET, finalRows);
+    // MARK 2026-10-20: 10일 보관인데 격자가 9만 행×26열(240만 셀)까지 커져 있었음 → 데이터 크기(+여유 2천 행)·4열로 줄임
+    await trimGridById(spreadsheetId, HISTORY_SHEET, finalRows.length + 2000, 4).catch((e) => console.error("재고입고이력 격자 정리 실패(무시):", e));
 
     // ---- 여기부터 "활성 알림" 갱신 ----
     const todayStockMap = new Map<string, { styleCode: string; colorCode: string; stock: number }>();

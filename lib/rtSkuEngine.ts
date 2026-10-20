@@ -10,7 +10,7 @@
 //    받는 쪽(출고/RT/보충)은 대상품번(재런칭 목록 또는 GF3·GF4·GF7·GF8로 시작)만.
 // 2) 물류 우선: 부족분은 창고 가용(오프)에서 먼저 — 같은 SKU를 여러 매장이 원하면 등급(A→D) → 판매순위 순
 // 3) 남는 부족분만 RT — 보내는 매장 재고를 차감해가며 배분(같은 재고를 두 번 지시하지 않음)
-//    - 1차: 과잉 매장(과잉량 큰 순). 판매가 있으면 목표재고만큼은 남김, 판매 없는 재고는 전량 가능
+//    - 1차: 과잉 매장(과잉량 큰 순). 판매가 있으면 목표재고만큼은 남김, 판매 없는 재고는 3장 이상일 때만 전량 가능
 //    - 2차: 정상 매장 중 판매순위 낮은 순 — 목표재고와 "품절임박 기준+1장" 중 큰 값은 반드시 남김
 //      (재고MD 엑셀은 2차에서 적정재고를 무시해 보내는 매장 SKU가 품절될 수 있었음 → 막음)
 //    - 품절임박/보충 상태인 매장은 보내지 않음
@@ -60,6 +60,7 @@ export const RT_SKU_SETTINGS = {
   grades: { A: { targetWeeks: 4, overWeeks: 7, boostQty: 4 }, B: { targetWeeks: 3, overWeeks: 5.5, boostQty: 3 }, C: { targetWeeks: 3, overWeeks: 4.3, boostQty: 2 }, D: { targetWeeks: 2, overWeeks: 3, boostQty: 0 } } as Record<Grade, { targetWeeks: number; overWeeks: number; boostQty: number }>,
   shortageWeeks: 2, // 품절임박 기준(재고주수 ≤)
   boostMinCumQty: 5, // 보충: 누계판매 이 이상
+  noSalesMinStock: 3, // MARK 2026-10-20: 판매 없는(전주·전전주 0) 재고는 그 매장 SKU 재고가 이 장수 이상일 때만 RT로 가져옴(1~2장 자잘한 이동 방지)
   targetPrefixes: ["GF3", "GF4", "GF7", "GF8"],
 };
 
@@ -192,7 +193,8 @@ export function runRtSkuEngine(input: {
       e.status = "정상";
     }
     if (e.status === "과잉") {
-      e.keep = e.weekly > 0 ? e.targetStock : 0;
+      // 판매가 있으면 목표재고만큼 남김. 판매 없는 재고는 noSalesMinStock장 이상일 때만 전량 가능(미만이면 안 가져옴)
+      e.keep = e.weekly > 0 ? e.targetStock : e.stock >= S.noSalesMinStock ? 0 : e.stock;
     } else if (e.status === "정상") {
       e.keep = Math.max(e.targetStock, Math.ceil(S.shortageWeeks * e.weekly) + 1);
     } else {

@@ -14,6 +14,30 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     // MARK 2026-10-20: 점검용 — ?rawDate=YYYY-MM-DD 이면 그 날짜의 원본 스냅샷 행을 그대로 돌려줍니다(중복 확인용).
+    // ?checkCopied=1 — 영수건수 1건 이하인데 금액이 바로 앞/뒤 날짜와 "정확히 같은" 행(다른 날 값이 복사된 것으로 의심)
+    if (searchParams.get("checkCopied") === "1") {
+      const { rows } = await readSalesSummarySnapshot();
+      const byStore = new Map<string, any[]>();
+      for (const r of rows) {
+        if (!byStore.has(r.storeName)) byStore.set(r.storeName, []);
+        byStore.get(r.storeName)!.push(r);
+      }
+      const hits: any[] = [];
+      for (const [store, list] of byStore.entries()) {
+        if (store.startsWith("오프라인_")) continue; // 위탁/면세는 원래 영수건수가 1로 들어와서 제외
+        const m = new Map(list.map((r) => [r.date, r]));
+        for (const r of list) {
+          if (!(r.amount > 0) || r.receiptCount > 1) continue;
+          const d = new Date(`${r.date}T00:00:00Z`);
+          const prev = new Date(d.getTime() - 86400000).toISOString().slice(0, 10);
+          const next = new Date(d.getTime() + 86400000).toISOString().slice(0, 10);
+          const src = [m.get(next), m.get(prev)].find((x: any) => x && x.amount === r.amount && x.receiptCount > 1);
+          if (src) hits.push({ store, channelCode: r.channelCode, date: r.date, amount: r.amount, qty: r.qty, receiptCount: r.receiptCount, sameAsDate: src.date, sameAsReceipt: src.receiptCount });
+        }
+      }
+      hits.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      return NextResponse.json({ ok: true, count: hits.length, totalAmount: hits.reduce((s, h) => s + h.amount, 0), hits }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     // ?checkSuspicious=1 — 영수건수 1건 이하인데 금액이 100만원 이상인 행(수기 보정/복사 의심)을 날짜별로 모읍니다.
     if (searchParams.get("checkSuspicious") === "1") {
       const { rows } = await readSalesSummarySnapshot();

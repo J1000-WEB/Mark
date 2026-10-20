@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveStoreStockSnapshot, getStoreStockSnapshotMeta } from "@/lib/dataBuilder";
+import { saveStoreStockSnapshot, saveStoreStockSnapshotChunk, finishStoreStockSnapshot, getStoreStockSnapshotMeta } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,6 +24,15 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
+    // MARK 2026-10-20: 대용량(새벽 자동 업로드)은 청크로: { mode:"chunk", rows, startRow } → { mode:"finish", totalRows, storeCount, fileName }
+    if (body?.mode === "chunk") {
+      const result = await saveStoreStockSnapshotChunk(Array.isArray(body.rows) ? body.rows : [], Number(body.startRow));
+      return NextResponse.json(result);
+    }
+    if (body?.mode === "finish") {
+      const result = await finishStoreStockSnapshot(Number(body.totalRows), Number(body.storeCount) || 0, typeof body.fileName === "string" ? body.fileName : "");
+      return NextResponse.json(result);
+    }
     const rows = Array.isArray(body?.rows) ? body.rows : null;
     const fileName = typeof body?.fileName === "string" ? body.fileName : "";
     if (!rows || !rows.length) {

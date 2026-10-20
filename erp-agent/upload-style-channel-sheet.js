@@ -144,13 +144,31 @@ async function saveSideSnapshots(rows, fileName) {
     if (!stockRows.length) {
       log("⚠ 매장별 재고: 매장 컬럼을 못 찾았어요(파일 헤더 구조가 바뀌었을 수 있음) — 건너뜀");
     } else {
-      let payload = { rows: stockRows, fileName };
-      // Vercel 요청 크기 한도(4.5MB) 여유를 두고, 넘으면 상품명/칼라명을 빼서 보냅니다(서버는 없어도 저장됨).
-      if (JSON.stringify(payload).length > 4_000_000) {
-        payload = { rows: stockRows.map((r) => [r[0], "", r[2], "", r[4], r[5], r[6]]), fileName };
-        log("매장별 재고: 용량이 커서 상품명/칼라명은 빼고 보냅니다.");
+      // MARK 2026-10-20: 한 번에 보내면 413(요청 크기 초과)이 나서 청크로 나눠 보냅니다.
+      // 한글은 UTF-8로 3바이트라 문자 수가 아니라 실제 바이트로 계산합니다(청크당 약 1.5MB).
+      const MAX_CHUNK_BYTES = 1_500_000;
+      const chunks = [];
+      let cur = [];
+      let curBytes = 2;
+      for (const r of stockRows) {
+        const b = Buffer.byteLength(JSON.stringify(r), "utf8") + 1;
+        if (cur.length && curBytes + b > MAX_CHUNK_BYTES) {
+          chunks.push(cur);
+          cur = [];
+          curBytes = 2;
+        }
+        cur.push(r);
+        curBytes += b;
       }
-      const res = await postApi("/api/store-stock-upload", payload);
+      if (cur.length) chunks.push(cur);
+      let startRow = 2; // 1행은 헤더
+      for (let i = 0; i < chunks.length; i++) {
+        const c = await postApi("/api/store-stock-upload", { mode: "chunk", rows: chunks[i], startRow });
+        // 서버가 필수값(스타일/칼라/사이즈/매장) 없는 행을 빼고 쓰므로, 실제로 쓴 행 수만큼만 다음 위치로 이동
+        startRow += Number(c.written || 0);
+        log(`매장별 재고 업로드 중... (${i + 1}/${chunks.length}, ${startRow - 2}행 저장)`);
+      }
+      const res = await postApi("/api/store-stock-upload", { mode: "finish", totalRows: startRow - 2, storeCount, fileName });
       log(`✅ 매장별 재고 스냅샷 저장 (${res.rowCount}행, ${res.storeCount || storeCount}개 매장)`);
     }
   } catch (e) {

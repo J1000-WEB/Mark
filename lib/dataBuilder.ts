@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
@@ -605,6 +605,50 @@ export async function saveStoreStockSnapshot(rows: any[][], fileName?: string) {
   ]);
 
   return { ok: true, rowCount: clean.length, storeCount, uploadedAt };
+}
+
+// MARK 2026-10-20: 새벽 자동 업로드에서 5만 행(UTF-8로 약 4.5MB 이상)을 한 번에 보내다가
+// Vercel 요청 크기 한도에 걸려(413 FUNCTION_PAYLOAD_TOO_LARGE) 저장이 안 되고 있었습니다.
+// 그래서 청크로 나눠 보내는 방식도 지원합니다:
+//   chunk(startRow=2부터, 이어서) → 각 청크를 해당 행 위치에 덮어쓰기
+//   finish(totalRows) → 새 데이터보다 아래 남은 예전 행을 지우고 메타(업로드일시 등) 기록
+// 업로드 도중 잠깐 예전/새 행이 섞일 수 있지만, finish 전까지 메타가 안 바뀌므로 조회 쪽 표시는 예전 기준 그대로입니다.
+function cleanStoreStockRows(rows: any[][]) {
+  return (rows || [])
+    .map((r) => [text(r[0]), text(r[1]), text(r[2]), text(r[3]), text(r[4]), text(r[5]), num(r[6])])
+    .filter((r) => r[0] && r[2] && r[4] && r[5]);
+}
+
+export async function saveStoreStockSnapshotChunk(rows: any[][], startRow: number) {
+  const clean = cleanStoreStockRows(rows);
+  if (!clean.length) return { ok: true, written: 0 };
+  if (!Number.isInteger(startRow) || startRow < 2) throw new Error("startRow는 2 이상이어야 합니다(1행은 헤더).");
+  const dbId = getDbSheetId();
+  if (startRow === 2) {
+    await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, STORE_STOCK_SNAPSHOT_HEADER);
+    await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A1:G1`, [STORE_STOCK_SNAPSHOT_HEADER]);
+  }
+  // 시작 셀만 지정하면 그리드가 모자랄 때 구글이 알아서 행을 늘려 씁니다(safeReplace의 A1 쓰기와 같은 방식).
+  await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A${startRow}`, clean);
+  return { ok: true, written: clean.length };
+}
+
+export async function finishStoreStockSnapshot(totalRows: number, storeCount: number, fileName?: string) {
+  if (!Number.isInteger(totalRows) || totalRows < 1) throw new Error("totalRows가 올바르지 않습니다.");
+  const dbId = getDbSheetId();
+  const lastRow = totalRows + 1; // 헤더 포함 마지막 데이터 행
+  // 실제로 다 써졌는지 마지막 행 확인
+  const tail = await getSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_SHEET, `A${lastRow}:A${lastRow}`).catch(() => [] as any[]);
+  if (!tail?.[0]?.[0]) throw new Error(`마지막 행(${lastRow})이 비어 있어요 — 청크 업로드가 덜 된 것 같아요. 다시 시도해주세요.`);
+  const gridRows = await getSheetRowCountById(dbId, STORE_STOCK_SNAPSHOT_SHEET).catch(() => 0);
+  if (gridRows > lastRow) await clearRangeById(dbId, STORE_STOCK_SNAPSHOT_SHEET, `A${lastRow + 1}:G${gridRows}`);
+  await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, STORE_STOCK_SNAPSHOT_META_HEADER);
+  const uploadedAt = nowKSTDateTime();
+  await safeReplaceSheetValuesById(dbId, STORE_STOCK_SNAPSHOT_META_SHEET, [
+    STORE_STOCK_SNAPSHOT_META_HEADER,
+    [uploadedAt, totalRows, storeCount, text(fileName)],
+  ]);
+  return { ok: true, rowCount: totalRows, storeCount, uploadedAt };
 }
 
 export async function getStoreStockSnapshotMeta() {

@@ -1,5 +1,5 @@
 import fallback from "./mark-data.json";
-import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById } from "./googleSheets";
+import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
@@ -628,7 +628,8 @@ export async function saveStoreStockSnapshotChunk(rows: any[][], startRow: numbe
     await ensureSheetExistsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, STORE_STOCK_SNAPSHOT_HEADER);
     await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A1:G1`, [STORE_STOCK_SNAPSHOT_HEADER]);
   }
-  // 시작 셀만 지정하면 그리드가 모자랄 때 구글이 알아서 행을 늘려 씁니다(safeReplace의 A1 쓰기와 같은 방식).
+  // 시작 셀이 그리드 밖이면 에러가 나서, 쓰기 전에 이 청크 끝까지 행을 미리 늘려둡니다.
+  await ensureGridRowsById(dbId, STORE_STOCK_SNAPSHOT_SHEET, startRow + clean.length - 1);
   await updateValuesById(dbId, `'${STORE_STOCK_SNAPSHOT_SHEET}'!A${startRow}`, clean);
   return { ok: true, written: clean.length };
 }

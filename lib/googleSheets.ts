@@ -313,6 +313,27 @@ function columnIndexToLetterLocal(zeroBasedNextCol: number) {
   return letters || "A";
 }
 
+// MARK 2026-10-20: 시트 그리드 행 수가 minRows보다 작으면 모자란 만큼 행을 늘립니다.
+// (values.update는 그리드 "안"에서 시작하면 넘치는 만큼 늘려 쓰지만, 시작 셀 자체가 그리드
+// 밖이면 "exceeds grid limits" 에러가 납니다 — 청크를 이어 쓸 때 필요.)
+export async function ensureGridRowsById(spreadsheetId: string, title: string, minRows: number) {
+  const sheets = await getSheetsClient();
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    ranges: [`'${title.replace(/'/g, "''")}'!A1`],
+    fields: "sheets.properties(title,sheetId,gridProperties)",
+  });
+  const props = (meta.data.sheets || []).find((x) => x.properties?.title === title)?.properties;
+  if (!props || props.sheetId === undefined || props.sheetId === null) throw new Error(`시트를 찾지 못했습니다: ${title}`);
+  const rowCount = props.gridProperties?.rowCount || 0;
+  if (rowCount >= minRows) return rowCount;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ appendDimension: { sheetId: props.sheetId, dimension: "ROWS", length: minRows - rowCount } }] },
+  });
+  return minRows;
+}
+
 export async function getSheetPropsById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

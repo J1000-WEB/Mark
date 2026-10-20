@@ -1700,6 +1700,14 @@ async function buildInventory(
   const RT_UNDERPERFORM_SENDER_KEEP_UNITS = 2;
   const RT_UNDERPERFORM_RECEIVER_PERCENTILE = 0.33;
   const RT_UNDERPERFORM_FILL_TARGET_WEEKS = 3;
+  // MARK 2026-10-20: "부진 RT가 너무 많다(하루 230건+, 제안의 60%)" — 실제 계산분(10/20, 부진 235건)으로
+  // 시뮬레이션해서 아래 세 가지로 줄였습니다(부진 약 120건, 이동수량은 약 83% 유지):
+  //  - 받는점포는 그 품번을 주 2장 이상 파는 곳만(1장 팔린 곳은 우연일 수 있음)
+  //  - 이동수량 3장 미만(1~2장)은 제안하지 않음(작업 대비 효과가 작음)
+  //  - 품번당 부진 제안은 수량 큰 순으로 최대 2건
+  const RT_UNDERPERFORM_RECEIVER_MIN_WEEK_NET = 2;
+  const RT_UNDERPERFORM_MIN_MOVE_QTY = 3;
+  const RT_UNDERPERFORM_MAX_PER_STYLE = 2;
 
   if (companyTopProducts.length) {
     for (const [styleCode, rows] of byStyle.entries()) {
@@ -1725,7 +1733,7 @@ async function buildInventory(
       // 받는점포 후보: 그 품번을 실제로 팔고 있는 매장들 중,
       // 재고주수가 상대적으로 짧은 편(하위 33%ile)인 매장만 봅니다.
       // 부진상품은 원래 회전이 느려서, 절대 주수(예: 2~3주)로 거르면 후보가 거의 안 남습니다.
-      const selling = rowsEnriched.filter((r) => r.weekNet > 0);
+      const selling = rowsEnriched.filter((r) => r.weekNet >= RT_UNDERPERFORM_RECEIVER_MIN_WEEK_NET);
       if (!selling.length) continue;
 
       const weeksSorted = selling.map((r) => r.stockWeeks).sort((a, b) => a - b);
@@ -1746,6 +1754,7 @@ async function buildInventory(
 
       const remainingSend = new Map<string, number>();
       for (const s of senders) remainingSend.set(s.storeName, Math.max(0, s.stock - (s.isFullClearCandidate ? 0 : RT_UNDERPERFORM_SENDER_KEEP_UNITS)));
+      const styleUnderperform: any[] = [];
 
       for (const to of receivers) {
         const targetStock = Math.max(1, Math.ceil(to.weekNet * RT_UNDERPERFORM_FILL_TARGET_WEEKS));
@@ -1761,7 +1770,7 @@ async function buildInventory(
           if (!available) continue;
 
           const suggestQty = Math.max(0, Math.min(remainingNeed, available));
-          if (!suggestQty) continue;
+          if (!suggestQty || suggestQty < RT_UNDERPERFORM_MIN_MOVE_QTY) continue;
 
           remainingSend.set(from.storeName, available - suggestQty);
           remainingNeed -= suggestQty;
@@ -1776,7 +1785,7 @@ async function buildInventory(
           const skuNeedWeights = computeSkuNeedWeights(to.skuRows, RT_UNDERPERFORM_FILL_TARGET_WEEKS);
           const skuNeedSummary = summarizeSkuNeeds(skuNeedWeights);
 
-          rtSuggestions.push({
+          styleUnderperform.push({
             moveType: "부진",
             styleCode,
             productName: to.productName,
@@ -1811,6 +1820,11 @@ async function buildInventory(
           });
         }
       }
+      // 품번당 수량 큰 순으로 최대 N건만
+      styleUnderperform
+        .sort((a, b) => b.suggestQty - a.suggestQty)
+        .slice(0, RT_UNDERPERFORM_MAX_PER_STYLE)
+        .forEach((x) => rtSuggestions.push(x));
     }
   }
 

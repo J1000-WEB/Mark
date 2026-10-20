@@ -2710,6 +2710,20 @@ function RtControlSection() {
         </div>
       )}
 
+      {rtData && (rtData.rtSuggestions || []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+          <a
+            href={`/api/rt-suggestions/export${rtData.savedDate ? `?date=${encodeURIComponent(rtData.savedDate)}` : ""}`}
+            className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700"
+          >
+            📥 전체 제안 엑셀 다운로드 (검토용)
+          </a>
+          <p className="text-[11px] font-bold text-emerald-800">
+            승인 없이 이 계산분 전체를 칼라/사이즈 지시서(A~G) + 판단근거(H~)로 받아요. 품번요약·물류출고대체·계산기준 시트 포함.
+          </p>
+        </div>
+      )}
+
       {rtData?.warehouseCovered?.length > 0 && (
         <details className="rounded-2xl border border-sky-100 bg-sky-50 p-3 text-xs font-bold text-sky-800">
           <summary className="cursor-pointer">📦 RT 대신 물류 출고로 채울 부족분 {rtData.warehouseCovered.length}건 (창고 가용재고 있음) — 펼쳐보기</summary>

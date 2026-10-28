@@ -274,6 +274,8 @@
 - 매출탭 상단 배너(`components/SalesRefreshBanner.tsx`, `/api/sales-summary-refresh-status`): 9:30 갱신 전엔
   "[용인, 무신사 매출 업데이트 전 · 9:30 자동업데이트예정]", 9:30 갱신 후(또는 10시까지 기록 없음) 어제 용인 매출 0이면
   "용인 업데이트 확인필요!!!" + 다시 가져오기 버튼. 9:30에 용인 없으면 메일 알림(Resend 설정 시).
+- 그 시트를 채우는 건 PC의 erp-agent `schedule-personal-sales-sync.js`(→ `sync-personal-sales-sheet.js`):
+  0:10, 2:18 + **3:57, 9:27**(매출탭 가져오기 3분 전). 시각을 바꾸면 두 쪽(크론·스케줄러)을 같이 바꿀 것.
 
 ## 상품 이미지 (`components/ProductThumb.tsx`)
 

@@ -299,7 +299,7 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
 // ================= 팩토리아울렛 용인점 =================
 // 원본: 매장별 판매 정산서(헤더가 1번째 줄에 바로 있음)
 // D=판매일자(YYYY-MM-DD), L=스타일(바코드, 한컬렉션처럼 칼라 풀네임/순서 자동수정 필요),
-// P=수량합계(반품은 이미 마이너스로 들어옴), V=판매가
+// P=수량합계(반품은 이미 마이너스로 들어옴), 단가=AA 실판매금액÷수량(2026-10-28~, 열은 헤더 이름으로 찾음)
 // 채널코드는 42005로 고정(사용자 지침, 2026-09-28)
 export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<string, string>, colorCodeList: ColorCodeEntry[] = []): { rows: UploadRow[]; warnings: string[] } {
   const sheetName = workbook.SheetNames[0];
@@ -316,17 +316,40 @@ export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<st
   let orderFixedCount = 0;
   let stillInvalidCount = 0;
 
+  // MARK 2026-10-28: 정산서 양식이 바뀌어(10/26분부터) "판매가"(V)·"실판매가"(Z)가 0으로 오고 금액은
+  // "실판매금액"(AA)에만 들어옴 → 열을 헤더 이름으로 찾고, 단가 = 실판매금액 ÷ 수량(반품은 금액·수량 둘 다 마이너스).
+  // 실판매금액이 없으면 예전처럼 실판매가 → 판매가 순으로 씀.
+  const header = (raw[0] || []).map((v) => text(v).replace(/\s/g, ""));
+  const col = (name: string, fallback: number) => {
+    const i = header.indexOf(name);
+    return i >= 0 ? i : fallback;
+  };
+  const C_DATE = col("판매일자", 3);
+  const C_STYLE = col("스타일", 11);
+  const C_QTY = col("수량합계", 15);
+  const C_PRICE = col("판매가", 21);
+  const C_REAL_PRICE = header.indexOf("실판매가");
+  const C_REAL_AMOUNT = header.indexOf("실판매금액");
+  let zeroPriceCount = 0;
+
   for (let i = 1; i < raw.length; i++) {
     const row = raw[i];
     if (!row || !row.length) continue;
 
-    let barcode = text(row[11]); // L열
+    let barcode = text(row[C_STYLE]);
     if (!barcode) continue;
 
-    const dateRaw = row[3]; // D열
-    const qty = num(row[15]); // P열
-    const price = num(row[21]); // V열
+    const dateRaw = row[C_DATE];
+    const qty = num(row[C_QTY]);
     if (!qty) continue; // 수량 0인 행은 제외
+    const amount = C_REAL_AMOUNT >= 0 ? num(row[C_REAL_AMOUNT]) : 0;
+    let price = 0;
+    if (amount) {
+      price = Math.round(Math.abs(amount / qty));
+    } else {
+      price = (C_REAL_PRICE >= 0 ? num(row[C_REAL_PRICE]) : 0) || num(row[C_PRICE]);
+    }
+    if (!price) zeroPriceCount++;
 
     if (barcode.includes("_")) barcode = barcode.split("_")[0];
 
@@ -374,6 +397,7 @@ export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<st
     });
   }
 
+  if (zeroPriceCount) warnings.push(`단가가 0원인 행이 ${zeroPriceCount}건 있어요(실판매금액·실판매가·판매가 모두 0) — 원본 확인 필요.`);
   if (colorNameFixedCount) warnings.push(`칼라코드 매핑으로 ${colorNameFixedCount}건의 품번코드를 자동 수정했습니다.`);
   if (orderFixedCount) warnings.push(`구품번 사이즈/컬러 순서를 ${orderFixedCount}건 자동으로 바로잡았습니다.`);
   if (stillInvalidCount) warnings.push(`자동수정 후에도 실제 바코드 목록에 없는 품번코드가 ${stillInvalidCount}건 있어 확인이 필요합니다.`);

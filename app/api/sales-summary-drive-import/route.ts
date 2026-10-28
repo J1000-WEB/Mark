@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import { findSalesSummaryDriveFile, downloadDriveFile } from "@/lib/googleDrive";
 import { extractSalesSummaryRows, type SalesSummaryDailyRow } from "@/lib/salesSummaryUpload";
 import { saveSalesSummarySnapshot } from "@/lib/dataBuilder";
+import { checkLateStores, logRefreshRun, kstNowParts, slotOf } from "@/lib/salesSummaryRefreshStatus";
+import { sendEmailAlert } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,6 +42,28 @@ async function runDriveImport() {
   return { ok: true as const, driveFile: { name: file.name, modifiedTime: file.modifiedTime }, ...result };
 }
 
+// MARK 2026-10-28: 가져오기 + 어제 용인·무신사 매출 확인 + 로그(매출탭 상단 배너가 읽음)
+async function runAndLog(slot: string) {
+  let result: any;
+  try {
+    result = await runDriveImport();
+  } catch (e: any) {
+    result = { ok: false, error: e?.message || String(e) };
+  }
+  const check = await checkLateStores().catch(() => null);
+  await logRefreshRun({ slot, ok: !!result.ok, error: result.ok ? "" : result.error, checkDate: check?.checkDate, yongin: check?.yongin, musinsa: check?.musinsa, newRowCount: result.newRowCount }).catch((e) =>
+    console.error("매출탭 자동갱신 로그 실패(무시):", e)
+  );
+  // 9:30 자동갱신인데 용인 매출이 없으면 메일 알림(메일 설정이 없으면 조용히 넘어감)
+  if (slot === "09:30" && check && !check.yonginOk) {
+    await sendEmailAlert(
+      `[MARK] 용인 업데이트 확인필요 (${check.checkDate})`,
+      `<p>9:30 매출탭 자동갱신 후에도 <b>팩토리아울렛 용인점 ${check.checkDate} 매출</b>이 없어요.</p><p>드라이브 전체매출 파일에 용인 매출을 넣은 뒤 매출탭에서 "드라이브에서 가져오기"를 눌러주세요.</p>`
+    ).catch(() => null);
+  }
+  return { ...result, check };
+}
+
 // GET: Vercel Cron이 매일 자동으로 호출합니다.
 export async function GET(req: Request) {
   try {
@@ -50,8 +74,11 @@ export async function GET(req: Request) {
         return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       }
     }
-    const result = await runDriveImport();
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    // 새벽 4:00 / 오전 9:30(KST) 두 번 — vercel.json crons
+    const q = new URL(req.url).searchParams.get("slot");
+    const slot = q === "0400" ? "04:00" : q === "0930" ? "09:30" : slotOf(kstNowParts().hhmm);
+    const result = await runAndLog(slot);
+    return NextResponse.json(result, { status: result.ok ? 200 : 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("sales-summary-drive-import (cron) failed:", error);
     return NextResponse.json({ ok: false, error: error?.message || "드라이브 자동 가져오기 실패" }, { status: 500 });
@@ -61,7 +88,7 @@ export async function GET(req: Request) {
 // POST: 대시보드의 "지금 가져오기" 버튼이 호출합니다(수동 트리거).
 export async function POST() {
   try {
-    const result = await runDriveImport();
+    const result = await runAndLog("수동");
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("sales-summary-drive-import (manual) failed:", error);

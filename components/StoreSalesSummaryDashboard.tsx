@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
+import SalesRefreshBanner from "@/components/SalesRefreshBanner";
 
 // MARK 2026-09-24: "글씨가 너무많아서 한판에 안보여서" 요청 — 표 안 금액이 다 9자리라
 // 한 화면에 다 안 들어와서, 원 단위 대신 천원 단위로 줄여서 표시합니다(234,555,000원 →
@@ -609,6 +610,8 @@ export default function StoreSalesSummaryDashboard() {
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-[1600px] px-4 pt-6">
         <NavTabs active="store-sales" />
+        {/* MARK 2026-10-28: 자동갱신(4:00/9:30) 상태 + 용인 매출 확인 배너 */}
+        <SalesRefreshBanner refreshKey={driveMessage} onReimport={runDriveImport} importing={driveImporting} />
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div>

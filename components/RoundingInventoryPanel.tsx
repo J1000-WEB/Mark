@@ -275,7 +275,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
           </Section>
 
           {/* ④ 보충 */}
-          <Section title="보충 대상 — 오래 품절된 인기 SKU" hint="재고 0 · 최근 2주 판매 0 · 누적판매 5장↑ (창고에 있거나 전사에서 아직 팔리는 것만)">
+          <Section title="보충 대상 — 오래 품절된 인기 SKU" hint="이 매장 재고 0 · 최근 2주 판매 0 · 누적판매 5장↑ 인데 전사에선 최근 2주 2장↑ 팔리는 SKU (전사 판매 많은 순)">
             {inv.boost.length === 0 ? (
               <Empty>보충 대상이 없어요{meta && !meta.pipUploadedAt ? "" : " (누적판매는 새벽 PIP 업로드부터 쌓여요)"}.</Empty>
             ) : (
@@ -293,7 +293,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
                             {label} <span className="font-semibold text-slate-400">{b.productName}</span>
                           </p>
                           <p className="text-[11px] font-semibold text-slate-500">
-                            누적판매 {b.cumQty} · 전사 2주 {b.companyQty2w} · 창고 <b className={b.warehouse > 0 ? "text-emerald-700" : "text-slate-400"}>{b.warehouse > 0 ? b.warehouse : "없음"}</b>
+                            매장 누적판매 {b.cumQty} · 전사 2주 {b.companyQty2w} · 창고 <b className={b.warehouse > 0 ? "text-emerald-700" : "text-slate-400"}>{b.warehouse > 0 ? b.warehouse : "없음"}</b>
                           </p>
                         </div>
                         <ActBtn done={actedTargets.has(target)} onClick={() => openDraft({ block: "보충 대상", target, label, content })} />

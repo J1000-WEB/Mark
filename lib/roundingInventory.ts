@@ -411,8 +411,9 @@ async function doCompute() {
         companyQty2w: coSku.get(`${s.style}|${s.color}|${s.size}`)?.qty2w || 0,
         warehouse: whSku.get(`${s.style}|${s.color}|${s.size}`) || 0,
       }))
-      .filter((x) => x.warehouse > 0 || x.companyQty2w > 0)
-      .sort((a, b) => b.cumQty - a.cumQty)
+      // 전사에서 최근 2주 아직 팔리는 SKU만(시즌 지난 품번 제외), 전사 판매 많은 순
+      .filter((x) => x.companyQty2w >= 2)
+      .sort((a, b) => b.companyQty2w - a.companyQty2w || b.cumQty - a.cumQty)
       .slice(0, S.boostMax);
 
     // ⑥ 신상품 반응
@@ -451,7 +452,8 @@ async function doCompute() {
         warehouse: whStyle.get(style) || 0,
       });
     }
-    newProducts.sort((a, b) => Number(b.low) - Number(a.low) || a.storeSellThrough - a.companySellThrough - (b.storeSellThrough - b.companySellThrough) || b.storeStock - a.storeStock);
+    // 저조 먼저 → 전사 반응 큰(매장당 판매 많은) 품번 순
+    newProducts.sort((a, b) => Number(b.low) - Number(a.low) || b.companyAvgSold - a.companyAvgSold);
 
     const skuMap: RoundingInventoryStore["skuMap"] = {};
     for (const s of m.values()) if (s.stock > 0 || s.w1 || s.w2) skuMap[`${s.style}|${s.color}|${s.size}`] = [s.stock, s.w1, s.w2];

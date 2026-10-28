@@ -306,7 +306,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
           </Section>
 
           {/* ⑥ 신상품 반응 */}
-          <Section title="신상품 반응 — 최근 3주" hint="판매율 = 판매 ÷ (판매+재고). 전사보다 많이 낮고 재고 3장↑이면 '저조'">
+          <Section title="신상품 반응 — 최근 3주" hint="최근 3주에 판매 시작한 품번(전사 누적판매의 85%↑가 최근 3주). 판매율 = 3주 판매 ÷ (판매+재고), 전사의 60% 미만·재고 3장↑이면 '저조'">
             {inv.newProducts.length === 0 ? (
               <Empty>최근 3주 신상품이 이 매장에 없어요.</Empty>
             ) : (
@@ -324,7 +324,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
                             {p.styleCode} <span className="font-semibold text-slate-400">{p.productName}</span>
                           </p>
                           <p className="text-[11px] font-semibold text-slate-500">
-                            첫판매 {p.firstSeen} · 판매 {p.storeSold} / 재고 {p.storeStock} · 판매율 <b className={p.low ? "text-rose-600" : "text-slate-700"}>{p.storeSellThrough}%</b> (전사 {p.companySellThrough}%, {p.carryingStores}개 매장 중 {p.storeSTRank}위)
+                            {p.firstSeen ? `입고 ${p.firstSeen}` : "3주 내 판매 시작"} · 판매 {p.storeSold} / 재고 {p.storeStock} · 판매율 <b className={p.low ? "text-rose-600" : "text-slate-700"}>{p.storeSellThrough}%</b> (전사 {p.companySellThrough}%, {p.carryingStores}개 매장 중 {p.storeSTRank}위)
                           </p>
                         </div>
                         <ActBtn done={actedTargets.has(p.styleCode)} onClick={() => openDraft({ block: "신상품 반응", target: p.styleCode, label, content })} />

@@ -143,15 +143,15 @@ async function doCompute() {
   ]);
   if (!pip.rows.length) throw new Error("PIP 매장별 재고 스냅샷이 비어 있어요. 새벽 PIP 업로드를 확인해주세요.");
 
-  // 판매이력: 어제 기준 6주(신상품 판정에 3주 + 그 이전 3주 필요)
+  // 판매이력: 어제 기준 3주를 7일씩 나눠 읽음(Daily_Sales_History는 하루치에 전 SKU 재고까지 담겨 있어
+  // 6주를 한 번에 읽으면 문자열 한도를 넘음 — 2026-10-28 실측). 가장 최근 7일을 먼저 읽어 기준일(anchor)을 정함.
   const yesterday = addDays(now.date, -1);
-  const flat: any[] = await readDailyHistoryFlatRange(addDays(yesterday, -41), yesterday, { strict: true });
+  const chunk1: any[] = await readDailyHistoryFlatRange(addDays(yesterday, -6), yesterday, { strict: true });
   let anchor = "";
-  for (const r of flat) if (r.date > anchor && r.date <= yesterday) anchor = r.date;
+  for (const r of chunk1) if (r.date > anchor && r.date <= yesterday) anchor = r.date;
   if (!anchor) anchor = yesterday;
   const w1s = addDays(anchor, -6), w2s = addDays(anchor, -13), w2e = addDays(anchor, -7);
   const newSince = addDays(anchor, -(ROUNDING_INV_SETTINGS.newDays - 1));
-  const oldWindowStart = addDays(anchor, -41);
 
   // 매장 목록: 재고MD 매장코드 22개 + PIP에만 있는 오프라인 매장(등급 없음)
   const stores = new Map<string, Store>();
@@ -191,29 +191,36 @@ async function doCompute() {
     if (r.productName && !productName.has(style)) productName.set(style, r.productName);
     if (r.colorName && !colorName.has(`${style}|${color}`)) colorName.set(`${style}|${color}`, r.colorName);
   }
-  // 품번 첫 등장일(전사, 판매 또는 재고 기록) — 신상품 판정
-  const firstSeen = new Map<string, string>();
   // 매장별 판매이력 재고 합계(날짜별) — 일별합계 로그가 아직 없을 때 지난주 재고 대체용(검증 후 사용)
   const dhStockByStoreDate = new Map<string, number>();
-  for (const r of flat) {
-    if (!r.styleCode || r.date < oldWindowStart || r.date > anchor) continue;
-    const style = up(r.styleCode);
-    const q = n(r.qty);
-    if ((q > 0 || n(r.stock) > 0) && (!firstSeen.has(style) || r.date < firstSeen.get(style)!)) firstSeen.set(style, r.date);
-    if (r.productName && !productName.has(style)) productName.set(style, r.productName);
-    const k = normalizeStoreKey(r.storeName);
-    if (!stores.has(k)) continue;
-    if (n(r.stock) > 0) dhStockByStoreDate.set(`${k}|${r.date}`, (dhStockByStoreDate.get(`${k}|${r.date}`) || 0) + n(r.stock));
-    if (!r.colorCode || !r.size) continue;
-    const inW1 = r.date >= w1s && r.date <= anchor;
-    const inW2 = r.date >= w2s && r.date <= w2e;
-    const in21 = r.date >= newSince && r.date <= anchor;
-    if (!inW1 && !inW2 && !in21) continue;
-    const s = getSku(k, style, up(r.colorCode), up(r.size));
-    if (inW1) s.w1 += q;
-    if (inW2) s.w2 += q;
-    if (in21) s.sold21 += q;
-    if (r.colorName && !colorName.has(`${style}|${up(r.colorCode)}`)) colorName.set(`${style}|${up(r.colorCode)}`, r.colorName);
+  const fold = (rows: any[]) => {
+    for (const r of rows) {
+      if (!r.styleCode || r.date < newSince || r.date > anchor) continue;
+      const k = normalizeStoreKey(r.storeName);
+      if (!stores.has(k)) continue;
+      const stock = n(r.stock);
+      if (stock > 0) dhStockByStoreDate.set(`${k}|${r.date}`, (dhStockByStoreDate.get(`${k}|${r.date}`) || 0) + stock);
+      const q = n(r.qty);
+      if (!q || !r.colorCode || !r.size) continue;
+      const style = up(r.styleCode);
+      if (r.productName && !productName.has(style)) productName.set(style, r.productName);
+      const s = getSku(k, style, up(r.colorCode), up(r.size));
+      if (r.date >= w1s) s.w1 += q;
+      else if (r.date >= w2s && r.date <= w2e) s.w2 += q;
+      s.sold21 += q;
+      if (r.colorName && !colorName.has(`${style}|${up(r.colorCode)}`)) colorName.set(`${style}|${up(r.colorCode)}`, r.colorName);
+    }
+  };
+  fold(chunk1);
+  chunk1.length = 0;
+  for (const [from, to] of [[addDays(yesterday, -13), addDays(yesterday, -7)], [addDays(yesterday, -20), addDays(yesterday, -14)], [addDays(yesterday, -21), addDays(yesterday, -21)]]) {
+    if (to < newSince) continue;
+    const rows: any[] = await readDailyHistoryFlatRange(from, to, { strict: true }).catch((e) => {
+      // 3주차 이전 구간이 비어 있으면(데이터 없음) 그냥 넘어감 — 최근 2주는 필수
+      if (to >= w2s) throw e;
+      return [];
+    });
+    fold(rows);
   }
 
   // 물류 가용(오프)
@@ -257,14 +264,15 @@ async function doCompute() {
     storeStats.set(sk, st);
   }
   // 품번×매장 합계(신상품 판매율 계산용, 한 번만)
-  const styleStore = new Map<string, Map<string, { stock: number; sold21: number }>>();
+  const styleStore = new Map<string, Map<string, { stock: number; sold21: number; cum: number }>>();
   for (const [sk, m] of skuByStore) {
     for (const s of m.values()) {
       let mm = styleStore.get(s.style);
       if (!mm) styleStore.set(s.style, (mm = new Map()));
-      const a = mm.get(sk) || { stock: 0, sold21: 0 };
+      const a = mm.get(sk) || { stock: 0, sold21: 0, cum: 0 };
       a.stock += s.stock;
       a.sold21 += Math.max(0, s.sold21);
+      a.cum += s.cumQty;
       mm.set(sk, a);
     }
   }
@@ -317,9 +325,19 @@ async function doCompute() {
   // 매장별 결과
   const S = ROUNDING_INV_SETTINGS;
   const results: RoundingInventoryStore[] = [];
+  // 신상품: 전사(오프라인) 누적판매(PIP)의 대부분(≥85%)이 최근 3주 판매 = 최근 3주 안에 판매 시작한 품번
+  //  (누적판매가 아직 없으면 Style_Launch_Master 입고일로 보조 판정)
   const newStyles = new Set<string>();
-  for (const [style, d] of firstSeen) if (d >= newSince && d > oldWindowStart) newStyles.add(style);
-  for (const [style, d] of launchMap) if (t(d).slice(0, 10) >= newSince) newStyles.add(up(style));
+  const firstSeen = new Map<string, string>();
+  for (const [style, mm] of styleStore) {
+    let cum = 0, sold = 0;
+    for (const a of mm.values()) { cum += a.cum; sold += a.sold21; }
+    if (cum >= 5 && sold >= cum * 0.85) newStyles.add(style);
+  }
+  for (const [style, d] of launchMap) {
+    const ld = t(d).slice(0, 10);
+    if (ld >= newSince) { newStyles.add(up(style)); firstSeen.set(up(style), ld); }
+  }
   for (const st of stores.values()) {
     const m = skuByStore.get(st.key);
     if (!m) continue;
@@ -415,7 +433,7 @@ async function doCompute() {
       newProducts.push({
         styleCode: style,
         productName: productName.get(style) || "",
-        firstSeen: firstSeen.get(style) || t(launchMap.get(style)).slice(0, 10),
+        firstSeen: firstSeen.get(style) || "",
         storeStock,
         storeSold,
         storeSellThrough: Math.round(myST * 1000) / 10,

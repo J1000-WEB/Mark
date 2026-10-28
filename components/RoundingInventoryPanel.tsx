@@ -156,6 +156,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
   const actedTargets = useMemo(() => new Set(openActions.map((i) => i.target)), [openActions]);
 
   const s = inv?.summary;
+  const whOld = !!meta?.warehouseUploadedAt && (Date.now() + 9 * 3600 * 1000 - Date.parse(`${meta.warehouseUploadedAt.slice(0, 10)}T00:00:00Z`)) / 86400000 > 7;
 
   return (
     <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
@@ -164,7 +165,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
           <p className="text-xs font-black text-slate-400">재고 점검</p>
           {meta && (
             <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
-              판매 전주 {meta.week1} · 전전주 {meta.week2} · 재고 PIP {meta.pipUploadedAt || "-"} · 창고 {meta.warehouseUsed ? meta.warehouseUploadedAt : "미반영(7일 지남)"} · 계산 {meta.computedAt}
+              판매 전주 {meta.week1} · 전전주 {meta.week2} · 재고 PIP {meta.pipUploadedAt || "-"} · 창고 {meta.warehouseUploadedAt || "업로드 없음"}{whOld ? " ⚠️ 오래됨 — 재고CTRL에서 다시 올려주세요" : ""} · 계산 {meta.computedAt}
             </p>
           )}
         </div>

@@ -15,7 +15,7 @@
 
 import { getDbSheetId, getSheetValuesById, safeReplaceSheetValuesById, ensureSheetExistsById } from "./googleSheets";
 import { readStoreStockSnapshot, readWarehouseStockSnapshot, readDailyHistoryFlatRange } from "./dataBuilder";
-import { RT_SKU_STORES, normalizeStoreKey } from "./rtSkuEngine";
+import { RT_SKU_STORES, RT_SKU_RELAUNCH, normalizeStoreKey } from "./rtSkuEngine";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { readStoreStockDailyTotals, recordStoreStockDailyTotals } from "./storeStockDailyTotals";
 
@@ -31,6 +31,8 @@ export const ROUNDING_INV_SETTINGS = {
   newDays: 21, // 신상품: 최근 N일 안에 처음 잡힌 품번
   newMinStock: 3, // 신상품 저조 판정: 매장 재고 이 이상
   newLowRatio: 0.6, // 매장 판매율 < 전사 판매율 × 이 값 → 저조
+  newMinCompanyAvgSold: 2, // 저조 판정은 전사 매장당 3주 판매가 이 이상인(반응이 있는) 품번만
+  sizeBreakMinCompany2w: 5, // 사이즈깨짐: 그 SKU 전사 2주 판매가 이 이상일 때만(노이즈 방지)
   newMax: 12,
 };
 
@@ -224,7 +226,8 @@ async function doCompute() {
   }
 
   // 물류 가용(오프)
-  const whFresh = !!wh.meta?.uploadedAt && t(wh.meta.uploadedAt).slice(0, 10) >= addDays(now.date, -7) && wh.rows.length > 0;
+  // 창고는 가장 최근 업로드분을 쓰고 화면에 기준일을 같이 보여줌(오래됐으면 경고)
+  const whFresh = wh.rows.length > 0;
   const whSku = new Map<string, number>();
   const whStyle = new Map<string, number>();
   if (whFresh) {
@@ -324,6 +327,8 @@ async function doCompute() {
 
   // 매장별 결과
   const S = ROUNDING_INV_SETTINGS;
+  // 재런칭으로 새 코드가 생긴 예전 품번은 보충 대상에서 뺌(새 코드로 이미 운영)
+  const relaunchOld = new Set(RT_SKU_RELAUNCH.map(([, oldCode]) => oldCode.toUpperCase()));
   const results: RoundingInventoryStore[] = [];
   // 신상품: 전사(오프라인) 누적판매(PIP)의 대부분(≥85%)이 최근 3주 판매 = 최근 3주 안에 판매 시작한 품번
   //  (누적판매가 아직 없으면 Style_Launch_Master 입고일로 보조 판정)
@@ -370,7 +375,7 @@ async function doCompute() {
             let type: "품절" | "품절임박" | "사이즈깨짐" | null = null;
             if (stock <= 0 && weekly > 0) type = "품절";
             else if (stock > 0 && weekly > 0 && weeks <= S.shortageWeeks) type = "품절임박";
-            else if (stock <= 0 && coQ > 0) type = "사이즈깨짐";
+            else if (stock <= 0 && coQ >= S.sizeBreakMinCompany2w) type = "사이즈깨짐";
             if (!type) continue;
             skus.push({ color, colorName: colorName.get(`${style}|${color}`) || "", size, type, stock, weekly: r1(weekly), weeks, companyQty2w: coQ, warehouse: whSku.get(`${style}|${color}|${size}`) || 0 });
           }
@@ -395,7 +400,7 @@ async function doCompute() {
 
     // ④ 보충 대상
     const boost = [...m.values()]
-      .filter((s) => s.stock <= 0 && s.w1 <= 0 && s.w2 <= 0 && s.cumQty >= S.boostMinCumQty)
+      .filter((s) => !relaunchOld.has(s.style) && s.stock <= 0 && s.w1 <= 0 && s.w2 <= 0 && s.cumQty >= S.boostMinCumQty)
       .map((s) => ({
         styleCode: s.style,
         productName: productName.get(s.style) || "",
@@ -429,7 +434,8 @@ async function doCompute() {
       const coST = coSold + coStock > 0 ? coSold / (coSold + coStock) : 0;
       const myST = storeSold / (storeSold + storeStock);
       const rank = [...per].sort((a, b) => b.st - a.st).findIndex((x) => x.key === st.key) + 1;
-      const low = storeStock >= S.newMinStock && myST < coST * S.newLowRatio;
+      const coAvgSold = per.length ? coSold / per.length : 0;
+      const low = storeStock >= S.newMinStock && coAvgSold >= S.newMinCompanyAvgSold && myST < coST * S.newLowRatio;
       newProducts.push({
         styleCode: style,
         productName: productName.get(style) || "",

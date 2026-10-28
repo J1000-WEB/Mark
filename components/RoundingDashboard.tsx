@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import NavTabs from "@/components/NavTabs";
+import RoundingInventoryPanel from "@/components/RoundingInventoryPanel";
 import {
   ROUNDING_CHECKLIST,
   ROUNDING_CATEGORIES,
@@ -219,6 +220,17 @@ export default function RoundingDashboard() {
       setAutoFill(null);
     } finally {
       setAutoFillLoading(false);
+    }
+  }
+
+  async function reloadOpenIssues() {
+    if (!selectedStore) return;
+    try {
+      const res = await fetch(`/api/rounding/issues?store=${encodeURIComponent(selectedStore)}&status=미해결`, { cache: "no-store" });
+      const json = await res.json();
+      if (json.ok) setOpenIssues(json.issues || []);
+    } catch {
+      // 무시
     }
   }
 
@@ -440,6 +452,9 @@ export default function RoundingDashboard() {
                 </p>
               )}
             </div>
+
+            {/* MARK 2026-10-28: 재고 점검(전사 비교 + 조치 남기기) */}
+            <RoundingInventoryPanel storeName={selectedStore} onIssuesChanged={reloadOpenIssues} />
 
             {/* 체크리스트 */}
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">

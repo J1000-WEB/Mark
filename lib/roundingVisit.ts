@@ -105,8 +105,10 @@ const VISIT_RANGE = "A:AD"; // 30개 컬럼(A~AD)
 const ISSUE_SHEET = "라운딩_지적사항";
 const ISSUE_HEADER = [
   "지적ID", "방문ID", "지적일", "매장명", "영역", "항목", "지적내용", "조치_피드백", "상태", "완료일", "생성일시",
+  // MARK 2026-10-28: 라운딩 재고점검에서 남기는 조치 — 대상(STYLE|COLOR|SIZE 또는 STYLE), 조치유형, 기한, 당시수치JSON
+  "대상", "조치유형", "기한", "당시수치",
 ];
-const ISSUE_RANGE = "A:K";
+const ISSUE_RANGE = "A:O";
 
 export async function ensureRoundingSheets() {
   const dbId = getDbSheetId();
@@ -114,6 +116,11 @@ export async function ensureRoundingSheets() {
     ensureSheetExistsById(dbId, VISIT_SHEET, VISIT_HEADER),
     ensureSheetExistsById(dbId, ISSUE_SHEET, ISSUE_HEADER),
   ]);
+  // 예전(11열) 헤더로 만들어진 시트면 L~O 헤더를 채움
+  const head = await getSheetValuesById(dbId, ISSUE_SHEET, "A1:O1").catch(() => [] as any[]);
+  if ((head?.[0] || []).length < ISSUE_HEADER.length) {
+    await updateValuesById(dbId, `'${ISSUE_SHEET}'!A1:O1`, [ISSUE_HEADER]);
+  }
 }
 
 // ========================= 방문기록 =========================
@@ -295,6 +302,10 @@ export interface RoundingIssueRecord {
   status: RoundingIssueStatus;
   resolvedAt: string;
   createdAt: string;
+  target: string;
+  actionType: string;
+  dueDate: string;
+  snapshot: any | null;
 }
 
 export interface SaveRoundingIssueInput {
@@ -305,6 +316,10 @@ export interface SaveRoundingIssueInput {
   item: string;
   content: string;
   action?: string;
+  target?: string;
+  actionType?: string;
+  dueDate?: string;
+  snapshot?: any;
 }
 
 function rowToIssueRecord(r: any[]): RoundingIssueRecord | null {
@@ -321,6 +336,10 @@ function rowToIssueRecord(r: any[]): RoundingIssueRecord | null {
     status: (text(r[8]) || "미해결") as RoundingIssueStatus,
     resolvedAt: text(r[9]),
     createdAt: text(r[10]),
+    target: text(r[11]),
+    actionType: text(r[12]),
+    dueDate: text(r[13]),
+    snapshot: safeJsonParse<any>(r[14], null),
   };
 }
 
@@ -341,14 +360,18 @@ export async function saveRoundingIssue(input: SaveRoundingIssueInput): Promise<
     "미해결",
     "",
     createdAt,
+    input.target || "",
+    input.actionType || "",
+    input.dueDate || "",
+    input.snapshot ? `'${JSON.stringify(input.snapshot)}` : "",
   ];
   await appendValuesById(dbId, `'${ISSUE_SHEET}'!${ISSUE_RANGE}`, [row]);
-  return rowToIssueRecord(row) as RoundingIssueRecord;
+  return rowToIssueRecord(row.map((v, i) => (i === 14 && typeof v === "string" ? v.replace(/^'/, "") : v))) as RoundingIssueRecord;
 }
 
 export async function listRoundingIssues(opts: { storeName?: string; status?: RoundingIssueStatus } = {}): Promise<RoundingIssueRecord[]> {
   const dbId = getDbSheetId();
-  const rows = await getSheetValuesById(dbId, ISSUE_SHEET, "A2:K20000").catch(() => [] as any[]);
+  const rows = await getSheetValuesById(dbId, ISSUE_SHEET, "A2:O20000").catch(() => [] as any[]);
   let records = rows.map(rowToIssueRecord).filter(Boolean) as RoundingIssueRecord[];
   if (opts.storeName) {
     const key = normalizeStoreKey(opts.storeName);
@@ -366,7 +389,8 @@ export function annotateIssueRepeats(issues: RoundingIssueRecord[]): (RoundingIs
   const sorted = [...issues].sort((a, b) => (a.issueDate < b.issueDate ? -1 : 1));
   const counters = new Map<string, number>();
   const withCount = sorted.map((issue) => {
-    const key = `${normalizeStoreKey(issue.storeName)}|${issue.area}|${issue.item}`;
+    // 재고점검 조치는 대상(SKU/품번)까지 같아야 반복으로 봄
+    const key = `${normalizeStoreKey(issue.storeName)}|${issue.area}|${issue.item}|${issue.target || ""}`;
     const count = (counters.get(key) || 0) + 1;
     counters.set(key, count);
     return { ...issue, repeatCount: count, isRepeat: count >= 2 };

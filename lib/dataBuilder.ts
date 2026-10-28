@@ -7,6 +7,7 @@ import { saveWeeklyStylePrices, currentWeekMonday } from "./stylePriceHistory";
 import { mergeStoreDailyAmounts, getMergedAmount, yesterdayDateKeyKST, getComparisonDateForDaily } from "./storeDailyAmount";
 import { readFirstAvailableSheet, buildProductMaster } from "./weeklyDataProvider";
 import { expandStyleChannelRows } from "./styleChannelCompact";
+import { recordStoreStockDailyTotals } from "./storeStockDailyTotals";
 
 function text(v: any) {
   if (v === null || v === undefined) return "";
@@ -653,6 +654,13 @@ export async function finishStoreStockSnapshot(totalRows: number, storeCount: nu
     STORE_STOCK_SNAPSHOT_META_HEADER,
     [uploadedAt, totalRows, storeCount, text(fileName)],
   ]);
+  // MARK 2026-10-28: 라운딩 재고점검 "지난주 대비 재고 증감"용 매장별 총재고 일별 기록(실패해도 업로드는 성공 처리)
+  try {
+    const snap = await readStoreStockSnapshot();
+    await recordStoreStockDailyTotals(uploadedAt.slice(0, 10), snap.rows);
+  } catch (e) {
+    console.error("매장별 재고 일별합계 기록 실패(무시):", e);
+  }
   return { ok: true, rowCount: totalRows, storeCount, uploadedAt };
 }
 

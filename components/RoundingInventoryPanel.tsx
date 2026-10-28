@@ -66,6 +66,24 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [showResolved, setShowResolved] = useState(false);
+  // MARK 2026-10-28: "창고재고 없는 건 빼고 보기" — 기본 켜짐, 브라우저에 기억
+  const [whOnly, setWhOnlyState] = useState(true);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("rounding-inv-wh-only");
+      if (v !== null) setWhOnlyState(v === "1");
+    } catch {
+      // 무시
+    }
+  }, []);
+  function setWhOnly(v: boolean) {
+    setWhOnlyState(v);
+    try {
+      localStorage.setItem("rounding-inv-wh-only", v ? "1" : "0");
+    } catch {
+      // 무시
+    }
+  }
 
   useEffect(() => {
     if (!storeName) return;
@@ -156,6 +174,13 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
   const actedTargets = useMemo(() => new Set(openActions.map((i) => i.target)), [openActions]);
 
   const s = inv?.summary;
+  const topIssues = useMemo(() => {
+    const list = (inv?.topIssues || [])
+      .map((it) => (whOnly ? { ...it, skus: it.skus.filter((x) => x.warehouse > 0) } : it))
+      .filter((it) => (it.notCarried ? !whOnly || it.warehouseStyle > 0 : it.skus.length > 0));
+    return list.slice(0, 10);
+  }, [inv, whOnly]);
+  const boost = useMemo(() => (inv?.boost || []).filter((b) => !whOnly || b.warehouse > 0).slice(0, 15), [inv, whOnly]);
   const whOld = !!meta?.warehouseUploadedAt && (Date.now() + 9 * 3600 * 1000 - Date.parse(`${meta.warehouseUploadedAt.slice(0, 10)}T00:00:00Z`)) / 86400000 > 7;
 
   return (
@@ -229,12 +254,17 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
           )}
 
           {/* ②③ TOP20 품절/품절임박/사이즈깨짐 */}
-          <Section title="전사 TOP20 품번 — 품절·품절임박·사이즈깨짐" hint={`최근 2주 전사 판매 TOP20 중 이 매장에 문제가 있는 품번 ${inv.topIssues.length}개 (전사 순위 순)`}>
-            {inv.topIssues.length === 0 ? (
-              <Empty>TOP20 품번 모두 사이즈가 잘 갖춰져 있어요.</Empty>
+          <label className="mt-4 flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600">
+            <input type="checkbox" checked={whOnly} onChange={(e) => setWhOnly(e.target.checked)} />
+            창고 재고 있는 것만 보기 (TOP20·보충)
+          </label>
+
+          <Section title="전사 TOP20 품번 — 품절·품절임박·사이즈깨짐" hint={`최근 2주 전사 판매 TOP20 중 이 매장에 문제가 있는 품번 ${topIssues.length}개 (전사 순위 순${whOnly ? ", 창고에 있는 SKU만" : ""})`}>
+            {topIssues.length === 0 ? (
+              <Empty>{whOnly ? "창고에서 채울 수 있는 TOP20 품절·사이즈깨짐이 없어요." : "TOP20 품번 모두 사이즈가 잘 갖춰져 있어요."}</Empty>
             ) : (
               <div className="space-y-2">
-                {inv.topIssues.map((it) => {
+                {topIssues.map((it) => {
                   const label = `${it.styleCode} ${it.productName}`;
                   const content = it.notCarried
                     ? `전사 ${it.companyRank}위 품번인데 매장에 재고·판매 없음 (전사 2주 ${it.companyQty2w}장, 창고 ${it.warehouseStyle}장)`
@@ -276,11 +306,12 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
 
           {/* ④ 보충 */}
           <Section title="보충 대상 — 오래 품절된 인기 SKU" hint="이 매장 재고 0 · 최근 2주 판매 0 · 누적판매 5장↑ 인데 전사에선 최근 2주 2장↑ 팔리는 SKU (전사 판매 많은 순)">
-            {inv.boost.length === 0 ? (
+            {boost.length === 0 ? (
+              whOnly && inv.boost.length > 0 ? <Empty>창고에 있는 보충 대상이 없어요 (체크를 끄면 {inv.boost.length}개 보여요).</Empty> :
               <Empty>보충 대상이 없어요{meta && !meta.pipUploadedAt ? "" : " (누적판매는 새벽 PIP 업로드부터 쌓여요)"}.</Empty>
             ) : (
               <div className="divide-y divide-slate-100">
-                {inv.boost.map((b) => {
+                {boost.map((b) => {
                   const target = `${b.styleCode}|${b.color}|${b.size}`;
                   const label = `${b.styleCode} ${b.colorName || b.color} ${sizeLabel(b.size)}`;
                   const content = `누적 ${b.cumQty}장 팔린 SKU가 품절 (전사 2주 ${b.companyQty2w}장, 창고 ${b.warehouse}장)`;

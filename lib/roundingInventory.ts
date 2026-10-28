@@ -24,10 +24,10 @@ const CHUNK_CHARS = 40000;
 
 export const ROUNDING_INV_SETTINGS = {
   topN: 20, // 전사 TOP N 품번
-  topIssueStyles: 10, // 그중 문제 있는 품번 몇 개까지
+  topIssueStyles: 20, // 그중 문제 있는 품번(화면에서 창고 필터 후 10개만 보여줌)
   shortageWeeks: 2, // 품절임박: 재고주수 ≤
   boostMinCumQty: 5, // 보충: 누적판매 ≥
-  boostMax: 15,
+  boostMax: 40, // 화면에서 창고 필터 후 15개만 보여줌
   newDays: 21, // 신상품: 최근 N일 안에 처음 잡힌 품번
   newMinStock: 3, // 신상품 저조 판정: 매장 재고 이 이상
   newLowRatio: 0.6, // 매장 판매율 < 전사 판매율 × 이 값 → 저조

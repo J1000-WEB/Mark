@@ -87,7 +87,7 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
       if (!json.ok) throw new Error(json.error || "불러오기 실패");
       setMeta(json.meta);
       setInv(json.store);
-      if (!json.store) setError("이 매장의 재고 데이터를 찾지 못했어요(PIP 매장 이름과 다를 수 있어요).");
+      if (!json.store) setError("재고 점검은 PIP에 매장별 재고가 있는 직영 오프라인 매장만 볼 수 있어요(무신사·면세·한컬렉션 등 위탁은 제외).");
     } catch (e: any) {
       setError(e?.message || "불러오기 실패");
     } finally {

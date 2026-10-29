@@ -423,7 +423,16 @@ export default function RoundingDashboard() {
           <>
             {/* 자동입력 숫자 */}
             <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-black text-slate-400">자동입력 · {autoFill.region || "지역 미확인"}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-black text-slate-400">자동입력 · {autoFill.region || "지역 미확인"}</p>
+                {/* MARK 2026-10-28: 매장별 라운딩 보고서 엑셀(최근 방문 기준, 방문기록 없으면 오늘 숫자로) */}
+                <a
+                  href={`/api/rounding/report?store=${encodeURIComponent(selectedStore)}`}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white"
+                >
+                  📄 라운딩 보고서 엑셀{lastVisit ? ` (${lastVisit.visitDate})` : ""}
+                </a>
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Stat label="금주 목표" value={won(autoFill.periodTarget)} />
                 <Stat label="금주 실적" value={won(autoFill.periodActual)} />
@@ -647,6 +656,7 @@ export default function RoundingDashboard() {
                         <th className="px-2 py-1 text-right">매출</th>
                         <th className="px-2 py-1 text-right">재고</th>
                         <th className="px-2 py-1 text-right">목표달성율</th>
+                        <th className="px-2 py-1 text-right">보고서</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -662,6 +672,11 @@ export default function RoundingDashboard() {
                           <td className="px-2 py-1.5 text-right">{v.scoreByCategory?.매출관리 ?? "-"}</td>
                           <td className="px-2 py-1.5 text-right">{v.scoreByCategory?.재고관리 ?? "-"}</td>
                           <td className="px-2 py-1.5 text-right">{pct(v.achievementRate)}</td>
+                          <td className="px-2 py-1.5 text-right">
+                            <a href={`/api/rounding/report?store=${encodeURIComponent(selectedStore)}&visitId=${encodeURIComponent(v.visitId)}`} className="font-bold text-emerald-700 underline">
+                              엑셀
+                            </a>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "functions": {
+    "app/api/rounding/report/route.ts": {
+      "memory": 1024,
+      "maxDuration": 300
+    },
     "app/api/rounding/inventory/route.ts": {
       "memory": 3009,
       "maxDuration": 300

@@ -14,6 +14,7 @@ import {
   ensureSheetExistsById,
   appendValuesById,
   updateValuesById,
+  ensureGridColsById,
 } from "./googleSheets";
 import { buildStoreSalesSummary, normalizeStoreKey, readStoreStockSnapshot } from "./dataBuilder";
 import { getRegionForStore } from "./storeRegion";
@@ -116,8 +117,16 @@ export async function ensureRoundingSheets() {
     ensureSheetExistsById(dbId, VISIT_SHEET, VISIT_HEADER),
     ensureSheetExistsById(dbId, ISSUE_SHEET, ISSUE_HEADER),
   ]);
+  // 새 시트는 기본 26열(Z)까지라, 30열(방문기록)·15열(지적사항)이 다 들어가게 열을 늘리고 헤더를 끝까지 채움
+  await Promise.all([ensureGridColsById(dbId, VISIT_SHEET, VISIT_HEADER.length), ensureGridColsById(dbId, ISSUE_SHEET, ISSUE_HEADER.length)]);
+  const [vHead, head] = await Promise.all([
+    getSheetValuesById(dbId, VISIT_SHEET, "A1:AD1").catch(() => [] as any[]),
+    getSheetValuesById(dbId, ISSUE_SHEET, "A1:O1").catch(() => [] as any[]),
+  ]);
+  if ((vHead?.[0] || []).length < VISIT_HEADER.length) {
+    await updateValuesById(dbId, `'${VISIT_SHEET}'!A1:AD1`, [VISIT_HEADER]);
+  }
   // 예전(11열) 헤더로 만들어진 시트면 L~O 헤더를 채움
-  const head = await getSheetValuesById(dbId, ISSUE_SHEET, "A1:O1").catch(() => [] as any[]);
   if ((head?.[0] || []).length < ISSUE_HEADER.length) {
     await updateValuesById(dbId, `'${ISSUE_SHEET}'!A1:O1`, [ISSUE_HEADER]);
   }

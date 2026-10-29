@@ -350,6 +350,21 @@ export async function trimGridById(spreadsheetId: string, title: string, keepRow
   if (requests.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
 }
 
+// MARK 2026-10-29: 시트 열 수가 minCols보다 적으면 오른쪽에 열을 늘립니다(새 시트는 기본 26열=Z까지라
+// 27열 이상을 append하면 "tried writing to column [AA]" 오류가 남 — 라운딩_방문기록 30열에서 실제로 겪음).
+export async function ensureGridColsById(spreadsheetId: string, title: string, minCols: number) {
+  const sheets = await getSheetsClient();
+  const escaped = title.replace(/'/g, "''");
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, ranges: [`'${escaped}'!A1`], fields: "sheets.properties(title,sheetId,gridProperties)" });
+  const props = (meta.data.sheets || []).find((x) => x.properties?.title === title)?.properties;
+  const cols = props?.gridProperties?.columnCount || 0;
+  if (!props || cols >= minCols) return;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ appendDimension: { sheetId: props.sheetId, dimension: "COLUMNS", length: minCols - cols } }] },
+  });
+}
+
 export async function getSheetPropsById(spreadsheetId: string) {
   const sheets = await getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId });

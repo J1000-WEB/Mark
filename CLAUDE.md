@@ -280,9 +280,10 @@
   "용인 업데이트 확인필요!!!" + 다시 가져오기 버튼. 9:30에 용인 없으면 메일 알림(Resend 설정 시).
 - 그 시트를 채우는 건 PC의 erp-agent `schedule-personal-sales-sync.js`(→ `sync-personal-sales-sheet.js`):
   0:10, 2:18 + **3:57, 9:27**(매출탭 가져오기 3분 전). 시각을 바꾸면 두 쪽(크론·스케줄러)을 같이 바꿀 것.
-- **용인(42005)은 ERP 매장목록 필터(SHOP_GB 2~5)에 안 걸려 빠지고 있었음** → `sync-personal-sales-sheet.js`의
-  `syncYonginFromErp`가 매장코드로 직접 조회(2026-10-29). 용인 매출이 ERP에 늦게 들어오는 날이 있어 최근 7일을 매번
-  다시 조회하고 금액이 있는 날만 씀(0으로 덮어쓰지 않음). (UPLOAD 시트에서 읽는 방식은 소천님 요청으로 안 씀)
+- **용인(42005)은 ERP엔 매출이 있는데 개인시트에 날짜별 행이 없어서 못 넣고 있었음**(2026-10-29 실측 로그로 확인).
+  `sync-personal-sales-sheet.js`의 `insertStoreDayRow`: 매출이 있는데 행이 없는 매장은 그 날짜 마지막 행 아래에 한 줄
+  끼워넣고(윗줄 서식 복사) B구분·C코드·D매장명·E일자·F수량·G금액을 채움. 용인은 `syncYonginRecent`가 최근 7일도 다시
+  조회해서 금액 있는 날만 보강. (UPLOAD 시트에서 읽는 방식은 소천님 요청으로 안 씀)
 
 ## 상품 이미지 (`components/ProductThumb.tsx`)
 

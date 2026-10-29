@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
     title(`재고 점검 (${inv?.meta?.computedAt || "-"} 기준)`);
     if (s && inv?.store) {
       kv([["총 재고", `${s.stock.toLocaleString("ko-KR")}장 (매장평균 ${s.company.avgStock.toLocaleString("ko-KR")})`], ["주간 판매(2주평균)", `${s.weekly}장 (매장평균 ${s.company.avgWeekly})`], ["재고주수", `${wk(s.weeks)} (전사 ${wk(s.company.weeks)})`], ["지난주 대비", s.stockDelta === null ? "기록 쌓는 중" : `${s.stockDelta >= 0 ? "+" : ""}${s.stockDelta.toLocaleString("ko-KR")}장`]]);
-      kv([["재고 많은 순", `${s.stockRank}위 / ${s.storeCount}`], ["재고주수 긴 순", `${s.weeksRank}위 / ${s.storeCount}`], ["TOP20 품절·사이즈깨짐", `${inv.store.topIssues.length}개 품번`], ["보충 대상 / 신상품 저조", `${inv.store.boost.length}개 / ${inv.store.newProducts.filter((p: any) => p.low).length}개`]]);
+      kv([["재고 많은 순", `${s.stockRank}위 / ${s.storeCount}`], ["재고주수 긴 순", `${s.weeksRank}위 / ${s.storeCount}`], ["TOP20 품절·사이즈깨짐", `${inv.store.topIssues.length}개 품번 (창고로 채울 수 있는 것 ${inv.store.topIssues.filter((it: any) => (it.notCarried ? it.warehouseStyle > 0 : it.skus.some((x: any) => x.warehouse > 0))).length}개)`], ["보충 대상 / 신상품 저조", `${inv.store.boost.length}개(창고 있음 ${inv.store.boost.filter((b: any) => b.warehouse > 0).length}) / ${inv.store.newProducts.filter((p: any) => p.low).length}개`]]);
       ws.getCell(r, 1).value = "※ 품번·SKU 상세는 '재고점검' 시트";
       ws.getCell(r, 1).font = { italic: true, color: { argb: "FF64748B" } };
       r++;

@@ -453,7 +453,9 @@ export async function ensureSheetExistsById(spreadsheetId: string, title: string
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
-        requests: [{ addSheet: { properties: { title } } }],
+        // MARK 2026-10-29: 헤더가 26열(Z)보다 길면 처음부터 그만큼 열을 만듦(예전엔 기본 26열로 만들고
+        // 헤더를 A1:Z1에 쓰려다 "tried writing to column [AA]"로 실패 → 헤더 없는 시트가 남았음)
+        requests: [{ addSheet: { properties: { title, gridProperties: { rowCount: 1000, columnCount: Math.max(26, header?.length || 0) } } } }],
       },
     });
   }
@@ -462,13 +464,13 @@ export async function ensureSheetExistsById(spreadsheetId: string, title: string
     const escaped = title.replace(/'/g, "''");
     const values = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${escaped}'!A1:Z1`,
+      range: `'${escaped}'!A1:ZZ1`,
     }).then((res) => res.data.values || []).catch(() => []);
     if (!values?.[0]?.length) {
-      const endCol = String.fromCharCode(64 + Math.min(header.length, 26));
+      if (header.length > 26) await ensureGridColsById(spreadsheetId, title, header.length);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `'${escaped}'!A1:${endCol}1`,
+        range: `'${escaped}'!A1`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values: [header] },
       });

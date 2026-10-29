@@ -280,9 +280,9 @@
   "용인 업데이트 확인필요!!!" + 다시 가져오기 버튼. 9:30에 용인 없으면 메일 알림(Resend 설정 시).
 - 그 시트를 채우는 건 PC의 erp-agent `schedule-personal-sales-sync.js`(→ `sync-personal-sales-sheet.js`):
   0:10, 2:18 + **3:57, 9:27**(매출탭 가져오기 3분 전). 시각을 바꾸면 두 쪽(크론·스케줄러)을 같이 바꿀 것.
-- **용인(42005)은 ERP가 아니라 인샵 UPLOAD 시트에서** 채움(2026-10-29, `sync-personal-sales-sheet.js`의 `syncYonginFromUpload`):
-  정산서를 대시보드 인샵업로드로 올리면 UPLOAD 시트에 42005 행이 쌓이고, 매 동기화 때 최근 14일을 판매일자별 합계(수량×단가)로
-  씀. 같은 날짜를 여러 번 올리면 마지막 업로드 묶음(연속 행)만 사용. ERP엔 용인 매출이 늦게 들어와서 예전엔 0으로 남았음.
+- **용인(42005)은 ERP 매장목록 필터(SHOP_GB 2~5)에 안 걸려 빠지고 있었음** → `sync-personal-sales-sheet.js`의
+  `syncYonginFromErp`가 매장코드로 직접 조회(2026-10-29). 용인 매출이 ERP에 늦게 들어오는 날이 있어 최근 7일을 매번
+  다시 조회하고 금액이 있는 날만 씀(0으로 덮어쓰지 않음). (UPLOAD 시트에서 읽는 방식은 소천님 요청으로 안 씀)
 
 ## 상품 이미지 (`components/ProductThumb.tsx`)
 

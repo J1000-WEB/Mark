@@ -6,6 +6,10 @@ import {
   deleteSheetByTitleIfExistsById,
   getSheetValuesById,
   getSpreadsheetTitlesById,
+  getSheetsClient,
+  getDbSheetId,
+  ensureSheetExistsById,
+  safeReplaceSheetValuesById,
 } from "@/lib/googleSheets";
 import { sendEmailAlert } from "@/lib/alerts";
 
@@ -14,6 +18,76 @@ export const maxDuration = 60;
 export const revalidate = 0;
 
 const LIVE_SHEET_DEFAULT = "스타일별 채널별 입고/판매/재고현황(금액)";
+
+// MARK 2026-10-30: 이 시트는 매일 새벽 "지우고 새로 만들기"라 사용자가 걸어둔 틀고정이 매번 사라졌고,
+// B열(기준일자)은 엑셀 날짜 숫자(46324)로 보였음 → 지우기 전에 틀고정(행/열 수)을 읽어두고(MARK_DB에도 백업),
+// 새 시트를 만든 직후 틀고정을 다시 걸고 B열을 날짜(yyyy-mm-dd) 서식으로 지정.
+// (B열을 읽는 lib/dailySales.ts toDateText는 숫자/날짜문자열 둘 다 처리하므로 영향 없음)
+const VIEW_SETTINGS_SHEET = "PIP시트_보기설정";
+
+async function readFreeze(spreadsheetId: string, title: string) {
+  try {
+    const sheets = await getSheetsClient();
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(title,gridProperties)" });
+    const g = (meta.data.sheets || []).find((x) => x.properties?.title === title)?.properties?.gridProperties;
+    if (!g) return null;
+    return { rows: g.frozenRowCount || 0, cols: g.frozenColumnCount || 0 };
+  } catch {
+    return null;
+  }
+}
+
+async function loadSavedFreeze() {
+  try {
+    const rows = await getSheetValuesById(getDbSheetId(), VIEW_SETTINGS_SHEET, "A2:B2");
+    const r = rows?.[0];
+    if (!r) return null;
+    return { rows: Number(r[0]) || 0, cols: Number(r[1]) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+async function saveFreeze(f: { rows: number; cols: number }) {
+  try {
+    const dbId = getDbSheetId();
+    await ensureSheetExistsById(dbId, VIEW_SETTINGS_SHEET, ["틀고정_행", "틀고정_열"]);
+    await safeReplaceSheetValuesById(dbId, VIEW_SETTINGS_SHEET, [["틀고정_행", "틀고정_열"], [f.rows, f.cols]]);
+  } catch (e) {
+    console.error("PIP 틀고정 설정 저장 실패(무시):", e);
+  }
+}
+
+async function applyViewSettings(spreadsheetId: string, title: string, freeze: { rows: number; cols: number } | null, rowCount?: number) {
+  try {
+    const sheets = await getSheetsClient();
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(title,sheetId,gridProperties)" });
+    const props = (meta.data.sheets || []).find((x) => x.properties?.title === title)?.properties;
+    if (!props || props.sheetId === undefined || props.sheetId === null) return;
+    const gridRows = rowCount || props.gridProperties?.rowCount || 1000;
+    const gridCols = props.gridProperties?.columnCount || 26;
+    const requests: any[] = [
+      {
+        repeatCell: {
+          range: { sheetId: props.sheetId, startRowIndex: 0, endRowIndex: gridRows, startColumnIndex: 1, endColumnIndex: 2 },
+          cell: { userEnteredFormat: { numberFormat: { type: "DATE", pattern: "yyyy-mm-dd" } } },
+          fields: "userEnteredFormat.numberFormat",
+        },
+      },
+    ];
+    if (freeze && (freeze.rows || freeze.cols)) {
+      requests.push({
+        updateSheetProperties: {
+          properties: { sheetId: props.sheetId, gridProperties: { frozenRowCount: Math.min(freeze.rows, gridRows - 1), frozenColumnCount: Math.min(freeze.cols, gridCols - 1) } },
+          fields: "gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+        },
+      });
+    }
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  } catch (e) {
+    console.error("PIP 시트 틀고정/날짜서식 적용 실패(무시):", e);
+  }
+}
 
 // MARK 6.58: 파일이 892만 셀까지 커져서, 예전 방식(스테이징 만들고 → 검증 → 기존 걸 백업으로
 // 이름바꾸기 → 스테이징 승격)은 순간적으로 신구 데이터가 동시에 존재해서 2배 공간이 필요했고,
@@ -31,6 +105,11 @@ export async function POST(req: Request) {
     if (mode === "start") {
       const titles = await getSpreadsheetTitlesById(spreadsheetId);
       const liveSheetName = titles.find((t) => t.includes("스타일별") && t.includes("채널별") && t.includes("금액")) || LIVE_SHEET_DEFAULT;
+
+      // 지우기 전에 사용자가 걸어둔 틀고정 기억(없으면 예전에 저장해둔 값)
+      const liveFreeze = await readFreeze(spreadsheetId, liveSheetName);
+      const freeze = liveFreeze && (liveFreeze.rows || liveFreeze.cols) ? liveFreeze : await loadSavedFreeze();
+      if (liveFreeze && (liveFreeze.rows || liveFreeze.cols)) await saveFreeze(liveFreeze);
 
       try {
         await deleteSheetByTitleIfExistsById(spreadsheetId, liveSheetName);
@@ -69,7 +148,8 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      return NextResponse.json({ ok: true, written: (rows || []).length, liveSheetName });
+      await applyViewSettings(spreadsheetId, liveSheetName, freeze, gridSize?.rowCount);
+      return NextResponse.json({ ok: true, written: (rows || []).length, liveSheetName, freeze });
     }
 
     if (mode === "chunk") {

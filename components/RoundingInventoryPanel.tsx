@@ -18,7 +18,7 @@ type InvStore = {
     prevStock: number | null; prevStockDate: string | null; stockDelta: number | null;
     company: { avgStock: number; avgWeekly: number; weeks: number; totalStock: number; avgPrevStock: number | null };
   };
-  topIssues: { companyRank: number; styleCode: string; productName: string; companyQty2w: number; companyAvgWeekly: number; storeQty2w: number; storeStock: number; notCarried: boolean; warehouseStyle: number; skus: Sku[] }[];
+  topIssues: { companyRank: number; styleCode: string; productName: string; companyQty2w: number; companyAvgWeekly: number; storeWeekly?: number; storeWeeks?: number; companyWeeks?: number; storeQty2w: number; storeStock: number; notCarried: boolean; warehouseStyle: number; skus: Sku[] }[];
   boost: { styleCode: string; productName: string; color: string; colorName: string; size: string; cumQty: number; companyQty2w: number; warehouse: number }[];
   newProducts: { styleCode: string; productName: string; firstSeen: string; storeStock: number; storeSold: number; storeSellThrough: number; companySellThrough: number; companyAvgSold: number; carryingStores: number; storeSTRank: number; low: boolean; warehouse: number }[];
   skuMap: Record<string, [number, number, number]>;
@@ -279,7 +279,11 @@ export default function RoundingInventoryPanel({ storeName, onIssuesChanged }: {
                             {it.styleCode} <span className="font-semibold text-slate-500">{it.productName}</span>
                           </p>
                           <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                            2주 판매: 매장 <b className="text-slate-700">{it.storeQty2w}</b> / 전사 매장평균 {fmt(it.companyAvgWeekly * 2)} · 매장재고 {it.storeStock} · 창고 {it.warehouseStyle}
+                            매장 보유 <b className="text-slate-800">{it.storeStock}장</b> · 재고주수{" "}
+                            <b className={it.storeWeeks !== undefined && it.storeWeeks < 2 ? "text-rose-600" : "text-slate-800"}>
+                              {it.storeWeeks !== undefined ? wk(it.storeWeeks) : wk(it.storeQty2w > 0 ? Math.round((it.storeStock / (it.storeQty2w / 2)) * 10) / 10 : it.storeStock > 0 ? 99 : 0)}
+                            </b>
+                            {it.companyWeeks !== undefined && <> (전사 {wk(it.companyWeeks)})</>} · 2주 판매: 매장 <b className="text-slate-700">{it.storeQty2w}</b> / 전사 매장평균 {fmt(it.companyAvgWeekly * 2)} · 창고 {it.warehouseStyle}
                           </p>
                           {it.notCarried ? (
                             <p className="mt-1 inline-block rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">매장에 없음 (재고·판매 0)</p>

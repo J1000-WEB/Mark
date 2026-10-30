@@ -88,6 +88,9 @@ export type RoundingInventoryStore = {
     productName: string;
     companyQty2w: number;
     companyAvgWeekly: number; // 매장당 평균 주간판매
+    storeWeekly: number; // 이 매장 품번 주간판매(2주 평균)
+    storeWeeks: number; // 이 매장 품번 재고주수(판매 없으면 99)
+    companyWeeks: number; // 전사(오프라인) 품번 재고주수
     storeQty2w: number;
     storeStock: number;
     notCarried: boolean;
@@ -361,6 +364,7 @@ async function doCompute() {
       const mine = byStyle.get(style) || [];
       const storeStock = mine.reduce((a, s) => a + s.stock, 0);
       const storeQty2w = mine.reduce((a, s) => a + Math.max(0, s.w1) + Math.max(0, s.w2), 0);
+      const storeWeekly = weeklyOf(mine.reduce((a, s) => a + s.w1, 0), mine.reduce((a, s) => a + s.w2, 0));
       const notCarried = storeStock === 0 && storeQty2w === 0;
       const skus: RoundingInventoryStore["topIssues"][number]["skus"] = [];
       if (!notCarried) {
@@ -390,6 +394,9 @@ async function doCompute() {
         productName: productName.get(style) || "",
         companyQty2w: co.qty2w,
         companyAvgWeekly: r1(co.qty2w / 2 / storeCount),
+        storeWeekly: r1(storeWeekly),
+        storeWeeks: weeksOf(storeStock, storeWeekly),
+        companyWeeks: weeksOf(co.stock, co.qty2w / 2),
         storeQty2w,
         storeStock,
         notCarried,

@@ -288,9 +288,10 @@ export async function GET(req: NextRequest) {
       d.addRow([]);
       d.addRow(["[전사 TOP20 품절·품절임박·사이즈깨짐]"]).font = { bold: true };
       const h1 = d.addRow(["전사순위", "스타일", "스타일명", "칼라", "사이즈", "구분", "매장재고", "매장 주판매", "재고주수", "전사 2주판매", "창고가용(오프)"]);
+      // 품번 단위 요약 줄(칼라/사이즈 비움): 매장 보유 합계·재고주수 vs 전사
       h1.font = { bold: true };
       for (const it of inv.store.topIssues) {
-        if (it.notCarried) d.addRow([it.companyRank, it.styleCode, it.productName, "", "", "매장 미보유", 0, 0, "", it.companyQty2w, it.warehouseStyle]);
+        d.addRow([it.companyRank, it.styleCode, it.productName, "(품번 합계)", "", it.notCarried ? "매장 미보유" : `전사 재고주수 ${it.companyWeeks !== undefined ? wk(it.companyWeeks) : "-"}`, it.storeStock, it.storeWeekly ?? "", it.storeWeeks !== undefined ? wk(it.storeWeeks) : "", it.companyQty2w, it.warehouseStyle]).font = { bold: true };
         for (const x of it.skus) d.addRow([it.companyRank, it.styleCode, it.productName, x.colorName || x.color, x.size, x.type, x.stock, x.weekly, wk(x.weeks), x.companyQty2w, x.warehouse]);
       }
       d.addRow([]);

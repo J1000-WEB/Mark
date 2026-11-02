@@ -33,15 +33,20 @@ export async function checkLateStores(date?: string) {
   const checkDate = date || addDays(kstNowParts().date, -1);
   const { rows } = await readSalesSummarySnapshot();
   let yongin = 0, musinsa = 0, yonginRow = false;
+  const musinsaUpdated = new Set<string>(); // 매출(수량 또는 금액)이 들어온 무신사 매장
   for (const r of rows) {
     if (r.date !== checkDate) continue;
     if (r.storeName.includes("용인")) {
       yongin += n(r.amount);
       yonginRow = true;
     }
-    if (r.storeName.includes("무신사")) musinsa += n(r.amount);
+    if (r.storeName.includes("무신사")) {
+      musinsa += n(r.amount);
+      if (n(r.amount) || n(r.qty)) musinsaUpdated.add(r.storeName);
+    }
   }
-  return { checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0, musinsaOk: musinsa !== 0 };
+  // MARK 2026-11-02: 무신사는 매장이 작아 하루 0인 곳이 많음 → 무신사 매장 중 하나라도 들어와 있으면 "업데이트됨"으로 봄
+  return { checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0, musinsaOk: musinsaUpdated.size > 0, musinsaUpdatedStores: musinsaUpdated.size };
 }
 
 export async function logRefreshRun(entry: { slot: string; ok: boolean; error?: string; checkDate?: string; yongin?: number; musinsa?: number; newRowCount?: number }) {

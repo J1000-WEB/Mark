@@ -332,6 +332,11 @@ export default function StoreSalesSummaryDashboard() {
   const [sortMode, setSortMode] = useState<SortMode>("default");
   // MARK 2026-11-02: 구분(로드샵/백화점…)별 접기 — 기본은 전부 펼침
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // 합계 줄 +/−: 하나라도 펼쳐져 있으면 전부 접고, 전부 접혀 있으면 전부 펼침
+  const allCollapsed = stores.length > 0 && Array.from(new Set(stores.map((x) => x.channelGroup).filter(Boolean))).every((g) => collapsedGroups.has(g));
+  function toggleAllGroups() {
+    setCollapsedGroups(allCollapsed ? new Set() : new Set(stores.map((x) => x.channelGroup).filter(Boolean)));
+  }
   function toggleGroup(group: string) {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -1021,8 +1026,19 @@ export default function StoreSalesSummaryDashboard() {
                 <tbody>
                   {totalRow && (
                     <tr className="bg-amber-50/80 ring-1 ring-inset ring-amber-200">
-                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-2 py-2 text-center font-black text-slate-400">
-                        -
+                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-1 py-2 text-center">
+                        {groupFilter === "전체" && subtotalRows.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={toggleAllGroups}
+                            className="h-6 w-6 rounded-md border border-amber-300 bg-white text-sm font-black leading-none text-amber-700"
+                            title={allCollapsed ? "전체 펼치기" : "전체 접기"}
+                          >
+                            {allCollapsed ? "+" : "−"}
+                          </button>
+                        ) : (
+                          <span className="font-black text-slate-400">-</span>
+                        )}
                       </td>
                       <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-200 bg-amber-50 px-3 py-2 font-black text-slate-900">
                         {totalRow.storeName}

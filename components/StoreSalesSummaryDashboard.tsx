@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 import SalesRefreshBanner from "@/components/SalesRefreshBanner";
@@ -330,6 +330,16 @@ export default function StoreSalesSummaryDashboard() {
   const [meta, setMeta] = useState<any>(null);
   const [groupFilter, setGroupFilter] = useState("전체");
   const [sortMode, setSortMode] = useState<SortMode>("default");
+  // MARK 2026-11-02: 구분(로드샵/백화점…)별 접기 — 기본은 전부 펼침
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  function toggleGroup(group: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
 
   // MARK 2026-09-22: "일간" 블록 날짜선택 + 커스텀 기간비교 조회.
   const [dailyDate, setDailyDate] = useState(""); // 빈 값 = 최신 날짜(기본값)
@@ -606,6 +616,173 @@ export default function StoreSalesSummaryDashboard() {
     );
   }
 
+  // MARK 2026-11-02: 매장 한 줄 — 구분별 묶음 안에서 재사용
+  const renderStoreRow = (s: StoreSalesSummaryRow, i: number) => (
+                    <tr key={s.storeName} className={i % 2 ? "bg-slate-50" : "bg-white"}>
+                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-100 bg-inherit px-2 py-2 text-center font-bold text-slate-400">
+                        {i + 1}
+                      </td>
+                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
+                        {shortStoreName(s.storeName)}
+                      </td>
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.daily.target)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.daily.actual, heatRanges.daily)}
+                      >
+                        {won(s.daily.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.daily.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.daily.yoyGrowthRate)}`}>
+                        {growthPct(s.daily.yoyGrowthRate)}
+                      </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.daily.actual, s.daily.prevYearAmount)}`}>
+                            {diffWon(s.daily.actual, s.daily.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.weekly.target)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.weekly.actual, heatRanges.weekly)}
+                      >
+                        {won(s.weekly.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.weekly.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.weekly.yoyGrowthRate)}`}>
+                        {growthPct(s.weekly.yoyGrowthRate)}
+                      </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.weekly.actual, s.weekly.prevYearAmount)}`}>
+                            {diffWon(s.weekly.actual, s.weekly.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
+
+                      {customPeriod && (
+                        <>
+                          <td className="border-t border-l border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.customPeriod?.target || 0)}</td>
+                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.customPeriod?.actual || 0)}</td>
+                          {showAvgReceipt && (
+                            <>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">
+                                {wonOrDash(s.customPeriod?.avgReceiptAmount ?? null)}
+                              </td>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
+                                {wonOrDash(s.customPeriod?.prevYearAvgReceiptAmount ?? null)}
+                              </td>
+                            </>
+                          )}
+                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.customPeriod?.achievementRate ?? null)}</td>
+                          <td
+                            className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.customPeriod?.yoyGrowthRate ?? null)}`}
+                          >
+                            {growthPct(s.customPeriod?.yoyGrowthRate ?? null)}
+                          </td>
+                          {showYoyDetail && (
+                            <>
+                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
+                                {wonOrDash(s.customPeriod?.prevYearAmount ?? null)}
+                              </td>
+                              <td
+                                className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}`}
+                              >
+                                {diffWon(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}
+                              </td>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.monthly.periodTarget)}</td>
+                      <td
+                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
+                        style={heatBg(s.monthly.actual, heatRanges.monthly)}
+                      >
+                        {won(s.monthly.actual)}
+                      </td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.monthly.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.monthly.yoyGrowthRate)}`}>
+                        {growthPct(s.monthly.yoyGrowthRate)}
+                      </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.monthly.actual, s.monthly.prevYearAmount)}`}>
+                            {diffWon(s.monthly.actual, s.monthly.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.prevMonth.target)}</td>
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.prevMonth.actual)}</td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.prevMonth.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.prevMonth.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.prevMonth.yoyGrowthRate)}`}>
+                        {growthPct(s.prevMonth.yoyGrowthRate)}
+                      </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.prevMonth.actual, s.prevMonth.prevYearAmount)}`}>
+                            {diffWon(s.prevMonth.actual, s.prevMonth.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
+
+                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.annual.ytdTarget)}</td>
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.annual.ytdActual)}</td>
+                      {showAvgReceipt && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.annual.avgReceiptAmount)}</td>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAvgReceiptAmount)}</td>
+                        </>
+                      )}
+                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.annual.achievementRate)}</td>
+                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.annual.yoyGrowthRate)}`}>
+                        {growthPct(s.annual.yoyGrowthRate)}
+                      </td>
+                      {showYoyDetail && (
+                        <>
+                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAmount)}</td>
+                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.annual.ytdActual, s.annual.prevYearAmount)}`}>
+                            {diffWon(s.annual.ytdActual, s.annual.prevYearAmount)}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+  );
+
   return (
     <main className="min-h-screen bg-slate-50 pb-20">
       <div className="mx-auto max-w-[1600px] px-4 pt-6">
@@ -811,17 +988,18 @@ export default function StoreSalesSummaryDashboard() {
               기준일: {asOfDate}{dailyDate && dailyDate !== asOfDate ? ` · 일간 조회일: ${dailyDate}` : ""} · 금액은 전부 천원 단위예요(원 단위 생략, 예: 234,555 = 234,555,000원). · 신장률이 "신규"인 경우는 비교 기간에 그 매장이 아직 없었다는 뜻이에요. · 일간/주간/이번달 실적 색상은 지금 보이는 매장들 사이의 상대 비교예요(낮음 🔴 ~ 높음 🟢).
             </p>
 
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+            {/* MARK 2026-11-02: 머리글(매장명·달성률 등) 고정 — 표 안에서 세로로도 스크롤되게 높이를 화면에 맞추고 thead를 sticky */}
+            <div className="mt-3 max-h-[calc(100vh-96px)] overflow-auto rounded-2xl border border-slate-200 bg-white">
               <table className="w-full border-collapse text-xs" style={{ minWidth: tableMinWidth }}>
-                <thead>
+                <thead className="sticky top-0 z-20">
                   <tr className="bg-slate-900 text-white">
-                    <th rowSpan={2} className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap bg-slate-900 px-2 py-2 text-center font-black">
+                    <th rowSpan={2} className="sticky left-0 z-30 w-9 min-w-[36px] whitespace-nowrap bg-slate-900 px-2 py-2 text-center font-black">
                       #
                     </th>
                     {/* MARK 2026-09-24: "구분 열은 지워달라(어차피 정렬순서로 알 수 있으니까)"
                         요청으로 구분(로드샵/백화점 등) 열을 없앴습니다 — 소계 줄 라벨에 구분명을
                         같이 넣어서 정보는 유지합니다. */}
-                    <th rowSpan={2} className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap bg-slate-900 px-3 py-2 text-left font-black">
+                    <th rowSpan={2} className="sticky left-[36px] z-30 min-w-[64px] whitespace-nowrap bg-slate-900 px-3 py-2 text-left font-black">
                       매장명
                     </th>
                     <PeriodHeaderGroup title="일간" />
@@ -853,183 +1031,33 @@ export default function StoreSalesSummaryDashboard() {
                     </tr>
                   )}
 
-                  {subtotalRows.map(({ group, row }) => (
-                    <tr key={`subtotal-${group}`} className="bg-sky-50/70 ring-1 ring-inset ring-sky-100">
-                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-2 py-2 text-center font-black text-slate-400">
-                        -
-                      </td>
-                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-3 py-2 font-black text-slate-900">
-                        {row.storeName}
-                      </td>
-                      <AggRowCells row={row} bg="bg-sky-50/50" />
-                    </tr>
-                  ))}
-
-                  {sortedStores.map((s, i) => (
-                    <tr key={s.storeName} className={i % 2 ? "bg-slate-50" : "bg-white"}>
-                      <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-100 bg-inherit px-2 py-2 text-center font-bold text-slate-400">
-                        {i + 1}
-                      </td>
-                      <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-100 bg-inherit px-3 py-2 font-black text-slate-900">
-                        {shortStoreName(s.storeName)}
-                      </td>
-
-                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.daily.target)}</td>
-                      <td
-                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
-                        style={heatBg(s.daily.actual, heatRanges.daily)}
-                      >
-                        {won(s.daily.actual)}
-                      </td>
-                      {showAvgReceipt && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.daily.avgReceiptAmount)}</td>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAvgReceiptAmount)}</td>
-                        </>
-                      )}
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.daily.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.daily.yoyGrowthRate)}`}>
-                        {growthPct(s.daily.yoyGrowthRate)}
-                      </td>
-                      {showYoyDetail && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.daily.prevYearAmount)}</td>
-                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.daily.actual, s.daily.prevYearAmount)}`}>
-                            {diffWon(s.daily.actual, s.daily.prevYearAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.weekly.target)}</td>
-                      <td
-                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
-                        style={heatBg(s.weekly.actual, heatRanges.weekly)}
-                      >
-                        {won(s.weekly.actual)}
-                      </td>
-                      {showAvgReceipt && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.weekly.avgReceiptAmount)}</td>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAvgReceiptAmount)}</td>
-                        </>
-                      )}
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.weekly.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.weekly.yoyGrowthRate)}`}>
-                        {growthPct(s.weekly.yoyGrowthRate)}
-                      </td>
-                      {showYoyDetail && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.weekly.prevYearAmount)}</td>
-                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.weekly.actual, s.weekly.prevYearAmount)}`}>
-                            {diffWon(s.weekly.actual, s.weekly.prevYearAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      {customPeriod && (
-                        <>
-                          <td className="border-t border-l border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.customPeriod?.target || 0)}</td>
-                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.customPeriod?.actual || 0)}</td>
-                          {showAvgReceipt && (
-                            <>
-                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">
-                                {wonOrDash(s.customPeriod?.avgReceiptAmount ?? null)}
+                  {groupFilter === "전체"
+                    ? subtotalRows.map(({ group, row }) => {
+                        const collapsed = collapsedGroups.has(group);
+                        const groupStores = sortedStores.filter((x) => x.channelGroup === group);
+                        return (
+                          <Fragment key={`grp-${group}`}>
+                            <tr className="bg-sky-50/70 ring-1 ring-inset ring-sky-100">
+                              <td className="sticky left-0 z-10 w-9 min-w-[36px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-1 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(group)}
+                                  className="h-6 w-6 rounded-md border border-sky-200 bg-white text-sm font-black leading-none text-sky-700"
+                                  title={collapsed ? "펼치기" : "접기"}
+                                >
+                                  {collapsed ? "+" : "−"}
+                                </button>
                               </td>
-                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
-                                {wonOrDash(s.customPeriod?.prevYearAvgReceiptAmount ?? null)}
+                              <td className="sticky left-[36px] z-10 min-w-[64px] whitespace-nowrap border-t border-slate-200 bg-sky-50 px-3 py-2 font-black text-slate-900">
+                                {row.storeName} <span className="text-[10px] font-bold text-slate-400">({groupStores.length})</span>
                               </td>
-                            </>
-                          )}
-                          <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.customPeriod?.achievementRate ?? null)}</td>
-                          <td
-                            className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.customPeriod?.yoyGrowthRate ?? null)}`}
-                          >
-                            {growthPct(s.customPeriod?.yoyGrowthRate ?? null)}
-                          </td>
-                          {showYoyDetail && (
-                            <>
-                              <td className="border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">
-                                {wonOrDash(s.customPeriod?.prevYearAmount ?? null)}
-                              </td>
-                              <td
-                                className={`border-t border-blue-100 bg-blue-50/40 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}`}
-                              >
-                                {diffWon(s.customPeriod?.actual, s.customPeriod?.prevYearAmount)}
-                              </td>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.monthly.periodTarget)}</td>
-                      <td
-                        className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums"
-                        style={heatBg(s.monthly.actual, heatRanges.monthly)}
-                      >
-                        {won(s.monthly.actual)}
-                      </td>
-                      {showAvgReceipt && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.monthly.avgReceiptAmount)}</td>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAvgReceiptAmount)}</td>
-                        </>
-                      )}
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.monthly.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.monthly.yoyGrowthRate)}`}>
-                        {growthPct(s.monthly.yoyGrowthRate)}
-                      </td>
-                      {showYoyDetail && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.monthly.prevYearAmount)}</td>
-                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.monthly.actual, s.monthly.prevYearAmount)}`}>
-                            {diffWon(s.monthly.actual, s.monthly.prevYearAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.prevMonth.target)}</td>
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.prevMonth.actual)}</td>
-                      {showAvgReceipt && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.prevMonth.avgReceiptAmount)}</td>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAvgReceiptAmount)}</td>
-                        </>
-                      )}
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.prevMonth.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.prevMonth.yoyGrowthRate)}`}>
-                        {growthPct(s.prevMonth.yoyGrowthRate)}
-                      </td>
-                      {showYoyDetail && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.prevMonth.prevYearAmount)}</td>
-                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.prevMonth.actual, s.prevMonth.prevYearAmount)}`}>
-                            {diffWon(s.prevMonth.actual, s.prevMonth.prevYearAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      <td className="border-t border-l border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{won(s.annual.ytdTarget)}</td>
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">{won(s.annual.ytdActual)}</td>
-                      {showAvgReceipt && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-indigo-600">{wonOrDash(s.annual.avgReceiptAmount)}</td>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAvgReceiptAmount)}</td>
-                        </>
-                      )}
-                      <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums">{pct(s.annual.achievementRate)}</td>
-                      <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${growthColor(s.annual.yoyGrowthRate)}`}>
-                        {growthPct(s.annual.yoyGrowthRate)}
-                      </td>
-                      {showYoyDetail && (
-                        <>
-                          <td className="border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right tabular-nums text-purple-600">{wonOrDash(s.annual.prevYearAmount)}</td>
-                          <td className={`border-t border-slate-100 whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums ${diffColor(s.annual.ytdActual, s.annual.prevYearAmount)}`}>
-                            {diffWon(s.annual.ytdActual, s.annual.prevYearAmount)}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
+                              <AggRowCells row={row} bg="bg-sky-50/50" />
+                            </tr>
+                            {!collapsed && groupStores.map((st, i) => renderStoreRow(st, i))}
+                          </Fragment>
+                        );
+                      })
+                    : sortedStores.map((st, i) => renderStoreRow(st, i))}
                 </tbody>
               </table>
             </div>

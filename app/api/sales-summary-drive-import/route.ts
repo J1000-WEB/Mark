@@ -55,10 +55,11 @@ async function runAndLog(slot: string) {
     console.error("매출탭 자동갱신 로그 실패(무시):", e)
   );
   // 9:30 자동갱신인데 용인 매출이 없으면 메일 알림(메일 설정이 없으면 조용히 넘어감)
-  if (slot === "09:30" && check && !check.yonginOk) {
+  const missing = check ? [!check.yonginOk ? "용인" : "", !check.musinsaOk ? "무신사" : ""].filter(Boolean) : [];
+  if (slot === "09:30" && missing.length) {
     await sendEmailAlert(
-      `[MARK] 용인 업데이트 확인필요 (${check.checkDate})`,
-      `<p>9:30 매출탭 자동갱신 후에도 <b>팩토리아울렛 용인점 ${check.checkDate} 매출</b>이 없어요.</p><p>드라이브 전체매출 파일에 용인 매출을 넣은 뒤 매출탭에서 "드라이브에서 가져오기"를 눌러주세요.</p>`
+      `[MARK] ${missing.join("·")} 업데이트 확인필요 (${check!.checkDate})`,
+      `<p>9:30 매출탭 자동갱신 후에도 <b>${missing.join("·")} ${check!.checkDate} 매출</b>이 없어요.</p><p>ERP에 반영됐는지 확인한 뒤 매출탭에서 "드라이브에서 다시 가져오기"를 눌러주세요.</p>`
     ).catch(() => null);
   }
   return { ...result, check };

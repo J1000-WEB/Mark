@@ -41,7 +41,7 @@ export async function checkLateStores(date?: string) {
     }
     if (r.storeName.includes("무신사")) musinsa += n(r.amount);
   }
-  return { checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0 };
+  return { checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0, musinsaOk: musinsa !== 0 };
 }
 
 export async function logRefreshRun(entry: { slot: string; ok: boolean; error?: string; checkDate?: string; yongin?: number; musinsa?: number; newRowCount?: number }) {
@@ -66,7 +66,7 @@ async function readRecentRuns(limit = 30): Promise<RefreshRun[]> {
 /**
  * 배너 상태:
  *  - "pending": 오늘 9:30 갱신 전 → "[용인, 무신사 매출 업데이트 전 · 9:30 자동업데이트예정]"
- *  - "yonginMissing": 9:30 갱신 후 어제 용인 매출 없음 → "용인 업데이트 확인필요!!!"
+ *  - "missing": 9:30 갱신 후 어제 용인/무신사 매출 없음 → "용인·무신사 업데이트 확인필요!!!"
  *  - "ok": 9:30 갱신 후 용인 매출 확인됨
  * 용인 여부는 저장된 매출탭 데이터를 지금 다시 확인(수동으로 다시 가져오면 바로 반영)
  */
@@ -76,13 +76,18 @@ export async function getRefreshStatus() {
   const todayRuns = runs.filter((r) => r.at.slice(0, 10) === now.date);
   const after930 = todayRuns.find((r) => r.ok && r.at.slice(11, 16) >= "09:30");
   const lastOk = runs.find((r) => r.ok) || null;
-  let phase: "pending" | "yonginMissing" | "ok";
-  if (live.yonginOk) phase = after930 || now.hhmm >= "09:30" ? "ok" : "pending";
+  // MARK 2026-11-02: 무신사도 용인처럼 확인 — 어제 매출이 0이면 "확인필요" 목록에 넣음
+  const missing: string[] = [];
+  if (!live.yonginOk) missing.push("용인");
+  if (!live.musinsaOk) missing.push("무신사");
+  let phase: "pending" | "missing" | "ok";
+  if (!missing.length) phase = after930 || now.hhmm >= "09:30" ? "ok" : "pending";
   // 9:30 갱신이 10시까지 기록이 없으면(실패/지연) 기다리지 않고 확인필요로 띄움
-  else phase = after930 || now.hhmm >= "10:00" ? "yonginMissing" : "pending";
+  else phase = after930 || now.hhmm >= "10:00" ? "missing" : "pending";
   return {
     now: now.label,
     phase,
+    missing,
     check: live,
     after930: after930 || null,
     lastOk,

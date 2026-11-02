@@ -167,7 +167,27 @@ type PeriodAgg = {
   qty: number;
 };
 
-type AggregatableRow = PeriodCommon & { target: number; actual: number; prevWeekAmount?: number; qty?: number };
+type AggregatableRow = PeriodCommon & { target: number; actual: number; prevWeekAmount?: number; qty?: number; noAvgReceipt?: boolean };
+
+// MARK 2026-11-02: 인샵(위탁 매장 + 팩토리아울렛 용인점)은 매출을 하루 한 건으로 통째로 올려서 영수건수가 실제 고객 수가 아님
+//  → 매장별 객단가는 "—"로 비우고, 합계/소계 객단가 계산(매출÷영수건수)에서도 그 매장의 매출·건수를 둘 다 뺌.
+const INSHOP_STORE_CODES = new Set(["42005"]); // 위탁(오프) 구분이 아닌 인샵 매장
+function isInshopStore(s: { channelGroup?: string; channelCode?: string; storeName?: string }) {
+  return String(s.channelGroup || "").startsWith("위탁") || INSHOP_STORE_CODES.has(String(s.channelCode || "")) || String(s.storeName || "").includes("용인");
+}
+function markInshopNoAvg(s: StoreSalesSummaryRow): StoreSalesSummaryRow {
+  if (!isInshopStore(s)) return s;
+  const strip = <T extends PeriodCommon>(p: T): T => ({ ...p, avgReceiptAmount: null, prevYearAvgReceiptAmount: null, noAvgReceipt: true });
+  return {
+    ...s,
+    daily: strip(s.daily),
+    weekly: strip(s.weekly),
+    monthly: strip(s.monthly),
+    prevMonth: strip(s.prevMonth),
+    annual: strip(s.annual),
+    customPeriod: s.customPeriod ? strip(s.customPeriod) : s.customPeriod,
+  };
+}
 
 function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
   let target = 0;
@@ -177,18 +197,24 @@ function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
   let prevYearReceiptCount = 0;
   let prevWeekAmount = 0;
   let qty = 0;
+  let avgBase = 0; // 객단가용 매출(인샵 제외)
+  let prevYearAvgBase = 0;
   for (const r of rows) {
     target += r.target || 0;
     actual += r.actual || 0;
-    receiptCount += r.receiptCount || 0;
     prevYearAmount += r.prevYearAmount || 0;
-    prevYearReceiptCount += r.prevYearReceiptCount || 0;
+    if (!r.noAvgReceipt) {
+      receiptCount += r.receiptCount || 0;
+      prevYearReceiptCount += r.prevYearReceiptCount || 0;
+      avgBase += r.actual || 0;
+      prevYearAvgBase += r.prevYearAmount || 0;
+    }
     prevWeekAmount += r.prevWeekAmount || 0;
     qty += r.qty || 0;
   }
   const achievementRate = target ? actual / target : null;
-  const avgReceiptAmount = receiptCount > 0 ? actual / receiptCount : null;
-  const prevYearAvgReceiptAmount = prevYearReceiptCount > 0 ? prevYearAmount / prevYearReceiptCount : null;
+  const avgReceiptAmount = receiptCount > 0 ? avgBase / receiptCount : null;
+  const prevYearAvgReceiptAmount = prevYearReceiptCount > 0 ? prevYearAvgBase / prevYearReceiptCount : null;
   const yoyGrowthRate = prevYearAmount ? (actual - prevYearAmount) / prevYearAmount : actual > 0 ? null : 0;
   const wowGrowthRate = prevWeekAmount ? (actual - prevWeekAmount) / prevWeekAmount : actual > 0 ? null : 0;
   return {
@@ -395,7 +421,7 @@ export default function StoreSalesSummaryDashboard() {
       if (json.ok) {
         setAsOfDate(json.asOfDate || "");
         setDailyDate(json.dailyDate || "");
-        setStores(json.stores || []);
+        setStores((json.stores || []).map(markInshopNoAvg));
         setMeta(json.meta || null);
         setCustomPeriod(json.customPeriod || null);
         // 서버가 내려준 기간(직접 고른 값이든 기본값이든)을 항상 입력칸에 반영해서

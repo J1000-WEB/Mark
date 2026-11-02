@@ -161,6 +161,12 @@ function resolveStoreCode(name: string, storeCodeMap: Map<string, string>): stri
 // ================= 무신사 =================
 // 원본: "POS 판매분매입 상세 내역" 시트
 // A=정산일자, H=매장명, P=업체바코드, Q=판매수량, R=판매금액
+/** MARK 2026-11-02: 반품 규칙 — 수량이 마이너스면 금액도 마이너스(원본 파일 부호와 상관없이 수량 부호를 따름) */
+function signLike(qty: number, value: number) {
+  const v = Math.abs(value);
+  return qty < 0 ? -v : v;
+}
+
 export function parseMusinsa(workbook: XLSX.WorkBook, storeCodeMap: Map<string, string>): { rows: UploadRow[]; warnings: string[] } {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
@@ -185,9 +191,8 @@ export function parseMusinsa(workbook: XLSX.WorkBook, storeCodeMap: Map<string, 
     const channel = resolveStoreCode(storeName, storeCodeMap);
     if (!channel) unmatchedStores.add(storeName);
 
-    // MARK 2026-11-02: ERP는 금액=수량×단가로 계산 → 단가는 항상 양수(개당), 반품 부호는 수량에만
-    //  (예전엔 R열 총액(반품이면 마이너스)을 그대로 단가로 넣어서 반품이 ERP에 플러스로 잡혔음)
-    const price = qty ? Math.round(Math.abs(amount / qty)) : Math.abs(amount);
+    // MARK 2026-11-02: 반품은 수량·금액 둘 다 마이너스(ERP에 -1 / -31,000으로 표시) — 금액 부호를 수량 부호에 맞춤
+    const price = signLike(qty, amount);
     rows.push({ date, pos: "P1", channel, barcode, qty, price });
   }
 
@@ -237,8 +242,8 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
 
     const dateRaw = row[3]; // D열
     let barcode = text(row[10]); // K열
-    const price = Math.abs(num(row[16])); // Q열 실판매가 — 단가는 항상 양수, 반품 부호는 수량(R열)에만
     const qty = num(row[17]); // R열
+    const price = signLike(qty, num(row[16])); // Q열 실판매가 — 반품(수량 −)이면 금액도 −
     if (!barcode) continue;
 
     // 밑줄(_) 뒤 부가정보 제거
@@ -353,6 +358,7 @@ export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       price = (C_REAL_PRICE >= 0 ? num(row[C_REAL_PRICE]) : 0) || num(row[C_PRICE]);
     }
     if (!price) zeroPriceCount++;
+    price = signLike(qty, price); // 반품(수량 −)이면 금액도 −
 
     if (barcode.includes("_")) barcode = barcode.split("_")[0];
 
@@ -436,9 +442,9 @@ export function parseDutyFree(
 
     const unitCount = Math.abs(qty);
     const sign = qty < 0 ? -1 : 1;
-    // 단가는 항상 양수(개당) — 반품 부호는 수량(sign)에만 (ERP 금액 = 수량×단가)
     let unitPrice = unitCount ? Math.abs(amount / unitCount) : 0;
     if (!unitPrice) unitPrice = 10; // 수량은 있는데 단가가 0이면 10원으로 임의 설정
+    unitPrice *= sign; // 반품(수량 −1)이면 금액도 −
 
     // 수량이 ±1이 아니면 1개(부호 유지) 단위로 분할
     for (let u = 0; u < unitCount; u++) {

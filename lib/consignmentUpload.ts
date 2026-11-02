@@ -185,7 +185,10 @@ export function parseMusinsa(workbook: XLSX.WorkBook, storeCodeMap: Map<string, 
     const channel = resolveStoreCode(storeName, storeCodeMap);
     if (!channel) unmatchedStores.add(storeName);
 
-    rows.push({ date, pos: "P1", channel, barcode, qty, price: amount });
+    // MARK 2026-11-02: ERP는 금액=수량×단가로 계산 → 단가는 항상 양수(개당), 반품 부호는 수량에만
+    //  (예전엔 R열 총액(반품이면 마이너스)을 그대로 단가로 넣어서 반품이 ERP에 플러스로 잡혔음)
+    const price = qty ? Math.round(Math.abs(amount / qty)) : Math.abs(amount);
+    rows.push({ date, pos: "P1", channel, barcode, qty, price });
   }
 
   if (unmatchedStores.size) {
@@ -234,7 +237,7 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
 
     const dateRaw = row[3]; // D열
     let barcode = text(row[10]); // K열
-    const price = num(row[16]); // Q열
+    const price = Math.abs(num(row[16])); // Q열 실판매가 — 단가는 항상 양수, 반품 부호는 수량(R열)에만
     const qty = num(row[17]); // R열
     if (!barcode) continue;
 
@@ -433,8 +436,9 @@ export function parseDutyFree(
 
     const unitCount = Math.abs(qty);
     const sign = qty < 0 ? -1 : 1;
-    let unitPrice = unitCount ? amount / unitCount : 0;
-    if (!unitPrice) unitPrice = 10 * sign; // 수량은 있는데 단가가 0이면 10원으로 임의 설정
+    // 단가는 항상 양수(개당) — 반품 부호는 수량(sign)에만 (ERP 금액 = 수량×단가)
+    let unitPrice = unitCount ? Math.abs(amount / unitCount) : 0;
+    if (!unitPrice) unitPrice = 10; // 수량은 있는데 단가가 0이면 10원으로 임의 설정
 
     // 수량이 ±1이 아니면 1개(부호 유지) 단위로 분할
     for (let u = 0; u < unitCount; u++) {

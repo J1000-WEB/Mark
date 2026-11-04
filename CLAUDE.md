@@ -86,6 +86,7 @@
 | 중간정리 | **3:33** | `schedule-cleanup.js` → `cleanup-simple.au3` | 크롬/엑셀/ERP 강제종료(PIP 체크 없이 단순 종료 — PA 2차 시도 전 초기화) |
 | PA 2차 | **3:35** | `schedule-power-automate.js` → `login-then-pa.au3` | 1차랑 동일 스크립트, 재시도 |
 | PIP | **4:50** | `schedule-style-channel-upload.js` | 스타일별채널별 업로드 + 재고이력 저장 |
+| PIP 직접조회 | **6:00** | `schedule-style-channel-upload.js` → `fetch-pip-direct.js` | ERP 화면·PA 없이 서버에 직접 조회(아래 섹션). 4:50 업로드 성공했으면 비교만, 실패면 직접 받은 파일로 업로드 |
 | 최종정리 | **4:55** | `schedule-cleanup.js` → `cleanup-4-30.au3` | PIP파일 있는지 확인 후 필요시 엑셀 저장 + 크롬/엑셀/ERP 종료 |
 
 > 2026-11-04 변경: 하루 첫 ERP 실행(2:20)엔 자동 업데이트 때문에 60초 안에 로그인 준비('sjc')가 안 돼 업로드가 실패한 날이 있음
@@ -154,6 +155,23 @@
   5. **디버그용 스크린샷**: 스크립트 끝에 `_ScreenCapture_Capture()`로 바탕화면에
      `디버그_PA실행_날짜시간.png` 저장 — 화면을 읽기만 하는 거라 PA 실행을 방해하지 않음.
      새벽에 뭐가 문제였는지 다음날 아침에 확인 가능.
+
+## ERP 직접 조회 (MiPlatform 서버 통신, 2026-11-04) — PA 대체 진행 중
+
+- GENERAL ERP 화면(MiPlatform320U)은 결국 `http://gierp.sgerp.com/*.do`에 요청을 보내 데이터를 받음 → Fiddler 캡처로 형식을 풀어서
+  Node에서 화면 없이 같은 요청을 보냄. `erp-agent/erp-mi.js`(인코더/디코더), `erp-mi-client.js`(로그인+호출).
+- 형식: 본문 `ff ad` + zlib. 변수 블록 + 데이터셋(열 정의 + 행). **행 안의 값은 열 정의 순서가 아니라 열 이름 정렬순**(이걸 몰라서
+  처음엔 값이 밀려 보였음). 캡처된 요청 168개를 다시 만들어서 바이트까지 동일한 것 확인.
+- 로그인: GET `/getIP.jsp`(쿠키) → `commonList.cod` dbConnect → `/common/Login.do`(inDataSet comp_cd/login_id/login_pw).
+  계정은 `.env`의 `ERP_MI_USER`/`ERP_MI_PASS`(없으면 `ERP_USER`/`ERP_PASS`).
+- 화면별 서비스: PIP = `/bu/bust/Bust0120.do` mainList(BUSTZZ0120, 칼라사이즈 약 4분, outDs1=데이터 625열·outDs2=채널 119개),
+  채널 목표대비 판매현황 = `/bu/busa/Busa0010.do` getMainList(BUSLSH0010), 채널매출 객단가 현황 = `/bu/slsh/Slsh0180.do` getMainList(BUSLSH0180).
+  화면 정의 XML은 `http://general.sgerp.com/mi/web/BU/...xml`(그리드 머리글 등).
+- `fetch-pip-direct.js`: PIP를 직접 조회해서 ERP "엑셀 내려받기"와 같은 모양(헤더 3줄+데이터+합계, 624열)으로 저장 → 기존
+  `upload-style-channel-sheet.js`로 업로드. 2026-11-04 실제 PA 파일과 대조: 헤더 100% 동일, 15,297행 중 15,014행 완전 동일(나머지는
+  조회 시각 차이로 그날 매출만 다름). 년도는 올해 포함 4개(F,E,D,C = 2026~2023, 코드 = 'A'+(연도-2021)).
+- 시험 운영: 매일 6:00, PA 결과가 있으면 비교 로그만(`logs/pip-direct.log`), 없으면 직접 조회 결과로 업로드. 며칠 잘 되면 PA 제거 예정.
+  다음 단계: 매출 5개 탭(전일/전주/전년/객단가 2개)도 직접 조회 → 구글시트 API로 기록.
 
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 

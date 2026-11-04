@@ -81,12 +81,17 @@
 | 면세 | 2시 | `schedule-lotte.js` | 00~02시는 정기점검으로 확실히 안 됨(확인됨) |
 | 병합 | 1:15, 2:15 | `merge-inshop.js` | 채널 끝난 뒤 여유 두고 파일 갱신 |
 | ERP | **2:20** | `schedule-sgerp-upload.js` → `sgerp-login.exe` | AutoIt, ERP 로그인+매출업로드+저장, **끝나면 ERP 항상 종료** |
-| ERP끄기 | **2:22** | `schedule-erp-force-close.js` | 안전장치(강제종료, taskkill) |
-| PA 1차 | **2:25** | `schedule-power-automate.js` → `login-then-pa.au3` | 로그인전용(`sgerp-login-only.exe`)으로 ERP 로그인 → 성공 확인되면 PA 실행 |
+| ERP끄기 | **2:25** | `schedule-erp-force-close.js` | 안전장치(강제종료, taskkill) |
+| PA 1차 | **2:27** | `schedule-power-automate.js` → `login-then-pa.au3` | 로그인전용(`sgerp-login-only.exe`)으로 ERP 로그인 → 성공 확인되면 PA 실행 |
 | 중간정리 | **3:33** | `schedule-cleanup.js` → `cleanup-simple.au3` | 크롬/엑셀/ERP 강제종료(PIP 체크 없이 단순 종료 — PA 2차 시도 전 초기화) |
 | PA 2차 | **3:35** | `schedule-power-automate.js` → `login-then-pa.au3` | 1차랑 동일 스크립트, 재시도 |
 | PIP | **4:50** | `schedule-style-channel-upload.js` | 스타일별채널별 업로드 + 재고이력 저장 |
 | 최종정리 | **4:55** | `schedule-cleanup.js` → `cleanup-4-30.au3` | PIP파일 있는지 확인 후 필요시 엑셀 저장 + 크롬/엑셀/ERP 종료 |
+
+> 2026-11-04 변경: 하루 첫 ERP 실행(2:20)엔 자동 업데이트 때문에 60초 안에 로그인 준비('sjc')가 안 돼 업로드가 실패한 날이 있음
+> → `sgerp-login.au3` 대기 150초 + 5초마다 로그인창 핸들 다시 찾기, 실패는 종료코드 1(예전엔 실패도 0). 스케줄러는 AutoIt이 있으면
+> **.au3를 직접 실행**(exe 재컴파일 불필요). 그래서 ERP끄기 2:22→2:25, PA 1차 2:25→2:27.
+> 같은 날 PA가 "홈" 화면(일반 창)으로 열려 흐름을 못 찾음 → `login-then-pa.au3`가 검색 전에 왼쪽 "흐름" 메뉴(창 왼쪽 위에서 33,160px)를 먼저 클릭.
 
 `schedule-cleanup.js`는 위 두 정리(3:33/4:55)를 시각별로 다른 스크립트로 실행하도록
 하나로 통합되어 있음(`CLEANUP_JOBS` 배열). `schedule-power-automate.js`도 PA 1차/2차를

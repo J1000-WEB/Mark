@@ -4901,6 +4901,7 @@ const SALES_SUMMARY_STORE_WHITELIST = [
   "오프라인_무신사(은평)",
   "오프라인_무신사(홍대)",
   "오프라인_무신사(송도)",
+  "오프라인_무신사(성수메가스토어)", // 2026-11-10 신규(위탁)
   "오프라인_한컬렉션",
 ];
 const SALES_SUMMARY_STORE_WHITELIST_KEYS = new Set(SALES_SUMMARY_STORE_WHITELIST.map((n) => normalizeStoreKey(n)));

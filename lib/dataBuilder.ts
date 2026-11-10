@@ -4598,7 +4598,7 @@ export type SalesSummaryDailyRow = {
 // 없는데 스냅샷엔 다음날과 똑같은 금액의 행이 남아 있었음(ERP도 그날 0원, 102건 확인). 예전에 날짜가 하루 밀려 저장됐던
 // 행들이 upsert(덮어쓰기만, 지우진 않음) 구조라 그대로 남은 것 — 매일 매출이 있는 매장은 다음 업로드 때 덮어써져 티가 안
 // 났고, 매출 없는 날이 많은 위탁/무신사만 남았음. 그래서 이번 업로드에 들어 있는 "날짜"는 그 날짜 전체를 원본대로
-// 교체(그 날짜에 원본에 없는 매장 행은 삭제)하고, 지운 행은 "매출_일별_스냅샷_보정백업" 탭에 남김. dryRun이면 저장 안 함.
+// 교체(그 날짜에 원본에 없고 옆 날짜 복사본인 매장 행은 삭제)하고, 지운 행은 "매출_일별_스냅샷_보정백업" 탭에 남김. dryRun이면 저장 안 함.
 export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fileName?: string, opts: { dryRun?: boolean } = {}) {
   const clean = (rows || [])
     .map((r) => ({
@@ -4645,15 +4645,27 @@ export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fil
   // 이번 업로드에 있는 날짜는 그 날짜를 통째로 원본으로 교체 — 원본에 없는(예전에 잘못 남은) 행 제거
   const uploadDates = new Set(clean.map((r) => r.date));
   const uploadKeys = new Set(clean.map((r) => keyOf(r)));
+  // 단, 진짜 매출일 수도 있으니(원본 시트에서 행이 실수로 빠진 경우 등) "같은 매장 바로 앞/뒤 날짜와 금액·수량이 똑같은"
+  // 복사본만 지우고, 나머지는 남겨두고 목록만 돌려줌(staleKept).
+  const uploadByStoreDate = new Map<string, SalesSummaryDailyRow>();
+  for (const r of clean) uploadByStoreDate.set(`${r.storeName}__${r.date}`, r);
   const staleRows: SalesSummaryDailyRow[] = [];
+  const staleKept: SalesSummaryDailyRow[] = [];
   for (const [k, r] of merged.entries()) {
-    if (uploadDates.has(r.date) && !uploadKeys.has(k)) {
+    if (!uploadDates.has(r.date) || uploadKeys.has(k)) continue;
+    if (!r.amount && !r.qty) continue; // 0행은 영향 없음 — 그대로 둠
+    const adj = [dateAddDays(r.date, -1), dateAddDays(r.date, 1)].map((d) => uploadByStoreDate.get(`${r.storeName}__${d}`));
+    if (adj.some((x) => x && x.amount === r.amount && x.qty === r.qty)) {
       staleRows.push(r);
       merged.delete(k);
+    } else {
+      staleKept.push(r);
     }
   }
   for (const r of clean) merged.set(keyOf(r), r); // 새로 올라온 행이 같은 키를 덮어씀(정정 포함)
   const staleSummary = {
+    staleKeptCount: staleKept.length,
+    staleKept: staleKept.slice(0, 100).map((r) => ({ date: r.date, store: r.storeName, code: r.channelCode, amount: r.amount, qty: r.qty, receipt: r.receiptCount })),
     staleRemovedCount: staleRows.length,
     staleRemovedAmount: staleRows.reduce((t, r) => t + r.amount, 0),
     staleRemovedSample: staleRows
@@ -4701,6 +4713,7 @@ export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fil
     newEndDate,
     staleRemovedCount: staleSummary.staleRemovedCount,
     staleRemovedAmount: staleSummary.staleRemovedAmount,
+    staleKeptCount: staleSummary.staleKeptCount,
   };
 }
 

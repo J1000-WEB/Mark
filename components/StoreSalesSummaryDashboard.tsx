@@ -139,7 +139,7 @@ type StoreSalesSummaryRow = {
   channelGroup: string;
   channelCode: string;
   daily: PeriodCommon & { date: string; target: number; actual: number; qty: number };
-  weekly: PeriodCommon & { start: string; end: string; target: number; actual: number; prevWeekAmount: number; wowGrowthRate: number | null };
+  weekly: PeriodCommon & { start: string; end: string; target: number; actual: number; prevWeekAmount: number; prevWeekToDateAmount?: number; wowGrowthRate: number | null };
   monthly: PeriodCommon & { month: string; periodTarget: number; actual: number; progressRate: number; fullMonthTarget: number };
   prevMonth: PeriodCommon & { month: string; target: number; actual: number };
   annual: PeriodCommon & { year: number; ytdTarget: number; ytdActual: number; progressRate: number };
@@ -163,11 +163,12 @@ type PeriodAgg = {
   prevYearAvgReceiptAmount: number | null;
   yoyGrowthRate: number | null;
   prevWeekAmount: number;
+  prevWeekToDateAmount: number;
   wowGrowthRate: number | null;
   qty: number;
 };
 
-type AggregatableRow = PeriodCommon & { target: number; actual: number; prevWeekAmount?: number; qty?: number; noAvgReceipt?: boolean };
+type AggregatableRow = PeriodCommon & { target: number; actual: number; prevWeekAmount?: number; prevWeekToDateAmount?: number; qty?: number; noAvgReceipt?: boolean };
 
 // MARK 2026-11-02: 인샵(위탁 매장 + 팩토리아울렛 용인점)은 매출을 하루 한 건으로 통째로 올려서 영수건수가 실제 고객 수가 아님
 //  → 매장별 객단가는 "—"로 비우고, 합계/소계 객단가 계산(매출÷영수건수)에서도 그 매장의 매출·건수를 둘 다 뺌.
@@ -196,6 +197,7 @@ function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
   let prevYearAmount = 0;
   let prevYearReceiptCount = 0;
   let prevWeekAmount = 0;
+  let prevWeekToDateAmount = 0; // 전주 같은 요일까지(전주比 계산용)
   let qty = 0;
   let avgBase = 0; // 객단가용 매출(인샵 제외)
   let prevYearAvgBase = 0;
@@ -210,13 +212,14 @@ function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
       prevYearAvgBase += r.prevYearAmount || 0;
     }
     prevWeekAmount += r.prevWeekAmount || 0;
+    prevWeekToDateAmount += r.prevWeekToDateAmount ?? r.prevWeekAmount ?? 0;
     qty += r.qty || 0;
   }
   const achievementRate = target ? actual / target : null;
   const avgReceiptAmount = receiptCount > 0 ? avgBase / receiptCount : null;
   const prevYearAvgReceiptAmount = prevYearReceiptCount > 0 ? prevYearAvgBase / prevYearReceiptCount : null;
   const yoyGrowthRate = prevYearAmount ? (actual - prevYearAmount) / prevYearAmount : actual > 0 ? null : 0;
-  const wowGrowthRate = prevWeekAmount ? (actual - prevWeekAmount) / prevWeekAmount : actual > 0 ? null : 0;
+  const wowGrowthRate = prevWeekToDateAmount ? (actual - prevWeekToDateAmount) / prevWeekToDateAmount : actual > 0 ? null : 0;
   return {
     target,
     actual,
@@ -228,6 +231,7 @@ function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
     prevYearAvgReceiptAmount,
     yoyGrowthRate,
     prevWeekAmount,
+    prevWeekToDateAmount,
     wowGrowthRate,
     qty,
   };
@@ -269,6 +273,7 @@ function buildTotalRow(rows: StoreSalesSummaryRow[], label: string): StoreSalesS
       avgReceiptAmount: weekly.avgReceiptAmount,
       receiptCount: weekly.receiptCount,
       prevWeekAmount: weekly.prevWeekAmount,
+      prevWeekToDateAmount: weekly.prevWeekToDateAmount,
       wowGrowthRate: weekly.wowGrowthRate,
       prevYearAmount: weekly.prevYearAmount,
       prevYearReceiptCount: weekly.prevYearReceiptCount,
@@ -387,6 +392,11 @@ export default function StoreSalesSummaryDashboard() {
   // 토글과 같은 방식으로, 기본은 접어두고 눌러서 "전년금액"/"금액차이" 두 열을 펼쳐봅니다.
   const [showYoyDetail, setShowYoyDetail] = useState(false);
 
+  // MARK 2026-11-10: 주간 전주比 — 눌러서 전주比(%)·전주금액·금액차이 3열을 펼쳐봄(같은 요일까지끼리 비교)
+  const [showWowDetail, setShowWowDetail] = useState(false);
+  // 기간비교를 직접 골랐는지(날짜를 바꿀 때 직접 고른 기간만 유지하고, 기본값이면 새 날짜의 주로 바뀌게)
+  const [rangeIsCustom, setRangeIsCustom] = useState(false);
+
   // MARK 2026-09-23: 구글드라이브에 올려둔 "전체매출" 파일을 수동으로 지금 바로 가져오기
   // (자동으로는 매일 새벽 cron이 같은 걸 호출함 — app/api/sales-summary-drive-import).
   const [driveImporting, setDriveImporting] = useState(false);
@@ -446,11 +456,13 @@ export default function StoreSalesSummaryDashboard() {
       setRangeError("시작일과 종료일을 모두 골라주세요.");
       return;
     }
+    setRangeIsCustom(true);
     load({ date: dailyDate, rangeStart: rangeStartInput, rangeEnd: rangeEndInput });
   }
 
   function clearRangeQuery() {
     setRangeError("");
+    setRangeIsCustom(false);
     // rangeStart/rangeEnd를 아예 안 보내면 서버가 기본(이번주 월~어제)을 다시 계산해서
     // 내려주고, load()가 그 값을 입력칸에도 다시 채워줍니다.
     load({ date: dailyDate });
@@ -458,7 +470,8 @@ export default function StoreSalesSummaryDashboard() {
 
   function onDailyDateChange(next: string) {
     setDailyDate(next);
-    load({ date: next, rangeStart: rangeStartInput && rangeEndInput ? rangeStartInput : undefined, rangeEnd: rangeStartInput && rangeEndInput ? rangeEndInput : undefined });
+    const keep = rangeIsCustom && rangeStartInput && rangeEndInput;
+    load({ date: next, rangeStart: keep ? rangeStartInput : undefined, rangeEnd: keep ? rangeEndInput : undefined });
   }
 
   async function runDriveImport() {
@@ -561,7 +574,14 @@ export default function StoreSalesSummaryDashboard() {
     };
   }, [filteredStores]);
 
+  // MARK 2026-11-10: 주간/이번달이 조회일 기준으로 바뀌므로 머리글에 기간을 같이 표시
+  const md = (d?: string) => (d && d.length >= 10 ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
+  const anchorDate = dailyDate || asOfDate;
+  const sampleWeekly = stores[0]?.weekly;
+  const weeklyTitle = sampleWeekly ? `주간 (${md(sampleWeekly.start)}~${md(anchorDate)})` : "주간";
+  const monthlyTitle = anchorDate ? `이번달(기간) (${Number(anchorDate.slice(5, 7))}/1~${md(anchorDate)})` : "이번달(기간)";
   const colSpanPerBlock = (showAvgReceipt ? 6 : 4) + (showYoyDetail ? 2 : 0);
+  const wowCols = showWowDetail ? 3 : 0; // 주간 블록에만 붙는 전주比/전주금액/금액차이
   const blockCount = customPeriod ? 6 : 5;
   // MARK 2026-09-24: 구분 열(64px) 삭제 + 매장명 열(150px→64px, 이름을 짧게 줄여서 그만큼
   // 안 필요해짐)만큼 최소폭도 줄였습니다.
@@ -569,17 +589,18 @@ export default function StoreSalesSummaryDashboard() {
   // blockCount만큼(기간비교 포함 여부에 따라 5~6개) 폭도 같이 늘립니다.
   const tableMinWidth =
     (showAvgReceipt ? (customPeriod ? 3250 : 2750) : customPeriod ? 2150 : 1750) +
-    (showYoyDetail ? blockCount * 170 : 0);
+    (showYoyDetail ? blockCount * 170 : 0) +
+    (showWowDetail ? 255 : 0);
 
-  function PeriodHeaderGroup({ title, bg = "" }: { title: string; bg?: string }) {
+  function PeriodHeaderGroup({ title, bg = "", extraCols = 0 }: { title: string; bg?: string; extraCols?: number }) {
     return (
-      <th colSpan={colSpanPerBlock} className={`border-l border-slate-700 px-2 py-1 text-center font-black whitespace-nowrap ${bg}`}>
+      <th colSpan={colSpanPerBlock + extraCols} className={`border-l border-slate-700 px-2 py-1 text-center font-black whitespace-nowrap ${bg}`}>
         {title}
       </th>
     );
   }
 
-  function PeriodSubHeaders({ bg = "" }: { bg?: string }) {
+  function PeriodSubHeaders({ bg = "", wow = false }: { bg?: string; wow?: boolean }) {
     return (
       <>
         <th className={`border-l border-slate-700 ${TH_NUM} ${bg}`}>목표</th>
@@ -598,6 +619,26 @@ export default function StoreSalesSummaryDashboard() {
             <th className={`${TH_NUM} text-amber-200 ${bg}`}>금액차이</th>
           </>
         )}
+        {wow && showWowDetail && (
+          <>
+            <th className={`${TH_NUM} text-emerald-200 ${bg}`}>전주比</th>
+            <th className={`${TH_NUM} text-emerald-200 ${bg}`}>전주금액</th>
+            <th className={`${TH_NUM} text-emerald-200 ${bg}`}>전주차이</th>
+          </>
+        )}
+      </>
+    );
+  }
+
+  // MARK 2026-11-10: 주간 블록 끝의 전주比/전주금액/전주차이 칸(같은 요일까지끼리 비교)
+  function WowCells({ w, bg = "" }: { w: { actual: number; prevWeekAmount: number; prevWeekToDateAmount?: number; wowGrowthRate: number | null }; bg?: string }) {
+    if (!showWowDetail) return null;
+    const prev = w.prevWeekToDateAmount ?? w.prevWeekAmount;
+    return (
+      <>
+        <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${growthColor(w.wowGrowthRate)} ${bg}`}>{growthPct(w.wowGrowthRate)}</td>
+        <td className={`border-t border-slate-100 ${TD_NUM} text-emerald-700 ${bg}`}>{wonOrDash(prev)}</td>
+        <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${diffColor(w.actual, prev)} ${bg}`}>{diffWon(w.actual, prev)}</td>
       </>
     );
   }
@@ -639,6 +680,7 @@ export default function StoreSalesSummaryDashboard() {
       <>
         <PeriodCells p={row.daily} bg={bg} />
         <PeriodCells p={row.weekly} bg={bg} />
+        <WowCells w={row.weekly} bg={bg} />
         {customPeriod && row.customPeriod && <PeriodCells p={row.customPeriod} bg={bg} />}
         <PeriodCells p={{ ...row.monthly, target: row.monthly.periodTarget }} bg={bg} />
         <PeriodCells p={row.prevMonth} bg={bg} />
@@ -708,6 +750,7 @@ export default function StoreSalesSummaryDashboard() {
                           </td>
                         </>
                       )}
+                      <WowCells w={s.weekly} />
 
                       {customPeriod && (
                         <>
@@ -995,6 +1038,15 @@ export default function StoreSalesSummaryDashboard() {
               >
                 전년금액/금액차이 {showYoyDetail ? "숨기기 ▲" : "보기 ▼"}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowWowDetail((v) => !v)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-black ${
+                  showWowDetail ? "bg-emerald-600 text-white" : "border border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                주간 전주比 {showWowDetail ? "숨기기 ▲" : "보기 ▼"}
+              </button>
             </div>
 
             {/* MARK 2026-09-25: "점포별로 실적순으로 나열" 요청 — 정렬 기준을 고르면 왼쪽
@@ -1034,15 +1086,15 @@ export default function StoreSalesSummaryDashboard() {
                       매장명
                     </th>
                     <PeriodHeaderGroup title="일간" />
-                    <PeriodHeaderGroup title="주간" />
+                    <PeriodHeaderGroup title={weeklyTitle} extraCols={wowCols} />
                     {customPeriod && <PeriodHeaderGroup title={`기간비교 (${customPeriod.start}~${customPeriod.end})`} bg="bg-blue-900" />}
-                    <PeriodHeaderGroup title="이번달(기간)" />
+                    <PeriodHeaderGroup title={monthlyTitle} />
                     <PeriodHeaderGroup title="전월" />
                     <PeriodHeaderGroup title="연간(누계)" />
                   </tr>
                   <tr className="bg-slate-800 text-white">
                     <PeriodSubHeaders />
-                    <PeriodSubHeaders />
+                    <PeriodSubHeaders wow />
                     {customPeriod && <PeriodSubHeaders bg="bg-blue-950" />}
                     <PeriodSubHeaders />
                     <PeriodSubHeaders />

@@ -4838,7 +4838,7 @@ export interface StoreSalesSummaryRow {
   // MARK 2026-09-25: "전년 객단가도 비교" 요청 — prevYearAvgReceiptAmount(=전년동기
   // 매출금액/전년동기 영수건수)를 추가하고, 합계 줄 계산용으로 prevYearReceiptCount도 같이 내려줍니다.
   daily: { date: string; target: number; actual: number; achievementRate: number | null; qty: number; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
-  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; wowGrowthRate: number | null; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
+  weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; prevWeekToDateAmount: number; wowGrowthRate: number | null; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   // MARK 2026-09-25: fullMonthTarget = 이번달 "전체"(월말까지) 목표 — "이대로가면 착지금액"을
   // 계산할 때 착지 달성률을 비교할 분모로 씁니다(periodTarget은 asOfDate까지만이라 착지 비교엔 부적합).
   monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null; fullMonthTarget: number };
@@ -4949,8 +4949,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const asOfDateObj = parseDate(asOfDate)!;
 
   // MARK 2026-09-22: "일간" 블록만 원하는 날짜를 골라볼 수 있게 합니다(기본값=asOfDate=보통 어제)
-  // — 주간/월간/전월/연간은 그대로 "지금 기준" 리포트라 dailyDate와 무관하게 asOfDate를 계속
-  // 씁니다. 형식이 틀리거나 데이터 범위(가장 이른 날짜~asOfDate) 밖이면 조용히 무시하고 최신
+  // — (2026-11-10부터 주간/이번달도 dailyDate를 따라감, 아래 periodAnchor 참고. 전월/연간은 asOfDate) 형식이 틀리거나 데이터 범위(가장 이른 날짜~asOfDate) 밖이면 조용히 무시하고 최신
   // 날짜로 폴백합니다(첫 파일은 과거 조회가 아예 안 됐던 것과 달리, 이제 쌓인 데이터 안에서는
   // 자유롭게 과거 하루를 골라볼 수 있습니다).
   const requestedDailyDate = options.dailyDate && SALES_SUMMARY_DATE_RE.test(options.dailyDate) ? options.dailyDate : "";
@@ -4960,10 +4959,15 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   // -364일(정확히 52주 전)을 써서 요일을 맞추고 있는 것과 똑같이, 일간도 -364일로 맞춥니다.
   const prevYearDailyDate = dateAddDays(dailyDate, -364);
 
-  // 이번주(월~일) — asOfDate가 속한 주
-  const dow = asOfDateObj.getDay(); // 0=일 ... 6=토
+  // MARK 2026-11-10: "날짜 조회하면 주간·이번달(기간)도 그 날짜에 맞춰 바뀌게" 요청 — 주간/이번달은 이제
+  // dailyDate(조회일, 기본=asOfDate) 기준. 조회일이 속한 주(월~일)·달을 쓰고, 실적은 그 주/달 1일~조회일까지만.
+  // 전월/연간은 그대로 asOfDate 기준.
+  const periodAnchor = dailyDate;
+  const periodAnchorObj = parseDate(periodAnchor)!;
+  // 이번주(월~일) — 조회일이 속한 주
+  const dow = periodAnchorObj.getDay(); // 0=일 ... 6=토
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const weekStart = dateAddDays(asOfDate, mondayOffset);
+  const weekStart = dateAddDays(periodAnchor, mondayOffset);
   const weekEnd = dateAddDays(weekStart, 6);
 
   // MARK 2026-09-22: 커스텀 기간비교 — 시작~끝 날짜를 직접 골라 그 기간의 목표달성률과
@@ -4980,7 +4984,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const rangeEndValid = options.rangeEnd && SALES_SUMMARY_DATE_RE.test(options.rangeEnd) ? options.rangeEnd : "";
   const noRangeRequestedAtAll = !options.rangeStart && !options.rangeEnd && !options.noRange;
   const effectiveRangeStart = rangeStartValid || (noRangeRequestedAtAll ? weekStart : "");
-  const effectiveRangeEnd = rangeEndValid || (noRangeRequestedAtAll ? asOfDate : "");
+  const effectiveRangeEnd = rangeEndValid || (noRangeRequestedAtAll ? periodAnchor : ""); // 2026-11-10: 조회일 기준 주 월~조회일
   const customPeriod = effectiveRangeStart && effectiveRangeEnd && effectiveRangeStart <= effectiveRangeEnd
     ? { start: effectiveRangeStart, end: effectiveRangeEnd, prevYearStart: dateAddDays(effectiveRangeStart, -364), prevYearEnd: dateAddDays(effectiveRangeEnd, -364) }
     : null;
@@ -4988,8 +4992,12 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const prevWeekEnd = dateAddDays(weekEnd, -7);
   const prevYearWeekStart = dateAddDays(weekStart, -364); // 정확히 52주 전 = 같은 요일
   const prevYearWeekEnd = dateAddDays(weekEnd, -364);
+  // 전주比·전년比는 "같은 요일까지"끼리 비교(월~조회일 vs 전주 월~같은 요일 / 52주 전 같은 구간) — 주 중간에
+  // 조회해도 이번주 일부 vs 지난주 전체로 비교되지 않게. weekly.prevWeekAmount(전주 전체)는 라운딩 탭이 그대로 씀.
+  const prevWeekToDateEnd = dateAddDays(periodAnchor, -7);
+  const prevYearWeekToDateEnd = dateAddDays(periodAnchor, -364);
 
-  const monthStart = firstDayOfMonth(asOfDate);
+  const monthStart = firstDayOfMonth(periodAnchor);
   // MARK 2026-09-25: "이대로가면 이번달 착지금액" 계산에 쓸 이번달 "전체" 목표(월말까지) —
   // monthNow.target은 asOfDate까지만 더해서 착지 달성률 비교엔 안 맞습니다. 소천님이 목표를
   // 미리(다음달치까지) 입력해두는 방식으로 운영 중이라 월말치 목표도 이미 들어있는 경우가
@@ -4997,7 +5005,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const monthEndFull = lastDayOfMonth(monthStart);
   const prevYearMonthStart = dateAddDays(monthStart, -365);
   const prevYearAsOfDate = dateAddDays(asOfDate, -365);
-  const prevYearMonthPeriodEnd = prevYearAsOfDate; // 같은 "1일~이맘때" 구간 비교
+  const prevYearMonthPeriodEnd = dateAddDays(periodAnchor, -365); // 같은 "1일~이맘때"(조회일) 구간 비교
 
   const prevMonthKeyStr = previousMonthKey(asOfDate); // "YYYY-MM"
   const prevMonthStart = `${prevMonthKeyStr}-01`;
@@ -5009,8 +5017,8 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
   const prevYearYtdStart = `${asOfDateObj.getFullYear() - 1}-01-01`;
   const prevYearYtdEnd = prevYearAsOfDate;
 
-  const dim = daysInMonth(asOfDateObj.getFullYear(), asOfDateObj.getMonth() + 1);
-  const monthProgressRate = asOfDateObj.getDate() / dim;
+  const dim = daysInMonth(periodAnchorObj.getFullYear(), periodAnchorObj.getMonth() + 1);
+  const monthProgressRate = periodAnchorObj.getDate() / dim;
   const yearProgressRate = dayOfYear(asOfDate) / (new Date(asOfDateObj.getFullYear(), 1, 29).getMonth() === 1 ? 366 : 365);
 
   const stores: StoreSalesSummaryRow[] = [];
@@ -5029,12 +5037,14 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     const dailyPrevYear = prevYearDayRow?.amount || 0;
 
     // 주간
-    const weekNow = sumPeriod(storeRows, weekStart, weekEnd);
+    const weekNow = sumPeriod(storeRows, weekStart, weekEnd); // 목표는 주 전체(월~일)
+    const weekToDate = sumPeriod(storeRows, weekStart, periodAnchor); // 실적은 월~조회일
     const weekPrev = sumPeriod(storeRows, prevWeekStart, prevWeekEnd);
-    const weekPrevYear = sumPeriod(storeRows, prevYearWeekStart, prevYearWeekEnd);
+    const weekPrevToDate = sumPeriod(storeRows, prevWeekStart, prevWeekToDateEnd);
+    const weekPrevYear = sumPeriod(storeRows, prevYearWeekStart, prevYearWeekToDateEnd);
 
     // 이번달(월초~asOfDate = 기간목표만 — 아직 안 지난 날짜의 목표는 원본에 없을 수 있음)
-    const monthNow = sumPeriod(storeRows, monthStart, asOfDate);
+    const monthNow = sumPeriod(storeRows, monthStart, periodAnchor);
     const monthPrevYear = sumPeriod(storeRows, prevYearMonthStart, prevYearMonthPeriodEnd);
     // 착지금액 계산용 — 월말까지의 전체 목표(미리 입력해둔 경우에만 값이 있고, 아직이면 0)
     const monthFull = sumPeriod(storeRows, monthStart, monthEndFull);
@@ -5091,16 +5101,17 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         start: weekStart,
         end: weekEnd,
         target: weekNow.target,
-        actual: weekNow.amount,
-        achievementRate: weekNow.target ? weekNow.amount / weekNow.target : null,
-        avgReceiptAmount: avgReceiptAmount(weekNow.amount, weekNow.receiptCount),
-        receiptCount: weekNow.receiptCount,
+        actual: weekToDate.amount,
+        achievementRate: weekNow.target ? weekToDate.amount / weekNow.target : null,
+        avgReceiptAmount: avgReceiptAmount(weekToDate.amount, weekToDate.receiptCount),
+        receiptCount: weekToDate.receiptCount,
         prevWeekAmount: weekPrev.amount,
-        wowGrowthRate: growthRate(weekNow.amount, weekPrev.amount, existedBefore(prevWeekStart)),
+        prevWeekToDateAmount: weekPrevToDate.amount,
+        wowGrowthRate: growthRate(weekToDate.amount, weekPrevToDate.amount, existedBefore(prevWeekStart)),
         prevYearAmount: weekPrevYear.amount,
         prevYearReceiptCount: weekPrevYear.receiptCount,
         prevYearAvgReceiptAmount: avgReceiptAmount(weekPrevYear.amount, weekPrevYear.receiptCount),
-        yoyGrowthRate: growthRate(weekNow.amount, weekPrevYear.amount, existedBefore(prevYearWeekStart)),
+        yoyGrowthRate: growthRate(weekToDate.amount, weekPrevYear.amount, existedBefore(prevYearWeekStart)),
       },
       monthly: {
         month: monthStart.slice(0, 7),

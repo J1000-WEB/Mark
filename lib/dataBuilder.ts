@@ -4594,7 +4594,12 @@ export type SalesSummaryDailyRow = {
 // (정정 등의 이유로) 다시 올려도 중복되지 않고 최신 값으로만 갱신됩니다. 최초 1회 올렸던
 // 전체 히스토리(2025-01~)는 이미 시트에 쌓여있으므로 별도 마이그레이션 없이 그 위에
 // 계속 하루치씩 쌓으면 됩니다.
-export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fileName?: string) {
+// MARK 2026-11-10: "무신사 등 매출 없는 날에 옆날 매출이 중복으로 더해진다" 점검 결과 — 원본(개인 매출시트)엔 그날 행이
+// 없는데 스냅샷엔 다음날과 똑같은 금액의 행이 남아 있었음(ERP도 그날 0원, 102건 확인). 예전에 날짜가 하루 밀려 저장됐던
+// 행들이 upsert(덮어쓰기만, 지우진 않음) 구조라 그대로 남은 것 — 매일 매출이 있는 매장은 다음 업로드 때 덮어써져 티가 안
+// 났고, 매출 없는 날이 많은 위탁/무신사만 남았음. 그래서 이번 업로드에 들어 있는 "날짜"는 그 날짜 전체를 원본대로
+// 교체(그 날짜에 원본에 없는 매장 행은 삭제)하고, 지운 행은 "매출_일별_스냅샷_보정백업" 탭에 남김. dryRun이면 저장 안 함.
+export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fileName?: string, opts: { dryRun?: boolean } = {}) {
   const clean = (rows || [])
     .map((r) => ({
       date: text(r.date),
@@ -4637,7 +4642,35 @@ export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fil
     };
     merged.set(keyOf(row), row);
   }
+  // 이번 업로드에 있는 날짜는 그 날짜를 통째로 원본으로 교체 — 원본에 없는(예전에 잘못 남은) 행 제거
+  const uploadDates = new Set(clean.map((r) => r.date));
+  const uploadKeys = new Set(clean.map((r) => keyOf(r)));
+  const staleRows: SalesSummaryDailyRow[] = [];
+  for (const [k, r] of merged.entries()) {
+    if (uploadDates.has(r.date) && !uploadKeys.has(k)) {
+      staleRows.push(r);
+      merged.delete(k);
+    }
+  }
   for (const r of clean) merged.set(keyOf(r), r); // 새로 올라온 행이 같은 키를 덮어씀(정정 포함)
+  const staleSummary = {
+    staleRemovedCount: staleRows.length,
+    staleRemovedAmount: staleRows.reduce((t, r) => t + r.amount, 0),
+    staleRemovedSample: staleRows
+      .filter((r) => r.amount || r.qty)
+      .slice(0, 300)
+      .map((r) => ({ date: r.date, store: r.storeName, code: r.channelCode, amount: r.amount, qty: r.qty, receipt: r.receiptCount, target: r.target })),
+  };
+  if (opts.dryRun) return { ok: true, dryRun: true, uploadRowCount: clean.length, ...staleSummary };
+  if (staleRows.length) {
+    const BACKUP = "매출_일별_스냅샷_보정백업";
+    const backupHeader = ["보정일시", ...SALES_SUMMARY_HEADER, "사유"];
+    await ensureSheetExistsById(dbId, BACKUP, backupHeader);
+    const prevBackup = await getSheetValuesById(dbId, BACKUP, "A1:J20000").catch(() => [] as any[]);
+    const stamp = nowKSTDateTime();
+    const backupRows = staleRows.map((r) => [stamp, r.date, r.channelGroup, r.channelCode, r.storeName, r.qty, r.amount, r.receiptCount, r.target, "원본에 없는 행(예전 저장분이 남음) → 삭제"]);
+    await safeReplaceSheetValuesById(dbId, BACKUP, [...(prevBackup.length ? prevBackup : [backupHeader]), ...backupRows]);
+  }
 
   const mergedRows = Array.from(merged.values()).sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
   const sheetRows = mergedRows.map((r) => [r.date, r.channelGroup, r.channelCode, r.storeName, r.qty, r.amount, r.receiptCount, r.target]);
@@ -4666,6 +4699,8 @@ export async function saveSalesSummarySnapshot(rows: SalesSummaryDailyRow[], fil
     newRowCount: clean.length,
     newStartDate,
     newEndDate,
+    staleRemovedCount: staleSummary.staleRemovedCount,
+    staleRemovedAmount: staleSummary.staleRemovedAmount,
   };
 }
 

@@ -20,7 +20,7 @@ export const maxDuration = 60;
 // 사용 설정하고, (2) 그 드라이브 파일(또는 폴더)을 서비스계정 이메일(GOOGLE_CLIENT_EMAIL
 // 환경변수 값)로 공유해줘야 합니다.
 
-async function runDriveImport() {
+async function runDriveImport(opts: { dryRun?: boolean } = {}) {
   const file = await findSalesSummaryDriveFile();
   if (!file) {
     return { ok: false as const, error: `드라이브에서 매출 파일을 찾을 수 없어요. 파일 ID/파일명 또는 공유 설정을 확인해주세요.` };
@@ -38,7 +38,7 @@ async function runDriveImport() {
     return { ok: false as const, error: `"${file.name}" 파일에서 매출 데이터를 하나도 못 찾았어요. 파일 형식을 확인해주세요.` };
   }
 
-  const result = await saveSalesSummarySnapshot(rows, file.name);
+  const result = await saveSalesSummarySnapshot(rows, file.name, opts);
   return { ok: true as const, driveFile: { name: file.name, modifiedTime: file.modifiedTime }, ...result };
 }
 
@@ -87,8 +87,13 @@ export async function GET(req: Request) {
 }
 
 // POST: 대시보드의 "지금 가져오기" 버튼이 호출합니다(수동 트리거).
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    // MARK 2026-11-10: ?dryRun=1 — 저장하지 않고 "원본에 없어서 지워질 행"만 미리 보기
+    if (new URL(req.url).searchParams.get("dryRun") === "1") {
+      const preview = await runDriveImport({ dryRun: true });
+      return NextResponse.json(preview, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     const result = await runAndLog("수동");
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {

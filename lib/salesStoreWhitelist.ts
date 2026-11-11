@@ -47,7 +47,12 @@ export function normalizeWhitelistStoreKey(storeName: string) {
     .toLowerCase();
 }
 
+// 폐점 매장 — 매출탭엔 지난 실적(전년比 등) 때문에 남겨두고, 실시간 "매출 미발생 매장"에서만 뺌
+const REALTIME_CLOSED_STORES = new Set(["포시즌 아울렛 신사점"]); // 2026-11 폐점
+
 // 실시간(당일 매출) 기준 직영·백화점·아울렛 매장 — 위탁(오프라인_…)과 다음날 매출이 들어오는 인샵(용인)은 제외
 export const REALTIME_STORE_KEYS = new Set(
-  SALES_SUMMARY_STORE_WHITELIST.filter((n) => !/^오프라인_/.test(n) && !/팩토리아울렛 용인/.test(n)).map(normalizeWhitelistStoreKey)
+  SALES_SUMMARY_STORE_WHITELIST.filter((n) => !/^오프라인_/.test(n) && !/팩토리아울렛 용인/.test(n) && !REALTIME_CLOSED_STORES.has(n)).map(
+    normalizeWhitelistStoreKey
+  )
 );

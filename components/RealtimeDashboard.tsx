@@ -215,6 +215,43 @@ function StockIssueList({ rows }: { rows: any[] }) {
   );
 }
 
+function NoSalesStoresCard({ data }: { data: any }) {
+  const active = !!data.noSalesCheckActive;
+  const stores: string[] = data.noSalesStores || [];
+  const total: number = data.totalStoreCount || 0;
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-black text-slate-500">매출 미발생 매장</p>
+        <p className="text-xs font-semibold text-slate-400">
+          {active ? `${data.noSalesCheckFrom || "11:30"}부터 집계 · 매출이 생기면 목록에서 빠져요` : `${data.noSalesCheckFrom || "11:30"}부터 집계해요(매장 오픈 10:30)`}
+        </p>
+      </div>
+      {!active ? (
+        <p className="mt-2 text-2xl font-black text-slate-300">집계 전</p>
+      ) : (
+        <>
+          <p className={`mt-2 text-3xl font-black ${stores.length ? "text-red-600" : "text-emerald-600"}`}>
+            {fmtNum(stores.length)}개
+            {total > 0 && <span className="ml-2 text-sm font-bold text-slate-400">/ 전체 {fmtNum(total)}개 매장</span>}
+          </p>
+          {stores.length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {stores.map((n) => (
+                <span key={n} className="rounded-xl bg-red-50 px-3 py-1.5 text-xs font-black text-red-700 ring-1 ring-inset ring-red-200">
+                  {n}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm font-bold text-emerald-600">모든 매장에서 매출이 발생했어요 👍</p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function RealtimeDashboard() {
   const [data, setData] = useState<any>(null);
   const [status, setStatus] = useState("");
@@ -307,6 +344,9 @@ export default function RealtimeDashboard() {
                 tone="plain"
               />
             </section>
+
+            {/* MARK 2026-11-11: "매출 미발생 매장" — 11:30부터 집계(매장 오픈 10:30 + 1시간), 매출이 생기면 목록에서 빠짐 */}
+            <NoSalesStoresCard data={data} />
 
             <section className="grid gap-6 lg:grid-cols-2">
               <Card title="매장별 오늘 매출 순위">

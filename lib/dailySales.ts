@@ -720,6 +720,22 @@ export async function readRealtimeOverview() {
   const activeChannels = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.storeName)).size;
   const activeProducts = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.styleCode)).size;
 
+  // MARK 2026-11-11: "매출 미발생 매장" 카드 — 매장이 보통 10:30 오픈이라 11:30(KST)부터 집계.
+  // 대상 매장 = 새벽 재고 스냅샷에 재고가 있는 매장(=운영 중인 오프라인 매장) + 오늘 행이 있는 매장.
+  // 그중 오늘 판매수량이 아직 0인 매장을 보여주고, 매출이 생기면 목록에서 빠짐.
+  const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+  const kstMinutes = kstNow.getUTCHours() * 60 + kstNow.getUTCMinutes();
+  const noSalesCheckFrom = "11:30";
+  const noSalesCheckActive = kstMinutes >= 11 * 60 + 30;
+  const soldStores = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.storeName));
+  const stockByStore = new Map<string, number>();
+  for (const r of baselineRows) stockByStore.set(r.storeName, (stockByStore.get(r.storeName) || 0) + num(r.stock));
+  const universe = new Set<string>([...Array.from(stockByStore.entries()).filter(([, st]) => st > 0).map(([n]) => n), ...todayRows.map((r) => r.storeName)]);
+  const noSalesStores = Array.from(universe)
+    .filter((n) => n && !soldStores.has(n))
+    .sort((a, b) => a.localeCompare(b, "ko"));
+  const totalStoreCount = universe.size;
+
   const topChannels = Array.from(
     todayRows.reduce((map, r) => {
       const key = r.storeName;
@@ -755,6 +771,10 @@ export async function readRealtimeOverview() {
     totalDailyAmount,
     activeChannels,
     activeProducts,
+    noSalesCheckActive,
+    noSalesCheckFrom,
+    noSalesStores,
+    totalStoreCount,
     topChannels,
     topProducts,
     stockBaselineDate: baselineDate,

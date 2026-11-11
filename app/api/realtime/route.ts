@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readRealtimeOverview } from "@/lib/dailySales";
-import { readRealtimeHourlyTrend, recordRealtimeHourlySnapshot } from "@/lib/realtimeHourlySnapshot";
+import { readRealtimeHourlyTrend, recordRealtimeHourlySnapshot, HOURLY_SNAPSHOT_SHEET } from "@/lib/realtimeHourlySnapshot";
+import { getSheetValuesById, getHistorySheetId } from "@/lib/googleSheets";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,8 +30,14 @@ export const maxDuration = 60;
 // 아무도 화면을 안 보는 시간대를 위한 백업으로 그대로 둡니다.
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // MARK 2026-11-11: 점검용 — ?exportHourly=1 정시 기록(Realtime_Hourly_Snapshot) [날짜, 시각, 전체금액] (예측 방식 검증용)
+    if (new URL(req.url).searchParams.get("exportHourly") === "1") {
+      const raw = await getSheetValuesById(getHistorySheetId(), HOURLY_SNAPSHOT_SHEET, "A:D").catch(() => [] as any[]);
+      const rows = raw.slice(1).map((r: any[]) => [String(r?.[0] ?? ""), String(r?.[1] ?? ""), Number(r?.[3]) || 0]).filter((r: any[]) => r[0]);
+      return NextResponse.json({ ok: true, rows }, { headers: NO_STORE_HEADERS });
+    }
     // MARK 2026-09-21: "매출예측은 배율표만으로 계산되게" 요청 — readRealtimeOverview()가
     // 이미 Daily_Sales_History에서 직접 계산해서 주는 "오늘 지금까지 누적매출"
     // (totalDailyAmount)을 readRealtimeHourlyTrend에 넘겨서, 정시 기록(Realtime_Hourly_Snapshot)

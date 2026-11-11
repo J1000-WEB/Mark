@@ -71,6 +71,21 @@ export async function GET(req: Request) {
       for (const h of hits) byDatePair.set(h.dates.join("~"), (byDatePair.get(h.dates.join("~")) || 0) + 1);
       return NextResponse.json({ ok: true, hitCount: hits.length, byDatePair: [...byDatePair.entries()].sort((a, b) => b[1] - a[1]), hits: hits.slice(0, 200) }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
+    // MARK 2026-11-11: 점검용 — ?exportDailyTotals=1 매출탭 점포(화이트리스트) 날짜별 합계 [날짜, 실적, 목표, 매장수] (예측 방식 검증용)
+    if (searchParams.get("exportDailyTotals") === "1") {
+      const data = await buildStoreSalesSummary({ noRange: true });
+      const keep = new Set(data.stores.map((s) => s.storeName));
+      const { rows } = await readSalesSummarySnapshot();
+      const m = new Map<string, [number, number, number]>();
+      for (const r of rows) {
+        if (!keep.has(r.storeName)) continue;
+        const v = m.get(r.date) || [0, 0, 0];
+        v[0] += r.amount; v[1] += r.target; if (r.amount) v[2] += 1;
+        m.set(r.date, v);
+      }
+      const out = [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([d, v]) => [d, Math.round(v[0]), Math.round(v[1]), v[2]]);
+      return NextResponse.json({ ok: true, asOfDate: data.asOfDate, rows: out }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
     const rawDate = searchParams.get("rawDate");
     if (rawDate) {
       const { rows } = await readSalesSummarySnapshot();

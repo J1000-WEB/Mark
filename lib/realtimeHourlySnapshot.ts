@@ -1,6 +1,7 @@
 import { getHistorySheetId, getSheetValuesById, ensureSheetExistsById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
 import { readTodayDailyHistoryRows } from "@/lib/dailySales";
 import { getCumulativeShareAt } from "@/lib/hourlyPaceProfile";
+import { isKoreanHoliday } from "@/lib/koreanHolidays";
 
 // MARK 2026-09: "전주 동시간대비 증감율" 추적을 위한 시간별 매출 기록. 요청 배경:
 // "실시간으로 다 기록하면 너무 양이 많으니까 정시에 기록하는 루틴으로 하고 싶고, 매장운영이
@@ -202,10 +203,21 @@ export async function readRealtimeHourlyTrend(todayLiveAmount?: number, dailyTot
   // 같은 요일 최근 8주 평균(매출 있는 날만)
   let sameWeekdayAvg: number | null = null;
   if (dailyTotals && dailyTotals.size) {
+    // 공휴일은 평균에서 빼고, 오늘이 공휴일이면 최근 8주 일요일 평균을 씀
+    const step = isKoreanHoliday(today) ? null : 7;
     const xs: number[] = [];
-    for (let k = 1; k <= 8; k++) {
-      const v = dailyTotals.get(kstDateKeyOffset(-7 * k));
-      if (v && v > 0) xs.push(v);
+    if (step) {
+      for (let k = 1; k <= 8; k++) {
+        const d = kstDateKeyOffset(-7 * k);
+        const v = dailyTotals.get(d);
+        if (v && v > 0 && !isKoreanHoliday(d)) xs.push(v);
+      }
+    } else {
+      for (let k = 1; k <= 56; k++) {
+        const d = kstDateKeyOffset(-k);
+        const v = dailyTotals.get(d);
+        if (v && v > 0 && !isKoreanHoliday(d) && new Date(`${d}T00:00:00Z`).getUTCDay() === 0) xs.push(v);
+      }
     }
     if (xs.length) sameWeekdayAvg = Math.round((calib * xs.reduce((a, b) => a + b, 0)) / xs.length);
   }

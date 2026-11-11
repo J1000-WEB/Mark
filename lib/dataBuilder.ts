@@ -1,4 +1,5 @@
 import { SALES_SUMMARY_STORE_WHITELIST, REALTIME_STORE_KEYS, normalizeWhitelistStoreKey } from "./salesStoreWhitelist";
+import { isKoreanHoliday } from "./koreanHolidays";
 import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById, trimGridById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
@@ -5085,14 +5086,14 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     const dowSum = [0, 0, 0, 0, 0, 0, 0];
     const dowCnt = [0, 0, 0, 0, 0, 0, 0];
     for (const r of storeRows) {
-      if (r.date < landingRefStart || r.date > periodAnchor || !r.amount) continue;
+      if (r.date < landingRefStart || r.date > periodAnchor || !r.amount || isKoreanHoliday(r.date)) continue; // 공휴일은 평균에서 제외
       const w = parseDate(r.date)!.getDay();
       dowSum[w] += r.amount;
       dowCnt[w] += 1;
     }
     let landingRemaining = 0;
     for (let d = dateAddDays(periodAnchor, 1); d <= monthEndFull; d = dateAddDays(d, 1)) {
-      const w = parseDate(d)!.getDay();
+      const w = isKoreanHoliday(d) ? 0 : parseDate(d)!.getDay(); // 남은 공휴일은 일요일처럼
       if (dowCnt[w]) landingRemaining += dowSum[w] / dowCnt[w];
     }
 

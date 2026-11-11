@@ -1,3 +1,4 @@
+import { SALES_SUMMARY_STORE_WHITELIST } from "./salesStoreWhitelist";
 import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById, trimGridById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
@@ -4915,43 +4916,7 @@ const SALES_SUMMARY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // 화면에서 제외합니다. normalizeStoreKey()로 비교해서 "오프라인_" 접두어나 공백/구두점
 // 차이는 무시하고 매칭합니다 — 화면에 보여줄 이름 자체는 업로드 원본 데이터의 표기를 그대로
 // 씁니다(이 목록은 매칭용). 오픈 등으로 점포가 늘어나면 이 배열에 이름만 추가하면 됩니다.
-const SALES_SUMMARY_STORE_WHITELIST = [
-  "성수 플래그십",
-  "신사 플래그십",
-  "한남 플래그십",
-  "서울숲 플래그십",
-  "포시즌 아울렛 신사점",
-  "신세계 센텀시티점",
-  "신세계 광주점",
-  "롯데백화점 평촌점",
-  "롯데백화점 광복점",
-  "신세계 의정부점",
-  "신세계 대전점",
-  "현대백화점 신촌점",
-  "LF스퀘어 광양점",
-  "아이파크몰 용산점",
-  "스타필드 고양점",
-  "현대커넥트 청주점",
-  "스타필드 빌리지 운정점",
-  "타임스퀘어 영등포점",
-  "롯데아울렛 서울역점",
-  "현대아울렛 송도점",
-  "롯데아울렛 김해점",
-  "롯데아울렛 동부산",
-  "현대아울렛 남양주점",
-  "팩토리아울렛 용인점",
-  "오프라인_롯데면세점",
-  "오프라인_무신사(강남)",
-  "오프라인_무신사(대구)",
-  "오프라인_무신사(백&캡클럽 서울숲)",
-  "오프라인_무신사(성수)",
-  "오프라인_무신사(수원)",
-  "오프라인_무신사(은평)",
-  "오프라인_무신사(홍대)",
-  "오프라인_무신사(송도)",
-  "오프라인_무신사(성수메가스토어)", // 2026-11-10 신규(위탁)
-  "오프라인_한컬렉션",
-];
+// (2026-11-11) 목록은 lib/salesStoreWhitelist.ts로 옮김 — 실시간 탭 "매출 미발생 매장"도 같이 씀
 const SALES_SUMMARY_STORE_WHITELIST_KEYS = new Set(SALES_SUMMARY_STORE_WHITELIST.map((n) => normalizeStoreKey(n)));
 
 // MARK 2026-09-25: "오프라인_롯데면세점"이 원본 파일에 점포코드 2개(21029/81028)로 겹쳐서

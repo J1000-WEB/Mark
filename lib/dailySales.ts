@@ -14,6 +14,7 @@ import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { loadChannelMaster, isOnlineType, seedUnknownChannels, type ChannelType } from "@/lib/channelMaster";
 import { expandStyleChannelRows } from "@/lib/styleChannelCompact";
 import { normalizeDateKey } from "@/lib/storeDailyAmount";
+import { REALTIME_STORE_KEYS, normalizeWhitelistStoreKey } from "@/lib/salesStoreWhitelist";
 
 function text(v: any) {
   return String(v ?? "").trim();
@@ -730,7 +731,12 @@ export async function readRealtimeOverview() {
   const soldStores = new Set(todayRows.filter((r) => num(r.qty) > 0).map((r) => r.storeName));
   const stockByStore = new Map<string, number>();
   for (const r of baselineRows) stockByStore.set(r.storeName, (stockByStore.get(r.storeName) || 0) + num(r.stock));
-  const universe = new Set<string>([...Array.from(stockByStore.entries()).filter(([, st]) => st > 0).map(([n]) => n), ...todayRows.map((r) => r.storeName)]);
+  // 매출탭 점포 목록 중 당일 매출이 실시간으로 들어오는 매장만(위탁·용인 인샵, 매장주문/반품 같은 가상 채널 제외)
+  const universe = new Set<string>(
+    [...Array.from(stockByStore.entries()).filter(([, st]) => st > 0).map(([n]) => n), ...todayRows.map((r) => r.storeName)].filter((n) =>
+      REALTIME_STORE_KEYS.has(normalizeWhitelistStoreKey(n))
+    )
+  );
   const noSalesStores = Array.from(universe)
     .filter((n) => n && !soldStores.has(n))
     .sort((a, b) => a.localeCompare(b, "ko"));

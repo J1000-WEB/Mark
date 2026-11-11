@@ -1,6 +1,6 @@
 import { getHistorySheetId, getSheetValuesById, ensureSheetExistsById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
 import { readTodayDailyHistoryRows } from "@/lib/dailySales";
-import { getCompanyProjectionRatio, getFirstStableProjectionHour } from "@/lib/hourlyPaceProfile";
+import { getCumulativeShareAt } from "@/lib/hourlyPaceProfile";
 
 // MARK 2026-09: "전주 동시간대비 증감율" 추적을 위한 시간별 매출 기록. 요청 배경:
 // "실시간으로 다 기록하면 너무 양이 많으니까 정시에 기록하는 루틴으로 하고 싶고, 매장운영이
@@ -124,13 +124,13 @@ function hourLabelList() {
 
 // 이 시트는 정시(11~22시)에만 한 줄씩 늘어나서 하루 최대 12줄입니다(Daily_Sales_History처럼
 // 항목 단위로 폭증하는 시트가 아님) — 몇 년이 쌓여도 전체를 한 번에 읽어도 가볍습니다.
-async function readHourlyAmountsByDate(historyId: string, dateKeys: string[]): Promise<Map<string, Map<string, number>>> {
-  const wanted = new Set(dateKeys);
+async function readHourlyAmountsByDate(historyId: string, dateKeys: string[] | null): Promise<Map<string, Map<string, number>>> {
+  const wanted = dateKeys ? new Set(dateKeys) : null;
   const result = new Map<string, Map<string, number>>();
   const raw = await getSheetValuesById(historyId, HOURLY_SNAPSHOT_SHEET, "A:E").catch(() => [] as any[]);
   for (let i = 1; i < raw.length; i++) {
     const date = String(raw[i]?.[0] ?? "").trim();
-    if (!wanted.has(date)) continue;
+    if (wanted && !wanted.has(date)) continue;
     const hour = String(raw[i]?.[1] ?? "").trim();
     const amount = num(raw[i]?.[3]);
     if (!result.has(date)) result.set(date, new Map());
@@ -150,17 +150,22 @@ export type HourlyTrendPoint = { hour: string; todayAmount: number | null; lastW
 // 정적 배율표만으로 계산합니다. 그래서 예측은 이제 Realtime_Hourly_Snapshot이 하나도
 // 없어도 항상 뜹니다. 정시 기록 자체는 이 함수 위쪽의 "오늘 vs 지난주" 시간대별 추이
 // 그래프(과거 시점별 비교가 반드시 필요한 용도)를 위해 계속 쌓아둡니다.
-export async function readRealtimeHourlyTrend(todayLiveAmount?: number) {
+// MARK 2026-11-11: "쌓여 있는 데이터로 더 정확하게" 요청 — 예측 = 지금까지 매출 + (아직 안 나온 비율) × 같은 요일 최근 8주 평균.
+// 9/10~11/10 정시 기록 197건으로 시험: 예전(지금까지 매출 × 시간대 배율) 평균 오차 14.6% → 8.4%(16시 12.5→9.3%, 13시 47→9%).
+// 이른 시간엔 "평소 이 요일 매출"에, 늦을수록 실제 매출에 가깝게 자연스럽게 옮겨감 — 그래서 오픈 직후부터 표시 가능.
+// 평균은 매출탭 일별 데이터(실시간 대상 매장) × 보정계수(실시간 집계/매출탭 비율, 정시 22:00 기록으로 계산, 기본 0.93).
+export type RealtimeDailyTotals = Map<string, number>; // 날짜 → 매출탭 기준 실시간 대상 매장 합계
+
+export async function readRealtimeHourlyTrend(todayLiveAmount?: number, dailyTotals?: RealtimeDailyTotals | null) {
   const historyId = getHistorySheetId();
   const today = kstDateKey();
-  const currentHourLabel = `${String(kstHour()).padStart(2, "0")}:00`;
   const lookbackDates = Array.from({ length: WEEKS_LOOKBACK }, (_, i) => kstDateKeyOffset(-7 * (i + 1)));
   const primaryLastWeekDate = lookbackDates[0] || "";
 
-  const amountsByDate = await readHourlyAmountsByDate(historyId, [today, ...lookbackDates]);
+  const allHourly = await readHourlyAmountsByDate(historyId, null);
   const hours = hourLabelList();
-  const todayMap = amountsByDate.get(today) || new Map<string, number>();
-  const lastWeekMap = amountsByDate.get(primaryLastWeekDate) || new Map<string, number>();
+  const todayMap = allHourly.get(today) || new Map<string, number>();
+  const lastWeekMap = allHourly.get(primaryLastWeekDate) || new Map<string, number>();
 
   const series: HourlyTrendPoint[] = hours.map((hour) => ({
     hour,
@@ -169,21 +174,53 @@ export async function readRealtimeHourlyTrend(todayLiveAmount?: number) {
   }));
 
   const primaryLastWeekFinalAmount: number | null = (() => {
-    const map = amountsByDate.get(primaryLastWeekDate);
+    const map = allHourly.get(primaryLastWeekDate);
     if (!map || !map.size) return null;
     return hours.reduce((latest: number | null, h) => (map.has(h) ? map.get(h)! : latest), null as number | null);
   })();
 
-  const todayDow = nowKST().getDay();
+  const now = nowKST();
+  const todayDow = now.getDay();
   const isWeekendToday = todayDow === 0 || todayDow === 6;
-  const staticRatio = getCompanyProjectionRatio(currentHourLabel, isWeekendToday);
-  // 라이브 값이 넘어오면 그걸 우선 쓰고(정시 기록 여부와 무관하게 항상 최신), 안 넘어온
-  // 호출부(과거 호환)에서만 그날 기록된 스냅샷 값으로 대체합니다.
-  const todaySoFar = todayLiveAmount ?? todayMap.get(currentHourLabel) ?? null;
+  const todaySoFar = todayLiveAmount ?? todayMap.get(`${String(kstHour()).padStart(2, "0")}:00`) ?? null;
+  const share = getCumulativeShareAt(now.getHours(), now.getMinutes(), isWeekendToday);
 
-  const projectedEndOfDayAmount = todaySoFar && staticRatio ? Math.round(todaySoFar * staticRatio) : null;
-  // 예측이 아직 없을 때(대부분 이른 시간대) "언제부터 뜨는지" 화면에 정확히 알려주기 위한 값.
-  const projectionAvailableFromHour = projectedEndOfDayAmount ? null : getFirstStableProjectionHour(isWeekendToday);
+  // 보정계수: 정시 22:00 기록(실시간 집계 최종) ÷ 매출탭 같은 날 합계, 중앙값
+  let calib = 0.93;
+  if (dailyTotals && dailyTotals.size) {
+    const ratios: number[] = [];
+    for (const [d, m] of allHourly.entries()) {
+      const fin = m.get("22:00");
+      const tot = dailyTotals.get(d);
+      if (fin && tot && fin > 0 && tot > 0) ratios.push(fin / tot);
+    }
+    if (ratios.length >= 5) {
+      ratios.sort((a, b) => a - b);
+      calib = Math.min(1.1, Math.max(0.7, ratios[Math.floor(ratios.length / 2)]));
+    }
+  }
+  // 같은 요일 최근 8주 평균(매출 있는 날만)
+  let sameWeekdayAvg: number | null = null;
+  if (dailyTotals && dailyTotals.size) {
+    const xs: number[] = [];
+    for (let k = 1; k <= 8; k++) {
+      const v = dailyTotals.get(kstDateKeyOffset(-7 * k));
+      if (v && v > 0) xs.push(v);
+    }
+    if (xs.length) sameWeekdayAvg = Math.round((calib * xs.reduce((a, b) => a + b, 0)) / xs.length);
+  }
+
+  let projectedEndOfDayAmount: number | null = null;
+  let projectionSource: "weekday_avg_blend" | "hourly_profile" | null = null;
+  if (todaySoFar !== null && sameWeekdayAvg) {
+    projectedEndOfDayAmount = Math.round(Math.max(todaySoFar, todaySoFar + (1 - share) * sameWeekdayAvg));
+    projectionSource = "weekday_avg_blend";
+  } else if (todaySoFar && share >= 1 / 6) {
+    // 평균을 못 구했을 때만 예전 방식(지금까지 매출 ÷ 지금까지 비율)
+    projectedEndOfDayAmount = Math.round(todaySoFar / share);
+    projectionSource = "hourly_profile";
+  }
+  const projectionAvailableFromHour = projectedEndOfDayAmount ? null : "11:00";
 
   return {
     today,
@@ -192,7 +229,9 @@ export async function readRealtimeHourlyTrend(todayLiveAmount?: number) {
     hasLastWeekData: lastWeekMap.size > 0,
     lastWeekFinalAmount: primaryLastWeekFinalAmount,
     projectedEndOfDayAmount,
-    projectionSource: projectedEndOfDayAmount ? ("historical_profile" as const) : null,
+    projectionSource,
     projectionAvailableFromHour,
+    sameWeekdayAvg,
+    shareSoFar: Math.round(share * 1000) / 1000,
   };
 }

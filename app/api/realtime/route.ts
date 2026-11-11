@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readRealtimeOverview } from "@/lib/dailySales";
 import { readRealtimeHourlyTrend, recordRealtimeHourlySnapshot, HOURLY_SNAPSHOT_SHEET } from "@/lib/realtimeHourlySnapshot";
 import { getSheetValuesById, getHistorySheetId } from "@/lib/googleSheets";
+import { readRealtimeStoreDailyTotals } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,7 +48,12 @@ export async function GET(req: Request) {
       readRealtimeOverview(),
       recordRealtimeHourlySnapshot().catch((err) => console.error("realtime: opportunistic hourly snapshot failed:", err)),
     ]);
-    const trend = await readRealtimeHourlyTrend(overview.totalDailyAmount).catch(() => null);
+    // MARK 2026-11-11: 예상 마감 = 지금까지 + 남은 비율 × 같은 요일 최근 8주 평균(매출탭 일별 데이터)
+    const dailyTotals = await readRealtimeStoreDailyTotals().catch(() => null);
+    const trend = await readRealtimeHourlyTrend(overview.totalDailyAmount, dailyTotals).catch((e) => {
+      console.error("realtime trend failed:", e);
+      return null;
+    });
     return NextResponse.json({ ok: true, data: { ...overview, trend } }, { headers: NO_STORE_HEADERS });
   } catch (error: any) {
     console.error("realtime failed:", error);

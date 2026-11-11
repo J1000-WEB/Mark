@@ -61,6 +61,21 @@ export function getCompanyProjectionRatio(hourLabel: string, isWeekend: boolean)
   return ratio;
 }
 
+// MARK 2026-11-11: 분 단위 "하루 매출 중 지금까지 나온 비율"(0~1). 정시 배율표의 역수를 이웃 정시 사이에서 분 단위로 보간.
+// (예전엔 16:58에도 16:00 배율을 그대로 써서 정시 직전일수록 높게 나왔음)
+export function getCumulativeShareAt(hour: number, minute: number, isWeekend: boolean): number {
+  const table = isWeekend ? COMPANY_WEEKEND_PROJECTION_RATIO : COMPANY_WEEKDAY_PROJECTION_RATIO;
+  const shareAt = (h: number) => {
+    if (h < 11) return 0;
+    if (h >= 22) return 1;
+    const r = table[`${String(h).padStart(2, "0")}:00`];
+    return r ? Math.min(1, 1 / r) : 0;
+  };
+  const a = shareAt(hour);
+  const b = shareAt(hour + 1);
+  return Math.max(0, Math.min(1, a + (b - a) * (minute / 60)));
+}
+
 // MARK 2026-09-14: "실시간 탭에 매출예측이 어디 나오는지 모르겠다" 문의 — 이른 시간대(11~13시)는
 // 배율이 너무 불안정해서 일부러 안 보여주는 건데, "언제부터 뜨는지"를 화면에 정확히 알려주는 게
 // 훨씬 친절합니다. 배율이 안정권(MAX_STABLE_RATIO 미만)에 처음 들어오는 시각을 찾아줍니다.

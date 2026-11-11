@@ -336,7 +336,9 @@ export default function RealtimeDashboard() {
                 value={data.trend?.projectedEndOfDayAmount ? won(data.trend.projectedEndOfDayAmount) : "—"}
                 sub={
                   data.trend?.projectedEndOfDayAmount
-                    ? undefined
+                    ? data.trend?.sameWeekdayAvg
+                      ? `같은 요일 평균 ${won(data.trend.sameWeekdayAvg)} 반영`
+                      : undefined
                     : data.trend?.projectionAvailableFromHour
                     ? `${data.trend.projectionAvailableFromHour}부터 표시`
                     : "이른 시간대"

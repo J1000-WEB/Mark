@@ -141,7 +141,7 @@ type StoreSalesSummaryRow = {
   channelCode: string;
   daily: PeriodCommon & { date: string; target: number; actual: number; qty: number };
   weekly: PeriodCommon & { start: string; end: string; target: number; actual: number; prevWeekAmount: number; prevWeekToDateAmount?: number; wowGrowthRate: number | null };
-  monthly: PeriodCommon & { month: string; periodTarget: number; actual: number; progressRate: number; fullMonthTarget: number };
+  monthly: PeriodCommon & { month: string; periodTarget: number; actual: number; progressRate: number; fullMonthTarget: number; landingAmount?: number };
   prevMonth: PeriodCommon & { month: string; target: number; actual: number };
   annual: PeriodCommon & { year: number; ytdTarget: number; ytdActual: number; progressRate: number };
   customPeriod?: PeriodCommon & { start: string; end: string; target: number; actual: number; qty: number; prevYearStart: string; prevYearEnd: string };
@@ -294,6 +294,7 @@ function buildTotalRow(rows: StoreSalesSummaryRow[], label: string): StoreSalesS
       prevYearAvgReceiptAmount: monthly.prevYearAvgReceiptAmount,
       yoyGrowthRate: monthly.yoyGrowthRate,
       fullMonthTarget: rows.reduce((sum, r) => sum + (r.monthly.fullMonthTarget || 0), 0),
+      landingAmount: rows.reduce((sum, r) => sum + (r.monthly.landingAmount ?? r.monthly.actual / (r.monthly.progressRate || 1)), 0),
     },
     prevMonth: {
       month: rows[0].prevMonth.month,
@@ -557,7 +558,8 @@ export default function StoreSalesSummaryDashboard() {
   // 이미 입력돼 있으면(월말치까지) 착지 기준 달성률도 같이 보여줍니다.
   const landingEstimate = useMemo(() => {
     if (!totalRow || !totalRow.monthly.progressRate) return null;
-    const landingAmount = totalRow.monthly.actual / totalRow.monthly.progressRate;
+    // MARK 2026-11-11: 서버가 매장별로 "실적 + 남은 날 × 최근 8주 같은 요일 평균"을 계산 → 합계(필터 반영)
+    const landingAmount = totalRow.monthly.landingAmount ?? totalRow.monthly.actual / totalRow.monthly.progressRate;
     const fullMonthTarget = totalRow.monthly.fullMonthTarget;
     const landingAchievementRate = fullMonthTarget ? landingAmount / fullMonthTarget : null;
     return { landingAmount, fullMonthTarget, landingAchievementRate, month: totalRow.monthly.month };
@@ -880,8 +882,7 @@ export default function StoreSalesSummaryDashboard() {
 
           <div className="flex flex-wrap items-start gap-3">
             {/* MARK 2026-09-25: "오른쪽상단에 이대로가면 월간 착지금액" 요청 — 지금 보이는
-                (필터 적용된) 매장 기준, 지금까지의 하루 평균 페이스가 이어진다고 가정한 이번달
-                착지 예상 금액. 이번달 전체 목표가 입력돼 있으면 착지 기준 달성률도 같이 표시. */}
+                (필터 적용된) 매장 기준 이번달 착지 예상 금액(2026-11-11~: 지금까지 실적 + 남은 날 × 매장별 최근 8주 같은 요일 평균). 이번달 전체 목표가 입력돼 있으면 착지 기준 달성률도 같이 표시. */}
             {landingEstimate && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-right">
                 <p className="text-[11px] font-black text-emerald-700">이대로가면 {landingEstimate.month.slice(5)}월 착지</p>

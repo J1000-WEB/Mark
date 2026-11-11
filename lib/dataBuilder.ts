@@ -1,4 +1,4 @@
-import { SALES_SUMMARY_STORE_WHITELIST } from "./salesStoreWhitelist";
+import { SALES_SUMMARY_STORE_WHITELIST, REALTIME_STORE_KEYS, normalizeWhitelistStoreKey } from "./salesStoreWhitelist";
 import fallback from "./mark-data.json";
 import { getDbSheetId, getDailySourceSheetId, getDailyStoreSalesSheetId, getHistorySheetId, getSheetId, getManySheetValues, getManySheetValuesById, getSpreadsheetTitles, getSpreadsheetTitlesById, getSheetValuesById, getSheetRowCountById, readRecentTailRowsById, ensureSheetExistsById, safeReplaceSheetValuesById, updateValuesById, clearRangeById, ensureGridRowsById, trimGridById } from "./googleSheets";
 import { isCompactDailyHistoryHeader, expandCompactDailyHistoryRows, expandAnyDailyHistoryRows, DAILY_HISTORY_HEADER } from "./dailySales";
@@ -4890,7 +4890,7 @@ export interface StoreSalesSummaryRow {
   weekly: { start: string; end: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevWeekAmount: number; prevWeekToDateAmount: number; wowGrowthRate: number | null; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   // MARK 2026-09-25: fullMonthTarget = 이번달 "전체"(월말까지) 목표 — "이대로가면 착지금액"을
   // 계산할 때 착지 달성률을 비교할 분모로 씁니다(periodTarget은 asOfDate까지만이라 착지 비교엔 부적합).
-  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null; fullMonthTarget: number };
+  monthly: { month: string; periodTarget: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null; fullMonthTarget: number; landingAmount: number };
   prevMonth: { month: string; target: number; actual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   annual: { year: number; ytdTarget: number; ytdActual: number; achievementRate: number | null; avgReceiptAmount: number | null; receiptCount: number; progressRate: number; prevYearAmount: number; prevYearReceiptCount: number; prevYearAvgReceiptAmount: number | null; yoyGrowthRate: number | null };
   // MARK 2026-09-22: 사용자가 시작~끝 날짜를 직접 골라 조회했을 때만 채워짐(기본 조회에는 없음).
@@ -4924,6 +4924,22 @@ const SALES_SUMMARY_STORE_WHITELIST_KEYS = new Set(SALES_SUMMARY_STORE_WHITELIST
 // 소천님 확인: 21029는 빼고 81028만 남깁니다. 이름이 아니라 코드로 제외하므로, 같은 이름을
 // 쓰는 다른 코드가 나중에 생겨도 여기 코드만 더 추가하면 됩니다.
 const SALES_SUMMARY_STORE_CODE_EXCLUDE = new Set(["21029"]);
+
+// MARK 2026-11-11: 실시간 탭 예상 마감 매출용 — 매출탭 일별 데이터에서 실시간 대상 매장(직영·백화점·아울렛)만 날짜별 합계.
+// 실시간 탭은 3분마다 새로고침되니 서버 인스턴스 메모리에 1시간 캐시.
+let realtimeDailyTotalsCache: { at: number; map: Map<string, number> } | null = null;
+export async function readRealtimeStoreDailyTotals(): Promise<Map<string, number>> {
+  if (realtimeDailyTotalsCache && Date.now() - realtimeDailyTotalsCache.at < 60 * 60 * 1000) return realtimeDailyTotalsCache.map;
+  const { rows } = await readSalesSummarySnapshot();
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.amount || SALES_SUMMARY_STORE_CODE_EXCLUDE.has(text(r.channelCode))) continue;
+    if (!REALTIME_STORE_KEYS.has(normalizeWhitelistStoreKey(r.storeName))) continue;
+    map.set(r.date, (map.get(r.date) || 0) + r.amount);
+  }
+  realtimeDailyTotalsCache = { at: Date.now(), map };
+  return map;
+}
 
 export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions = {}): Promise<{
   asOfDate: string;
@@ -5062,6 +5078,23 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
     const monthPrevYear = sumPeriod(storeRows, prevYearMonthStart, prevYearMonthPeriodEnd);
     // 착지금액 계산용 — 월말까지의 전체 목표(미리 입력해둔 경우에만 값이 있고, 아직이면 0)
     const monthFull = sumPeriod(storeRows, monthStart, monthEndFull);
+    // MARK 2026-11-11: 착지 예상 = 지금까지 실적 + 남은 날마다 "최근 8주 같은 요일 평균"(조회일까지, 매출 있는 날만).
+    // 예전 "실적 ÷ 경과일 비율"은 주말 몇 번 지났는지에 따라 크게 흔들렸음 — 2026년 1~10월로 시험해 보니
+    // 평균 오차 10.3% → 6.2%(월초 21% → 9%). 목표 기반·작년 패턴 기반은 더 안 맞았음.
+    const landingRefStart = dateAddDays(periodAnchor, -55);
+    const dowSum = [0, 0, 0, 0, 0, 0, 0];
+    const dowCnt = [0, 0, 0, 0, 0, 0, 0];
+    for (const r of storeRows) {
+      if (r.date < landingRefStart || r.date > periodAnchor || !r.amount) continue;
+      const w = parseDate(r.date)!.getDay();
+      dowSum[w] += r.amount;
+      dowCnt[w] += 1;
+    }
+    let landingRemaining = 0;
+    for (let d = dateAddDays(periodAnchor, 1); d <= monthEndFull; d = dateAddDays(d, 1)) {
+      const w = parseDate(d)!.getDay();
+      if (dowCnt[w]) landingRemaining += dowSum[w] / dowCnt[w];
+    }
 
     // 전월(완결된 달 — 전체 월 목표 사용 가능)
     const prevMonthNow = sumPeriod(storeRows, prevMonthStart, prevMonthEnd);
@@ -5140,6 +5173,7 @@ export async function buildStoreSalesSummary(options: SalesSummaryQueryOptions =
         prevYearAvgReceiptAmount: avgReceiptAmount(monthPrevYear.amount, monthPrevYear.receiptCount),
         yoyGrowthRate: growthRate(monthNow.amount, monthPrevYear.amount, existedBefore(prevYearMonthStart)),
         fullMonthTarget: monthFull.target,
+        landingAmount: Math.round(monthNow.amount + landingRemaining),
       },
       prevMonth: {
         month: prevMonthKeyStr,

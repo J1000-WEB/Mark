@@ -346,6 +346,15 @@
   점검용 GET `/api/sales-summary?checkSameDays=1`, PC `check-consign-dupes.js`(ERP 대조, 읽기 전용, run-now 허용).
 - 무신사 개인시트 동기화 대상(`LATE_SHOPS`)에 91001(백&캡클럽 서울숲, 빠져 있었음)·91002(성수메가스토어, 2026-11 신규) 추가.
   매출탭 화이트리스트에도 `오프라인_무신사(성수메가스토어)` 추가.
+- **예상 매출(2026-11-11 개편, 실제 데이터로 시험해서 고름)**:
+  - 매출탭 월 착지(`monthly.landingAmount`, 매장별 계산 후 합계): 실적 + 남은 날 × 그 매장 최근 8주 같은 요일 평균(공휴일 제외,
+    남은 공휴일은 일요일 취급). 2026-01~10 시험 평균 오차 10.3%(예전 "실적÷경과일비율") → 6.1%. 목표 기반·작년 패턴은 더 나빴음.
+  - 실시간 마감 예상(`readRealtimeHourlyTrend`): 지금까지 + (1 − 지금까지 비율) × 같은 요일 최근 8주 평균. 비율은 정시 배율표를
+    분 단위 보간(`getCumulativeShareAt`), 평균은 매출탭 일별(실시간 대상 매장, `readRealtimeStoreDailyTotals`, 1시간 캐시) ×
+    보정계수(정시 22:00 기록 ÷ 매출탭 합계 중앙값, 기본 0.93). 9/10~11/10 시험 오차 14.6% → 8.4%, 오픈 직후부터 표시.
+  - 공휴일 목록 `lib/koreanHolidays.ts`(해마다 추가 필요). 시험용 데이터: GET `/api/sales-summary?exportDailyTotals=1[&realtimeOnly=1]`,
+    `/api/realtime?exportHourly=1`.
+  - 점포 목록은 `lib/salesStoreWhitelist.ts`(매출탭·실시간 미발생 매장 공용, 폐점 매장은 `REALTIME_CLOSED_STORES`).
 - ⚠️ PC의 `sync-personal-sales-sheet.js`를 편집기로 열어둔 채 저장하면 원격으로 고친 내용이 덮어써짐(2026-10-29·11-02 두 번 겪음).
 
 ## 상품 이미지 (`components/ProductThumb.tsx`)

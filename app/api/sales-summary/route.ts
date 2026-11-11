@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { REALTIME_STORE_KEYS, normalizeWhitelistStoreKey } from "@/lib/salesStoreWhitelist";
 import { buildStoreSalesSummary, readSalesSummarySnapshot, fixCopiedClosedDaysInSalesSummary } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +75,8 @@ export async function GET(req: Request) {
     // MARK 2026-11-11: 점검용 — ?exportDailyTotals=1 매출탭 점포(화이트리스트) 날짜별 합계 [날짜, 실적, 목표, 매장수] (예측 방식 검증용)
     if (searchParams.get("exportDailyTotals") === "1") {
       const data = await buildStoreSalesSummary({ noRange: true });
-      const keep = new Set(data.stores.map((s) => s.storeName));
+      const realtimeOnly = searchParams.get("realtimeOnly") === "1"; // 실시간 탭 대상 매장만(위탁·용인·폐점 제외)
+      const keep = new Set(data.stores.map((s) => s.storeName).filter((n) => !realtimeOnly || REALTIME_STORE_KEYS.has(normalizeWhitelistStoreKey(n))));
       const { rows } = await readSalesSummarySnapshot();
       const m = new Map<string, [number, number, number]>();
       for (const r of rows) {

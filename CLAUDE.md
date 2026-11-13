@@ -360,6 +360,12 @@
   - 점포 목록은 `lib/salesStoreWhitelist.ts`(매출탭·실시간 미발생 매장 공용, 폐점 매장은 `REALTIME_CLOSED_STORES`).
 - ⚠️ PC의 `sync-personal-sales-sheet.js`를 편집기로 열어둔 채 저장하면 원격으로 고친 내용이 덮어써짐(2026-10-29·11-02 두 번 겪음).
 
+## 스페셜오퍼위크 세부일정 자동 기록 (대시보드 크론, erp-agent 아님)
+
+- Vercel 크론 `/api/auto-special-offer-actuals`(매일 05:00 KST, 수동은 POST) → `lib/specialOfferWeek.ts` `updateSpecialOfferActuals`.
+  2026-07-01 이후 시작 이벤트만: R열(실적) = Daily_Sales_History 기간 매출. **2026-11-13부터 G열(완료유무)도 날짜로 자동**:
+  오늘 < 시작 "준비", 시작~종료 "진행", 종료 뒤 "완료"(칸이 비었거나 이 세 값일 때만 바꿈, 바뀐 내역은 응답 debug.statusChanges).
+
 ## 상품 이미지 (`components/ProductThumb.tsx`)
 
 - gi-board 이미지 API를 서버 프록시로 호출(`GI_BOARD_TOKEN` 환경변수, 브라우저에 토큰 노출 안 함).

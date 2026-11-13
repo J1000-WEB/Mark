@@ -79,6 +79,7 @@ export async function readSpecialOfferSheet() {
   debug.startCol = startCol;
   debug.endCol = endCol;
   debug.resultCol = resultCol;
+  debug.completedCol = completedCol;
 
   return { rows, headerRowIdx, storeCol, startCol, endCol, completedCol, resultCol, debug };
 }
@@ -145,8 +146,13 @@ export async function buildSpecialOfferEvents(dailyFlatRows: DailyFlatRow[]) {
 // MARK 6.10.2: 7월 1일 이후 이벤트는 R열(실적)을 매일 자동으로 최신 매출로 갱신합니다.
 // 완료유무와 무관하게 갱신하되, 2026-07-01 이전 이벤트(과거 수기입력)는 절대 건드리지 않습니다.
 export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
-  const { rows, headerRowIdx, storeCol, startCol, endCol, resultCol, debug } = await readSpecialOfferSheet();
+  const { rows, headerRowIdx, storeCol, startCol, endCol, completedCol, resultCol, debug } = await readSpecialOfferSheet();
   if (headerRowIdx < 0) return { updated: 0, debug };
+  // MARK 2026-11-13: G열(완료유무)도 날짜에 맞춰 자동으로 — 오늘(KST) 시작 전 "준비", 시작~종료 "진행", 종료 다음날부터 "완료".
+  // 칸이 비었거나 이 세 값일 때만 바꿈(직접 적은 "취소" 등 다른 글자는 안 건드림). 매일 오전 5시 실적 갱신 때 같이 실행.
+  const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const statusCol = columnIndexToLetter(completedCol);
+  const statusChanges: { row: number; storeName: string; from: string; to: string }[] = [];
 
   const escapedSheet = SPECIAL_OFFER_SHEET_NAME.replace(/'/g, "''");
   const colLetter = columnIndexToLetter(resultCol);
@@ -195,6 +201,13 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
 
     const sheetRowNumber = i + 1; // rows는 0-based, 실제 시트 행은 1-based
     updates.push({ range: `'${escapedSheet}'!${colLetter}${sheetRowNumber}`, values: [[Math.round(salesAmount)]] });
+
+    const currentStatus = text(row[completedCol]);
+    const nextStatus = todayKST < startDate ? "준비" : todayKST <= endDate ? "진행" : "완료";
+    if (completedCol >= 0 && ["", "준비", "진행", "완료"].includes(currentStatus) && currentStatus !== nextStatus) {
+      updates.push({ range: `'${escapedSheet}'!${statusCol}${sheetRowNumber}`, values: [[nextStatus]] });
+      statusChanges.push({ row: sheetRowNumber, storeName, from: currentStatus, to: nextStatus });
+    }
   }
 
   if (updates.length) {
@@ -202,6 +215,7 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[]) {
   }
 
   debug.updatedCount = updates.length;
+  debug.statusChanges = statusChanges;
   debug.eventBreakdown = eventBreakdown;
   // MARK 6.99: 매출 데이터 쪽에 실제로 어떤 매장명들이 있는지도 같이 보여줍니다 —
   // "타임스퀘어 영등포점"처럼 세부일정 시트의 표기랑 Daily_Sales_History 쪽 표기가

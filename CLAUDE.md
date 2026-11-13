@@ -187,6 +187,9 @@
     긴 숫자는 "#####" 글자로 붙어 있었음 → 직접 쓰기로 둘 다 해결.
   - 내보내기 규칙(PA 탭과 대조해 확인): 목표대비 매장 줄은 0→빈칸, 달성율·성장율 소수 1자리, 합계 줄=outDs(팀 합계) 맨 위.
     객단가는 목표·달성율·미달·초과율·초과금액·비교목표·비교달성율만 0→빈칸, 합계 줄 맨 아래(달성율=판매 있는 매장 평균, 초과율=초과 매장 평균).
+- **주간탭 주차별 스냅샷(2026-11-13)**: Vercel 크론 `/api/auto-weekly-snapshot`(월 12:10 KST)이 9/14 이후 한 번도 안 쌓였음(수동 호출은 정상 —
+  11/13 수동 실행으로 11/9 주차 저장됨). 원인 확인용으로 호출마다 MARK_DB `주간스냅샷_자동로그`(시각·호출자 vercel-cron/pc-erp-agent/manual·결과)를
+  남기고, PC `schedule-style-channel-upload.js`가 월요일 6:40에 `?caller=pc-erp-agent`로 백업 호출(같은 주차는 덮어씀).
 - 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js).
 
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의

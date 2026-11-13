@@ -1,5 +1,21 @@
 import { NextResponse } from "next/server";
 import { sendEmailAlert } from "@/lib/alerts";
+import { getDbSheetId, ensureSheetExistsById, appendValuesById } from "@/lib/googleSheets";
+
+// MARK 2026-11-13: 9/14 이후 자동 스냅샷이 한 번도 안 쌓였는데(수동 호출은 정상 동작) 왜인지 볼 기록이 없었음 →
+// 호출될 때마다 MARK_DB "주간스냅샷_자동로그"에 [시각, 호출자, 결과, 기준주, 오류]를 남김. PC erp-agent도 월요일 6:30에 백업으로 호출.
+const RUN_LOG_SHEET = "주간스냅샷_자동로그";
+const RUN_LOG_HEADER = ["실행시각(KST)", "호출자", "결과", "기준주", "오류"];
+async function logRun(caller: string, result: string, anchor: string, error: string) {
+  try {
+    const id = getDbSheetId();
+    await ensureSheetExistsById(id, RUN_LOG_SHEET, RUN_LOG_HEADER);
+    const kst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 19);
+    await appendValuesById(id, `'${RUN_LOG_SHEET}'!A:E`, [[kst, caller, result, anchor, error]]);
+  } catch (e) {
+    console.error("auto-weekly-snapshot log failed:", e);
+  }
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,6 +42,8 @@ async function fetchJsonOrThrow(url: string, init?: RequestInit) {
  * 3) replace the matching Monday payload in dedicated Weekly_Snapshot
  */
 export async function GET(req: Request) {
+  const ua = req.headers.get("user-agent") || "";
+  const caller = /vercel-cron/i.test(ua) ? "vercel-cron" : new URL(req.url).searchParams.get("caller") || "manual";
   try {
     const secret = process.env.CRON_SECRET;
     if (secret) {
@@ -53,6 +71,7 @@ export async function GET(req: Request) {
       }),
     });
     if (!snapshot?.ok) throw new Error(snapshot?.error || "Weekly_Snapshot 저장 실패");
+    await logRun(caller, "성공", String(payload.weekly?.anchorMonday || ""), "");
 
     return NextResponse.json({
       ok: true,
@@ -64,6 +83,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     const message = error?.message || "Weekly Snapshot 자동 저장 실패";
     console.error("auto-weekly-snapshot failed:", message);
+    await logRun(caller, "실패", "", message);
     await sendEmailAlert(
       "⚠️ 주간 스냅샷 자동 저장 실패",
       `<p>매주 월요일 자동으로 실행되는 주간 스냅샷 저장(auto-weekly-snapshot)이 실패했습니다.</p><p><b>에러:</b> ${message}</p><p>이번 주 스냅샷이 안 쌓였을 수 있으니, 대시보드에서 "실시간 갱신" 또는 "스냅샷 저장"을 눌러 수동으로 확인해주세요.</p>`

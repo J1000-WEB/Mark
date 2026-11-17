@@ -56,6 +56,13 @@ function HoverDetail({ label, tone, children }: { label: string; tone: string; c
   );
 }
 
+// 금액차이(실적 − 비교금액), 천원 · +는 파랑, −는 빨강
+function DiffCell({ a, b }: { a: number | null; b: number | null }) {
+  if (a === null || a === undefined || b === null || b === undefined || !b) return <td className={`${TD} text-slate-300`}>-</td>;
+  const diff = a - b;
+  return <td className={`${TD} font-bold ${diff >= 0 ? "text-blue-600" : "text-rose-600"}`}>{`${diff >= 0 ? "+" : ""}${won(diff)}`}</td>;
+}
+
 function SokCell({ list, date, label }: { list: any[]; date: string; label: string }) {
   if (!list?.length) return null;
   return (
@@ -94,6 +101,8 @@ function SpikeCell({ list, date, label }: { list: any[]; date: string; label: st
 function DailyView() {
   const thisMonth = new Date(Date.now() + 9 * 3600 * 1000 - 86400000).toISOString().slice(0, 7);
   const [month, setMonth] = useState(thisMonth);
+  // 전년비·전주비 옆 금액차이 — 점포별 탭처럼 버튼으로 접었다 폈다(기본 접힘)
+  const [showDiff, setShowDiff] = useState(false);
   const { data, loading, error } = useReport(`/api/sales-reports?type=daily&month=${month}`);
   const days: any[] = data?.days || [];
   const last = [...days].reverse().find((d) => d.actual !== null);
@@ -102,6 +111,13 @@ function DailyView() {
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold" />
+        <button
+          type="button"
+          onClick={() => setShowDiff((v) => !v)}
+          className={`rounded-xl px-3 py-1.5 text-xs font-black ${showDiff ? "bg-amber-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}
+        >
+          금액차이 {showDiff ? "숨기기 ▲" : "보기 ▼"}
+        </button>
         {data && (
           <p className="text-xs font-bold text-slate-500">
             월 목표 {won(data.monthTarget)} · 평일 {data.weekdays}일 / 주말·공휴일 {data.weekendOrHoliday}일
@@ -117,7 +133,7 @@ function DailyView() {
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
       {!loading && days.length > 0 && (
         <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[1450px] border-collapse text-xs">
+          <table className={`w-full border-collapse text-xs ${showDiff ? "min-w-[1700px]" : "min-w-[1450px]"}`}>
             <thead className="sticky top-0 z-20 bg-slate-900 text-white">
               <tr>
                 <th className="whitespace-nowrap px-2 py-2 text-left font-black">일자</th>
@@ -127,11 +143,14 @@ function DailyView() {
                 <th className={TH}>달성</th>
                 <th className={TH}>전년</th>
                 <th className={TH}>전년비</th>
+                {showDiff && <th className={`${TH} text-amber-200`}>전년차이</th>}
                 <th className={TH}>전주비</th>
+                {showDiff && <th className={`${TH} text-amber-200`}>전주차이</th>}
                 <th className={`${TH} border-l border-slate-700`}>누적실적</th>
                 <th className={TH}>누적달성</th>
                 <th className={TH}>누적전년</th>
                 <th className={TH}>누적전년비</th>
+                {showDiff && <th className={`${TH} text-amber-200`}>누적전년차이</th>}
                 <th className="whitespace-nowrap border-l border-slate-700 px-2 py-2 text-center font-black">스오크</th>
                 <th className="whitespace-nowrap px-2 py-2 text-center font-black">특이매출</th>
                 <th className="whitespace-nowrap border-l-2 border-slate-600 px-2 py-2 text-center font-black text-slate-300">전년 스오크</th>
@@ -153,11 +172,14 @@ function DailyView() {
                     <td className={`${TD} font-bold ${achColor(d.achievement)}`}>{pct0(d.achievement)}</td>
                     <td className={`${TD} text-slate-500`}>{won(d.prevYear)}</td>
                     <td className={`${TD} font-bold ${gColor(d.yoy)}`}>{growth(d.yoy)}</td>
+                    {showDiff && <DiffCell a={d.actual} b={d.prevYear} />}
                     <td className={`${TD} ${gColor(d.wow)}`}>{growth(d.wow)}</td>
+                    {showDiff && <DiffCell a={d.actual} b={d.lastWeek} />}
                     <td className={`${TD} border-l border-slate-100 font-bold`}>{won(d.cumActual)}</td>
                     <td className={`${TD} font-bold ${achColor(d.cumAchievement)}`}>{pct0(d.cumAchievement)}</td>
                     <td className={`${TD} text-slate-500`}>{won(d.cumPrevYear)}</td>
                     <td className={`${TD} font-bold ${gColor(d.cumYoy)}`}>{growth(d.cumYoy)}</td>
+                    {showDiff && <DiffCell a={d.cumActual} b={d.cumPrevYear} />}
                     <td className="whitespace-nowrap border-l border-slate-100 px-2 py-1 text-center">
                       <SokCell list={d.specialOffers} date={d.date} label="스오크" />
                     </td>
@@ -460,12 +482,10 @@ function AnnualStoresView() {
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
       {!loading && stores.length > 0 && (
         <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full border-collapse text-xs" style={{ minWidth: 760 + months.length * 260 }}>
+          <table className="w-full border-collapse text-xs" style={{ minWidth: 620 + months.length * 260 }}>
             <thead className="sticky top-0 z-20 bg-slate-900 text-white">
               <tr>
                 <th rowSpan={2} className="sticky left-0 z-30 bg-slate-900 px-2 py-2 font-black">NO</th>
-                <th rowSpan={2} className="px-2 py-2 font-black">코드</th>
-                <th rowSpan={2} className="px-2 py-2 font-black">형태</th>
                 <th rowSpan={2} className="sticky left-[34px] z-30 bg-slate-900 px-2 py-2 text-left font-black">점포명</th>
                 <th colSpan={4} className="border-l border-slate-700 px-2 py-1 font-black">년누계 (1~{elapsed}월)</th>
                 {months.map((i) => (
@@ -497,8 +517,6 @@ function AnnualStoresView() {
                     {allCollapsed ? "+" : "−"}
                   </button>
                 </td>
-                <td />
-                <td />
                 <td className="sticky left-[34px] z-10 bg-amber-50 px-2 py-1.5 font-black">합계 ({stores.filter((s) => sum(s.actual, months) > 0).length}개)</td>
                 {cells(totalRow, true)}
               </tr>
@@ -516,8 +534,6 @@ function AnnualStoresView() {
                           {collapsed.has(g) ? "+" : "−"}
                         </button>
                       </td>
-                      <td />
-                      <td />
                       <td className="sticky left-[34px] z-10 whitespace-nowrap bg-sky-50 px-2 py-1.5 font-black text-sky-900">
                         {g} 소계 ({list.length}개)
                       </td>
@@ -529,8 +545,6 @@ function AnnualStoresView() {
                         return (
                           <tr key={s.storeName} className={`border-t border-slate-100 ${no % 2 ? "bg-white" : "bg-slate-50/60"}`}>
                             <td className="sticky left-0 z-10 bg-inherit px-2 py-1.5 text-center text-slate-400">{no}</td>
-                            <td className="px-2 py-1.5 text-slate-500">{s.channelCode}</td>
-                            <td className="whitespace-nowrap px-2 py-1.5 text-slate-500">{s.channelGroup}</td>
                             <td className="sticky left-[34px] z-10 whitespace-nowrap bg-inherit px-2 py-1.5 font-black text-slate-900">{shortName(s.storeName)}</td>
                             {cells(s)}
                           </tr>

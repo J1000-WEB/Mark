@@ -68,6 +68,38 @@ export async function buildDailyAchievement(month: string) {
     .map((o) => ({ ...o, store: matchStore(o.storeName, storeNames) }))
     .filter((o) => o.store);
 
+  // MARK 2026-11-17: 스오크(그날 행사 중인 점포 + 그날 실적) — 전년 날짜에도 같이 씀(세부일정에 과거 행사도 있음)
+  const sokFor = (date: string, withAmount: boolean) =>
+    offerPeriods
+      .filter((o) => o.startDate <= date && date <= o.endDate)
+      .map((o) => ({
+        store: o.store as string,
+        name: o.storeName,
+        period: `${o.startDate.slice(5)}~${o.endDate.slice(5)}`,
+        amount: withAmount ? Math.round(byStoreDate.get(o.store as string)?.get(date)?.amount || 0) : null,
+      }));
+  // 특이매출: 그 점포 최근 8주 같은 요일 평균 대비
+  const spikesFor = (date: string) => {
+    const spikes: { store: string; amount: number; usual: number; ratio: number }[] = [];
+    const w = dowOf(date);
+    for (const [store, m] of byStoreDate.entries()) {
+      const amt = m.get(date)?.amount || 0;
+      if (amt < SPIKE_MIN_DIFF) continue;
+      const xs: number[] = [];
+      for (let k = 1; k <= 8; k++) {
+        const d = addDays(date, -7 * k);
+        const v = m.get(d)?.amount || 0;
+        if (v > 0 && !isKoreanHoliday(d) && dowOf(d) === w) xs.push(v);
+      }
+      if (xs.length < 3) continue;
+      const usual = xs.reduce((a, b) => a + b, 0) / xs.length;
+      if (amt >= usual * SPIKE_RATIO && amt - usual >= SPIKE_MIN_DIFF) {
+        spikes.push({ store, amount: Math.round(amt), usual: Math.round(usual), ratio: Math.round((amt / usual) * 10) / 10 });
+      }
+    }
+    return spikes.sort((a, b) => b.amount - b.usual - (a.amount - a.usual));
+  };
+
   const [y, mo] = month.split("-").map(Number);
   const days: string[] = [];
   for (let d = 1; d <= 31; d++) {
@@ -91,37 +123,11 @@ export async function buildDailyAchievement(month: string) {
       cumPrevYear += prevYear;
     }
 
-    // 스오크: 그날 행사 중인 점포 + 그날 실적
-    const sok = offerPeriods
-      .filter((o) => o.startDate <= date && date <= o.endDate)
-      .map((o) => ({
-        store: o.store as string,
-        name: o.storeName,
-        period: `${o.startDate.slice(5)}~${o.endDate.slice(5)}`,
-        amount: hasActual ? Math.round(byStoreDate.get(o.store as string)?.get(date)?.amount || 0) : null,
-      }));
-
-    // 특이매출
-    const spikes: { store: string; amount: number; usual: number; ratio: number }[] = [];
-    if (hasActual) {
-      const w = dowOf(date);
-      for (const [store, m] of byStoreDate.entries()) {
-        const amt = m.get(date)?.amount || 0;
-        if (amt < SPIKE_MIN_DIFF) continue;
-        const xs: number[] = [];
-        for (let k = 1; k <= 8; k++) {
-          const d = addDays(date, -7 * k);
-          const v = m.get(d)?.amount || 0;
-          if (v > 0 && !isKoreanHoliday(d) && dowOf(d) === w) xs.push(v);
-        }
-        if (xs.length < 3) continue;
-        const usual = xs.reduce((a, b) => a + b, 0) / xs.length;
-        if (amt >= usual * SPIKE_RATIO && amt - usual >= SPIKE_MIN_DIFF) {
-          spikes.push({ store, amount: Math.round(amt), usual: Math.round(usual), ratio: Math.round((amt / usual) * 10) / 10 });
-        }
-      }
-      spikes.sort((a, b) => b.amount - b.usual - (a.amount - a.usual));
-    }
+    // 스오크·특이매출 — 올해 그날 + 전년 같은 요일(52주 전) 그날
+    const sok = sokFor(date, hasActual);
+    const spikes = hasActual ? spikesFor(date) : [];
+    const prevYearSpecialOffers = sokFor(prevYearDate, true);
+    const prevYearSpikes = spikesFor(prevYearDate);
 
     // 서울 기준, 실측(actual) 우선·없으면 예보
     const wxList = (weather as any[]).filter((w) => w.date === date && (!w.region || w.region === "서울"));
@@ -147,6 +153,8 @@ export async function buildDailyAchievement(month: string) {
       cumYoy: hasActual && cumPrevYear ? cumActual / cumPrevYear - 1 : null,
       specialOffers: sok,
       spikes,
+      prevYearSpecialOffers,
+      prevYearSpikes,
     };
   });
 
@@ -229,11 +237,25 @@ export async function buildAnnualTeams(year: number) {
   const [rows, inputs] = await Promise.all([readSalesSummaryRowsForReports(), readInputs()]);
   const asOf = yesterdayKST();
   const obActual = Array(12).fill(0), obPrev = Array(12).fill(0);
+  // MARK 2026-11-17: 오프라인을 형태(로드샵·백화점·쇼핑몰·아울렛·위탁)별로 펼쳐보기 — 목표는 매출탭 점포 일별 목표 합
+  const byGroup = new Map<string, { target: number[]; actual: number[]; prevYear: number[] }>();
+  const storeGroup = new Map<string, string>();
+  for (const r of rows) if (r.channelGroup && Number(r.date.slice(0, 4)) === year) storeGroup.set(r.storeName, r.channelGroup);
+  for (const r of rows) if (r.channelGroup && !storeGroup.has(r.storeName)) storeGroup.set(r.storeName, r.channelGroup);
   for (const r of rows) {
     const yy = Number(r.date.slice(0, 4));
     const mi = Number(r.date.slice(5, 7)) - 1;
-    if (yy === year && r.date <= asOf) obActual[mi] += r.amount;
-    else if (yy === year - 1) obPrev[mi] += r.amount;
+    const g = storeGroup.get(r.storeName) || "기타";
+    if (!byGroup.has(g)) byGroup.set(g, { target: Array(12).fill(0), actual: Array(12).fill(0), prevYear: Array(12).fill(0) });
+    const b = byGroup.get(g)!;
+    if (yy === year) b.target[mi] += r.target;
+    if (yy === year && r.date <= asOf) {
+      obActual[mi] += r.amount;
+      b.actual[mi] += r.amount;
+    } else if (yy === year - 1) {
+      obPrev[mi] += r.amount;
+      b.prevYear[mi] += r.amount;
+    }
   }
   const get = (team: TeamKey, item: ItemKey) => {
     const saved = inputs.map.get(`${year}|${team}|${item}`);
@@ -242,10 +264,22 @@ export async function buildAnnualTeams(year: number) {
     return Array(12).fill(null);
   };
   const monthsElapsed = asOf.slice(0, 4) === String(year) ? Number(asOf.slice(5, 7)) : Number(asOf.slice(0, 4)) > year ? 12 : 0;
+  const GROUP_ORDER = ["로드샵", "백화점", "쇼핑몰", "아울렛", "위탁(오프)"];
+  const rank = (g: string) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? 99 : i; };
+  const offlineGroups = [...byGroup.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .map(([group, b]) => ({
+      key: `OB:${group}`,
+      label: group,
+      target: b.target.map((v) => (v ? Math.round(v) : null)),
+      actual: b.actual.map((v, i) => (i < monthsElapsed ? Math.round(v) : null)),
+      prevYear: b.prevYear.map(Math.round),
+    }));
   return {
     year,
     asOf,
     monthsElapsed,
+    offlineGroups,
     teams: [
       { key: "OB", label: "오프라인 (O.B)", target: get("OB", "target"), actual: obActual.map((v, i) => (i < monthsElapsed ? Math.round(v) : null)), prevYear: obPrev.map(Math.round), auto: ["actual", "prevYear"] },
       { key: "EGI", label: "온라인 (E-GI)", target: get("EGI", "target"), actual: get("EGI", "actual"), prevYear: get("EGI", "prevYear"), auto: [] },

@@ -56,6 +56,40 @@ function HoverDetail({ label, tone, children }: { label: string; tone: string; c
   );
 }
 
+function SokCell({ list, date, label }: { list: any[]; date: string; label: string }) {
+  if (!list?.length) return null;
+  return (
+    <HoverDetail label={`${label} ${list.length}`} tone="bg-violet-100 text-violet-700">
+      <span className="mb-1 block font-black text-slate-500">스페셜오퍼위크 · {date.slice(2).replace(/-/g, ".")} 실적</span>
+      {list.map((o: any, i: number) => (
+        <span key={i} className="flex justify-between gap-3 py-0.5">
+          <span>
+            {shortName(o.store)} <span className="text-slate-400">({o.period})</span>
+          </span>
+          <span className="font-black tabular-nums">{o.amount === null ? "-" : won(o.amount)}</span>
+        </span>
+      ))}
+    </HoverDetail>
+  );
+}
+
+function SpikeCell({ list, date, label }: { list: any[]; date: string; label: string }) {
+  if (!list?.length) return null;
+  return (
+    <HoverDetail label={`${label} ${list.length}`} tone="bg-emerald-100 text-emerald-700">
+      <span className="mb-1 block font-black text-slate-500">{date.slice(2).replace(/-/g, ".")} 평소보다 높은 점포 · 실적 / 평소(8주 같은 요일)</span>
+      {list.map((x: any, i: number) => (
+        <span key={i} className="flex justify-between gap-3 py-0.5">
+          <span>{shortName(x.store)}</span>
+          <span className="tabular-nums">
+            <b>{won(x.amount)}</b> / {won(x.usual)} <span className="font-black text-emerald-600">×{x.ratio}</span>
+          </span>
+        </span>
+      ))}
+    </HoverDetail>
+  );
+}
+
 // ========================= 일별 매출달성 =========================
 function DailyView() {
   const thisMonth = new Date(Date.now() + 9 * 3600 * 1000 - 86400000).toISOString().slice(0, 7);
@@ -76,14 +110,14 @@ function DailyView() {
         )}
       </div>
       <p className="text-[11px] font-semibold text-slate-400">
-        금액 천원 · 전년 = 52주 전 같은 요일 · 전주비 = 7일 전 대비 · <b>스오크</b>=그날 스페셜오퍼위크 진행 점포(올리면 점포별 그날 실적) ·{" "}
+        금액 천원 · 전년 = 52주 전 같은 요일(전년 스오크·특이매출도 그 날짜) · 전주비 = 7일 전 대비 · <b>스오크</b>=그날 스페셜오퍼위크 진행 점포(올리면 점포별 그날 실적) ·{" "}
         <b>특이매출</b>=그 점포 최근 8주 같은 요일 평균의 {data?.spikeRule?.ratio || 1.5}배 이상 + {won(data?.spikeRule?.minDiff || 3000000)} 이상 더 나온 점포
       </p>
       {loading && <p className="text-sm font-bold text-slate-400">불러오는 중...</p>}
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
       {!loading && days.length > 0 && (
         <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[1250px] border-collapse text-xs">
+          <table className="w-full min-w-[1450px] border-collapse text-xs">
             <thead className="sticky top-0 z-20 bg-slate-900 text-white">
               <tr>
                 <th className="whitespace-nowrap px-2 py-2 text-left font-black">일자</th>
@@ -100,6 +134,8 @@ function DailyView() {
                 <th className={TH}>누적전년비</th>
                 <th className="whitespace-nowrap border-l border-slate-700 px-2 py-2 text-center font-black">스오크</th>
                 <th className="whitespace-nowrap px-2 py-2 text-center font-black">특이매출</th>
+                <th className="whitespace-nowrap border-l-2 border-slate-600 px-2 py-2 text-center font-black text-slate-300">전년 스오크</th>
+                <th className="whitespace-nowrap px-2 py-2 text-center font-black text-slate-300">전년 특이매출</th>
               </tr>
             </thead>
             <tbody>
@@ -123,34 +159,16 @@ function DailyView() {
                     <td className={`${TD} text-slate-500`}>{won(d.cumPrevYear)}</td>
                     <td className={`${TD} font-bold ${gColor(d.cumYoy)}`}>{growth(d.cumYoy)}</td>
                     <td className="whitespace-nowrap border-l border-slate-100 px-2 py-1 text-center">
-                      {d.specialOffers.length > 0 && (
-                        <HoverDetail label={`스오크 ${d.specialOffers.length}`} tone="bg-violet-100 text-violet-700">
-                          <span className="mb-1 block font-black text-slate-500">스페셜오퍼위크 · {d.date.slice(5)} 실적</span>
-                          {d.specialOffers.map((o: any, i: number) => (
-                            <span key={i} className="flex justify-between gap-3 py-0.5">
-                              <span>
-                                {shortName(o.store)} <span className="text-slate-400">({o.period})</span>
-                              </span>
-                              <span className="font-black tabular-nums">{o.amount === null ? "-" : won(o.amount)}</span>
-                            </span>
-                          ))}
-                        </HoverDetail>
-                      )}
+                      <SokCell list={d.specialOffers} date={d.date} label="스오크" />
                     </td>
                     <td className="whitespace-nowrap px-2 py-1 text-center">
-                      {d.spikes.length > 0 && (
-                        <HoverDetail label={`특이 ${d.spikes.length}`} tone="bg-emerald-100 text-emerald-700">
-                          <span className="mb-1 block font-black text-slate-500">평소보다 높은 점포 · 실적 / 평소(8주 같은 요일)</span>
-                          {d.spikes.map((s: any, i: number) => (
-                            <span key={i} className="flex justify-between gap-3 py-0.5">
-                              <span>{shortName(s.store)}</span>
-                              <span className="tabular-nums">
-                                <b>{won(s.amount)}</b> / {won(s.usual)} <span className="font-black text-emerald-600">×{s.ratio}</span>
-                              </span>
-                            </span>
-                          ))}
-                        </HoverDetail>
-                      )}
+                      <SpikeCell list={d.spikes} date={d.date} label="특이" />
+                    </td>
+                    <td className="whitespace-nowrap border-l-2 border-slate-200 bg-slate-50/60 px-2 py-1 text-center">
+                      <SokCell list={d.prevYearSpecialOffers} date={d.prevYearDate} label="스오크" />
+                    </td>
+                    <td className="whitespace-nowrap bg-slate-50/60 px-2 py-1 text-center">
+                      <SpikeCell list={d.prevYearSpikes} date={d.prevYearDate} label="특이" />
                     </td>
                   </tr>
                 );
@@ -187,8 +205,11 @@ function AnnualView() {
   const [draft, setDraft] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [obOpen, setObOpen] = useState(false); // 오프라인 형태별(로드샵·백화점…) 펼치기
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   const teams: any[] = data?.teams || [];
+  const offlineGroups: any[] = data?.offlineGroups || [];
   const editable: Record<string, string[]> = { OB: ["target"], EGI: ["target", "actual", "prevYear"], GP: ["target", "actual", "prevYear"] };
   useEffect(() => {
     if (!teams.length) return;
@@ -227,7 +248,7 @@ function AnnualView() {
     }
   }
 
-  const block = (t: any, isTotal = false) => {
+  const block = (t: any, isTotal = false, sub = false) => {
     const rowsDef: { item: string; label: string }[] = [
       { item: "target", label: "목표" },
       { item: "actual", label: t.key === "GP" ? "실적(NMV)" : "실적" },
@@ -235,12 +256,28 @@ function AnnualView() {
       { item: "prevYear", label: "전년" },
       { item: "growth", label: "신장" },
     ];
-    return rowsDef.map((r, ri) => (
-      <tr key={`${t.key}-${r.item}`} className={`${ri === 0 ? "border-t-2 border-slate-300" : "border-t border-slate-100"} ${isTotal ? "bg-amber-50/60" : ""}`}>
+    const shown = sub && !openGroups.has(t.key) ? rowsDef.filter((r) => r.item === "actual") : rowsDef;
+    return shown.map((r, ri) => (
+      <tr key={`${t.key}-${r.item}`} className={`${ri === 0 ? (sub ? "border-t border-slate-200" : "border-t-2 border-slate-300") : "border-t border-slate-100"} ${isTotal ? "bg-amber-50/60" : sub ? "bg-sky-50/40" : ""}`}>
         {ri === 0 && (
-          <td rowSpan={5} className={`sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 px-3 py-1.5 font-black ${isTotal ? "bg-amber-50" : "bg-white"}`}>
+          <td rowSpan={sub && !openGroups.has(t.key) ? 1 : 5} className={`sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 px-3 py-1.5 font-black ${isTotal ? "bg-amber-50" : sub ? "bg-sky-50 pl-6 text-slate-700" : "bg-white"}`}>
+            {t.key === "OB" && (
+              <button type="button" onClick={() => setObOpen((v) => !v)} className="mr-1 h-5 w-5 rounded border border-slate-300 text-xs leading-none text-slate-600">
+                {obOpen ? "−" : "+"}
+              </button>
+            )}
+            {sub && (
+              <button
+                type="button"
+                onClick={() => setOpenGroups((s) => { const n = new Set(s); n.has(t.key) ? n.delete(t.key) : n.add(t.key); return n; })}
+                className="mr-1 h-5 w-5 rounded border border-slate-300 text-xs leading-none text-slate-500"
+              >
+                {openGroups.has(t.key) ? "−" : "+"}
+              </button>
+            )}
             {t.label}
-            {t.key === "OB" && <span className="block text-[10px] font-bold text-slate-400">실적·전년 자동</span>}
+            {t.key === "OB" && <span className="block text-[10px] font-bold text-slate-400">실적·전년 자동 · + 형태별</span>}
+            {sub && <span className="block text-[10px] font-bold text-slate-400">목표=매출탭 점포 목표 합</span>}
             {(t.key === "EGI" || t.key === "GP") && <span className="block text-[10px] font-bold text-slate-400">직접 입력</span>}
           </td>
         )}
@@ -324,7 +361,12 @@ function AnnualView() {
             </thead>
             <tbody>
               {totals && block(totals, true)}
-              {teams.map((t) => <Fragment key={t.key}>{block(t)}</Fragment>)}
+              {teams.map((t) => (
+                <Fragment key={t.key}>
+                  {block(t)}
+                  {t.key === "OB" && obOpen && offlineGroups.map((g) => <Fragment key={g.key}>{block(g, false, true)}</Fragment>)}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -358,10 +400,23 @@ function AnnualStoresView() {
     for (const s of stores) for (const i of ms) if (s.prevYear[i] > 0 && s.actual[i] > 0) { a += s.actual[i]; p += s.prevYear[i]; }
     return p ? a / p - 1 : null;
   };
-  const totalRow = {
-    actual: Array.from({ length: 12 }, (_, i) => stores.reduce((t, s) => t + (s.actual[i] || 0), 0)),
-    prevYear: Array.from({ length: 12 }, (_, i) => stores.reduce((t, s) => t + (s.prevYear[i] || 0), 0)),
-  };
+  const sumRows = (list: any[]) => ({
+    actual: Array.from({ length: 12 }, (_, i) => list.reduce((t, s) => t + (s.actual[i] || 0), 0)),
+    prevYear: Array.from({ length: 12 }, (_, i) => list.reduce((t, s) => t + (s.prevYear[i] || 0), 0)),
+  });
+  const totalRow = sumRows(stores);
+  // 형태(로드샵·백화점…)별 소계 + 접기/펼치기(매출탭 점포별과 같은 방식)
+  const groups = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const st of stores) {
+      const g = st.channelGroup || "기타";
+      if (!m.has(g)) m.set(g, []);
+      m.get(g)!.push(st);
+    }
+    return [...m.entries()];
+  }, [stores]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const allCollapsed = groups.length > 0 && groups.every(([g]) => collapsed.has(g));
 
   const cells = (s: any, bold = false) => {
     const y = ytd(s);
@@ -433,21 +488,57 @@ function AnnualStoresView() {
             </thead>
             <tbody>
               <tr className="border-t border-slate-200 bg-amber-50/80">
-                <td className="sticky left-0 z-10 bg-amber-50 px-2 py-1.5" />
+                <td className="sticky left-0 z-10 bg-amber-50 px-1 py-1.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map(([g]) => g)))}
+                    className="h-5 w-5 rounded border border-amber-300 bg-white text-xs leading-none text-amber-700"
+                  >
+                    {allCollapsed ? "+" : "−"}
+                  </button>
+                </td>
                 <td />
                 <td />
                 <td className="sticky left-[34px] z-10 bg-amber-50 px-2 py-1.5 font-black">합계 ({stores.filter((s) => sum(s.actual, months) > 0).length}개)</td>
                 {cells(totalRow, true)}
               </tr>
-              {stores.map((s, idx) => (
-                <tr key={s.storeName} className={`border-t border-slate-100 ${idx % 2 ? "bg-slate-50/60" : "bg-white"}`}>
-                  <td className="sticky left-0 z-10 bg-inherit px-2 py-1.5 text-center text-slate-400">{idx + 1}</td>
-                  <td className="px-2 py-1.5 text-slate-500">{s.channelCode}</td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-slate-500">{s.channelGroup}</td>
-                  <td className="sticky left-[34px] z-10 whitespace-nowrap bg-inherit px-2 py-1.5 font-black text-slate-900">{shortName(s.storeName)}</td>
-                  {cells(s)}
-                </tr>
-              ))}
+              {(() => {
+                let no = 0;
+                return groups.map(([g, list]) => (
+                  <Fragment key={g}>
+                    <tr className="border-t border-slate-200 bg-sky-50/70">
+                      <td className="sticky left-0 z-10 bg-sky-50 px-1 py-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setCollapsed((c) => { const n = new Set(c); n.has(g) ? n.delete(g) : n.add(g); return n; })}
+                          className="h-5 w-5 rounded border border-slate-300 bg-white text-xs leading-none text-slate-600"
+                        >
+                          {collapsed.has(g) ? "+" : "−"}
+                        </button>
+                      </td>
+                      <td />
+                      <td />
+                      <td className="sticky left-[34px] z-10 whitespace-nowrap bg-sky-50 px-2 py-1.5 font-black text-sky-900">
+                        {g} 소계 ({list.length}개)
+                      </td>
+                      {cells(sumRows(list), true)}
+                    </tr>
+                    {!collapsed.has(g) &&
+                      list.map((s: any) => {
+                        no += 1;
+                        return (
+                          <tr key={s.storeName} className={`border-t border-slate-100 ${no % 2 ? "bg-white" : "bg-slate-50/60"}`}>
+                            <td className="sticky left-0 z-10 bg-inherit px-2 py-1.5 text-center text-slate-400">{no}</td>
+                            <td className="px-2 py-1.5 text-slate-500">{s.channelCode}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-slate-500">{s.channelGroup}</td>
+                            <td className="sticky left-[34px] z-10 whitespace-nowrap bg-inherit px-2 py-1.5 font-black text-slate-900">{shortName(s.storeName)}</td>
+                            {cells(s)}
+                          </tr>
+                        );
+                      })}
+                  </Fragment>
+                ));
+              })()}
             </tbody>
           </table>
         </div>

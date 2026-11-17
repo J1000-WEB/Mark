@@ -235,3 +235,19 @@ function columnIndexToLetter(index: number) {
   }
   return letters || "R";
 }
+
+// MARK 2026-11-17: 일별 매출달성 "스오크" 칸용 — 세부일정의 점포·시작일·종료일만(실적 계산 없이)
+export async function readSpecialOfferPeriods(): Promise<{ storeName: string; startDate: string; endDate: string }[]> {
+  const { rows, headerRowIdx, storeCol, startCol, endCol } = await readSpecialOfferSheet();
+  if (headerRowIdx < 0) return [];
+  const out: { storeName: string; startDate: string; endDate: string }[] = [];
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.length) continue;
+    const storeName = text(row[storeCol]);
+    const startDate = parseDate(row[startCol]);
+    const endDate = parseDate(row[endCol]) || startDate;
+    if (storeName && startDate) out.push({ storeName, startDate, endDate });
+  }
+  return out;
+}

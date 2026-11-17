@@ -4929,6 +4929,14 @@ const SALES_SUMMARY_STORE_CODE_EXCLUDE = new Set(["21029"]);
 // MARK 2026-11-11: 실시간 탭 예상 마감 매출용 — 매출탭 일별 데이터에서 실시간 대상 매장(직영·백화점·아울렛)만 날짜별 합계.
 // 실시간 탭은 3분마다 새로고침되니 서버 인스턴스 메모리에 1시간 캐시.
 let realtimeDailyTotalsCache: { at: number; map: Map<string, number> } | null = null;
+// MARK 2026-11-17: 매출탭 리포트(일별 매출달성·연간실적·연간실적(점포))용 — 매출탭과 같은 점포 목록·제외 코드로 거른 일별 행
+export async function readSalesSummaryRowsForReports(): Promise<SalesSummaryDailyRow[]> {
+  const { rows } = await readSalesSummarySnapshot();
+  return rows.filter(
+    (r) => SALES_SUMMARY_STORE_WHITELIST_KEYS.has(normalizeStoreKey(r.storeName)) && !SALES_SUMMARY_STORE_CODE_EXCLUDE.has(text(r.channelCode))
+  );
+}
+
 export async function readRealtimeStoreDailyTotals(): Promise<Map<string, number>> {
   if (realtimeDailyTotalsCache && Date.now() - realtimeDailyTotalsCache.at < 60 * 60 * 1000) return realtimeDailyTotalsCache.map;
   const { rows } = await readSalesSummarySnapshot();

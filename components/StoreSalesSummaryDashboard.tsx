@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
+import SalesReportsPanel, { type ReportTab } from "@/components/SalesReportsPanel";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 import SalesRefreshBanner from "@/components/SalesRefreshBanner";
@@ -396,6 +397,7 @@ export default function StoreSalesSummaryDashboard() {
 
   // MARK 2026-11-10: 주간 전주比 — 눌러서 전주比(%)·전주금액·금액차이 3열을 펼쳐봄(같은 요일까지끼리 비교)
   const [showWowDetail, setShowWowDetail] = useState(false);
+  const [reportTab, setReportTab] = useState<"store" | ReportTab>("store");
   // 기간비교를 직접 골랐는지(날짜를 바꿀 때 직접 고른 기간만 유지하고, 기본값이면 새 날짜의 주로 바뀌게)
   const [rangeIsCustom, setRangeIsCustom] = useState(false);
 
@@ -867,6 +869,32 @@ export default function StoreSalesSummaryDashboard() {
         {/* MARK 2026-10-28: 자동갱신(4:00/9:30) 상태 + 용인 매출 확인 배너 */}
         <SalesRefreshBanner refreshKey={driveMessage} onReimport={runDriveImport} importing={driveImporting} />
 
+        {/* MARK 2026-11-17: 팀 시트의 "일별 매출달성"·"연간실적"·"연간실적(점포)"를 매출탭 안 탭으로 */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(
+            [
+              ["store", "점포별"],
+              ["daily", "일별 매출달성"],
+              ["annual", "연간실적"],
+              ["annualStores", "연간실적(점포)"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setReportTab(k)}
+              className={`rounded-xl px-4 py-2 text-sm font-black ${reportTab === k ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {reportTab !== "store" ? (
+          <SalesReportsPanel tab={reportTab} />
+        ) : (
+        <>
+
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-slate-400">STORE SALES SUMMARY</p>
@@ -1158,6 +1186,8 @@ export default function StoreSalesSummaryDashboard() {
               </table>
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </main>

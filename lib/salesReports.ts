@@ -5,7 +5,7 @@
 // - 연간실적(점포): 매장별 월 실적·전년(달력 기준 작년 같은 달)·신장
 import { readSalesSummaryRowsForReports, normalizeStoreKey } from "@/lib/dataBuilder";
 import { readSpecialOfferPeriods } from "@/lib/specialOfferWeek";
-import { readWeatherHistory, pickWeatherForDate } from "@/lib/weather";
+import { readWeatherHistory } from "@/lib/openWeather";
 import { isKoreanHoliday } from "@/lib/koreanHolidays";
 import { getDbSheetId, getSheetValuesById, ensureSheetExistsById, safeReplaceSheetValuesById } from "@/lib/googleSheets";
 
@@ -123,7 +123,9 @@ export async function buildDailyAchievement(month: string) {
       spikes.sort((a, b) => b.amount - b.usual - (a.amount - a.usual));
     }
 
-    const wx = pickWeatherForDate(weather as any, date) as any;
+    // 서울 기준, 실측(actual) 우선·없으면 예보
+    const wxList = (weather as any[]).filter((w) => w.date === date && (!w.region || w.region === "서울"));
+    const wx = wxList.find((w) => w.source === "actual") || wxList[wxList.length - 1] || null;
     return {
       date,
       dow: DOW[dowOf(date)],

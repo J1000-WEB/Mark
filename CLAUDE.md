@@ -197,6 +197,19 @@
   남기고, PC `schedule-style-channel-upload.js`가 월요일 6:40에 `?caller=pc-erp-agent`로 백업 호출(같은 주차는 덮어씀).
 - 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js).
 
+## PIP 과거 보관 (MARK_PIP_ARCHIVE, 2026-11-17)
+
+- 시트 `1P3gzejuFCnGd8nXR946_ttXY9VcqropnS5wokCmWLwA`(소천님이 만들어 서비스 계정에 공유). PC `erp-agent/pip-archive.js`가 ERP PIP(Bust0120)를
+  하루씩 직접 조회해 **엑셀 없이** 압축 저장: `판매_일별`(하루 1줄: 날짜·요일·판매줄수·오프라인수량·오프라인금액·전체금액·저장시각·조각수·조각…,
+  조각=base64(gzip(JSON {v,d,sh:[[채널코드,채널명,팀명]],sk:["스타일|칼라|사이즈"],s:[[채널i,품목i,수량,금액]]})), 칸당 45,000자),
+  `재고_주별`(일요일만, 물류창고 포함), `상품정보`(품목별 이름·년도·시즌·아이템·소비자가·판매가, 새 품목만 추가). 팀 소계 채널(온라인팀 등)은 뺌.
+- 범위: 2025-11-01~2026-08-31(303일). Daily_Sales_History는 2026-06-09부터 있지만 6~8월 금액이 추정치(매출탭 대비 6월 1.42·7월 1.19·8월 0.92배,
+  `/api/history-coverage`로 확인)라 8월까지 PIP로 받음. 9월부터는 Daily_Sales_History가 매출탭과 0.98~1.03배.
+- 검증: 2025-11-16 오프라인 91,353,806원 = 매출탭 원 단위 일치, 오프라인팀 소계=매장합. 하루 조회 약 5분(년도 다음해~3년 전 5개 코드), 판매 약 46KB/일.
+- 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 최근→과거 순. 잠금 `logs/pip-archive.lock`(8시간), 로그 `logs/pip-archive.log`.
+  run-now로 돌릴 땐 인자에 ':'가 안 돼서 `--until 0150`. 1회: `--date YYYYMMDD`. 첫 실행 2026-11-17 18:58 시작.
+- 읽는 쪽(대시보드)은 아직 없음 — 날짜 열(A)로 줄 찾고 조각 이어붙여 gunzip.
+
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 
 - `C:\Users\User\Documents\PIP업데이트YYYYMMDD.xlsx`, 파워오토메이트가 매일 새벽 다운로드.

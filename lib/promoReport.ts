@@ -48,8 +48,9 @@ async function aggregateWeek(start: string, styles: Set<string>, master: Map<str
     : [];
   if (archDates.length) {
     const arch = await readArchivedSales(archDates).catch(() => ({ rows: [] as any[] }));
-    // 보관 시트는 ERP 팀명이 있어서 오프라인팀만 씀(온라인·글로벌·기타 제외), 매장주문/반품은 아래 isPromoExcludedStore가 뺌
-    for (const r of arch.rows) if (r.team === "오프라인팀") rows.push(r);
+    // 보관 시트엔 ERP 팀명이 있음 — 온라인·글로벌 팀은 빼고(위탁 무신사 매장 등은 오프라인팀이 아닐 수 있어 팀명으로 거르지 않음),
+    // 나머지(매장주문/반품·기타·온라인 이름)는 아래 isPromoExcludedStore가 뺌
+    for (const r of arch.rows) if (!/온라인|글로벌/.test(r.team)) rows.push(r);
   }
   const byStyle = new Map<string, Agg>();
   const unitPrices = new Map<string, Map<number, number>>(); // 스타일 → (개당 판매가 → 수량) — 현판가 추정용

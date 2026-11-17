@@ -365,7 +365,7 @@ function AnnualView() {
         {msg && <span className="text-xs font-bold text-slate-500">{msg}</span>}
       </div>
       <p className="text-[11px] font-semibold text-slate-400">
-        금액 천원(입력은 원 단위) · 오프라인 실적·전년은 매출탭 데이터로 자동(어제까지) · 오프라인 목표와 온라인·글로벌은 입력값(처음엔 팀 시트 "연간실적" 숫자) · 달성·신장은 실적이 있는 달끼리 비교
+        금액 천원(입력은 원 단위) · 오프라인 실적·전년은 매출탭 데이터로 자동(어제까지) · 오프라인 목표와 온라인·글로벌은 입력값(처음엔 팀 시트 "연간실적" 숫자) · 달성·신장은 실적이 있는 달끼리 비교 · 진행 중인 달의 오프라인 전년은 작년 같은 날짜까지
       </p>
       {loading && <p className="text-sm font-bold text-slate-400">불러오는 중...</p>}
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
@@ -477,7 +477,7 @@ function AnnualStoresView() {
           </p>
         )}
       </div>
-      <p className="text-[11px] font-semibold text-slate-400">금액 천원 · 전년 = 작년 같은 달(달력 기준) · 매출탭과 같은 점포 목록</p>
+      <p className="text-[11px] font-semibold text-slate-400">금액 천원 · 전년 = 작년 같은 달(달력 기준, 진행 중인 달은 작년 같은 날짜까지) · 매출탭과 같은 점포 목록</p>
       {loading && <p className="text-sm font-bold text-slate-400">불러오는 중...</p>}
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
       {!loading && stores.length > 0 && (

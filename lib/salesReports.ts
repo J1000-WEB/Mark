@@ -170,6 +170,17 @@ export async function buildDailyAchievement(month: string) {
   };
 }
 
+// MARK 2026-11-17: 진행 중인 달은 전년도 "같은 날짜까지"만 비교(예: 11/16 기준이면 작년 11/1~11/16).
+// 예전엔 작년 그 달 전체와 비교해서 진행 중인 달 신장이 −40%대로 나오고 분기·반기·합계 신장까지 틀어졌음.
+function prevYearIncluded(dateKey: string, year: number, asOf: string) {
+  // dateKey는 전년(year-1) 날짜. 올해 같은 월·일이 asOf 이전(포함)이면 비교 대상
+  if (asOf.slice(0, 4) !== String(year)) return true; // 지난해 리포트 등 — 전체 비교
+  const sameDayThisYear = `${year}${dateKey.slice(4)}`;
+  // 진행 중인 달만 날짜까지 자르고, 지난 달·남은 달(12월 등)은 전년 한 달 전체를 그대로(참고용)
+  if (dateKey.slice(5, 7) !== asOf.slice(5, 7)) return true;
+  return sameDayThisYear <= asOf;
+}
+
 // ========================= 연간실적(점포) =========================
 export async function buildAnnualStores(year: number) {
   const rows = await readSalesSummaryRowsForReports();
@@ -192,7 +203,7 @@ export async function buildAnnualStores(year: number) {
     }
     const mi = Number(r.date.slice(5, 7)) - 1;
     if (yy === ys) s.actual[mi] += r.amount;
-    else s.prevYear[mi] += r.amount;
+    else if (prevYearIncluded(r.date, year, asOf)) s.prevYear[mi] += r.amount;
   }
   // 올해 매출이 하나도 없는 점포(폐점 등)는 빼되, 전년만 있는 점포는 남겨서 전년 합계가 맞게
   const list = [...stores.values()]
@@ -252,7 +263,7 @@ export async function buildAnnualTeams(year: number) {
     if (yy === year && r.date <= asOf) {
       obActual[mi] += r.amount;
       b.actual[mi] += r.amount;
-    } else if (yy === year - 1) {
+    } else if (yy === year - 1 && prevYearIncluded(r.date, year, asOf)) {
       obPrev[mi] += r.amount;
       b.prevYear[mi] += r.amount;
     }

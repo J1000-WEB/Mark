@@ -38,6 +38,29 @@ export default function PromoReportPanel() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showShare, setShowShare] = useState(false);
+  // 보고 싶은 프로모션만 체크(브라우저에 기억) — 저장값 없으면 전부
+  const [hidden, setHidden] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      setHidden(JSON.parse(localStorage.getItem("promoReportHidden") || "{}") || {});
+    } catch {}
+  }, []);
+  const toggleGroup = (g: string) =>
+    setHidden((h) => {
+      const next = { ...h, [g]: !h[g] };
+      try {
+        localStorage.setItem("promoReportHidden", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  const setAll = (show: boolean, list: string[]) => {
+    const next: Record<string, boolean> = {};
+    if (!show) list.forEach((g) => (next[g] = true));
+    setHidden(next);
+    try {
+      localStorage.setItem("promoReportHidden", JSON.stringify(next));
+    } catch {}
+  };
 
   useEffect(() => {
     let alive = true;
@@ -57,7 +80,8 @@ export default function PromoReportPanel() {
     };
   }, [week]);
 
-  const groups: any[] = data?.groups || [];
+  const allGroups: any[] = data?.groups || [];
+  const groups: any[] = allGroups.filter((g) => !hidden[g.group]);
   const total = data?.total;
   const isOpen = (g: string) => open[g] !== false; // 기본 펼침
 
@@ -82,7 +106,28 @@ export default function PromoReportPanel() {
             오프라인(위탁·면세 포함) 기준 · 매장주문/매장반품·온라인 제외 · 금주 vs 전주(7일 전) · 품번 목록은 MARK_DB "프로모션_품번"
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {allGroups.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5">
+              <span className="px-1 text-xs font-black text-slate-400">조회</span>
+              {allGroups.map((g) => (
+                <label
+                  key={g.group}
+                  className={`flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${hidden[g.group] ? "text-slate-400" : "bg-slate-100 text-slate-800"}`}
+                >
+                  <input type="checkbox" checked={!hidden[g.group]} onChange={() => toggleGroup(g.group)} className="h-3.5 w-3.5" />
+                  {g.group}
+                </label>
+              ))}
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-100"
+                onClick={() => setAll(groups.length !== allGroups.length, allGroups.map((g) => g.group))}
+              >
+                {groups.length !== allGroups.length ? "전체" : "전체해제"}
+              </button>
+            </div>
+          )}
           <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => data && setWeek(addDays(data.weekStart, -7))}>
             ◀ 전주
           </button>

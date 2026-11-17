@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" | "rounding" }) {
+export default function NavTabs({ active }: { active: "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" | "rounding" | "product" }) {
   // MARK: 상품동향/VMD/스냅샷 탭은 안 쓰셔서 네비게이션에서 숨겼습니다 (라우트 자체는
   // 남아있어서 주소로 직접 들어가면 여전히 열립니다 — 나중에 다시 켜고 싶으면 이 배열에
   // 도로 추가하면 됩니다).
@@ -14,6 +14,7 @@ export default function NavTabs({ active }: { active: "schedule" | "sales-data" 
     { key: "store-sales", label: "매출", href: "/store-sales" },
     { key: "weekly", label: "주간", href: "/weekly" },
     { key: "inventory", label: "재고CTRL", href: "/inventory" },
+    { key: "product", label: "상품", href: "/product" }, // 2026-11-17 프로모션 결과 등 상품 단위 리포트
     { key: "realtime", label: "실시간", href: "/realtime" },
     { key: "store", label: "매장", href: "/store" },
     { key: "rounding", label: "라운딩", href: "/rounding" },

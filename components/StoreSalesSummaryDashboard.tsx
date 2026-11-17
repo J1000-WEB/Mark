@@ -2,7 +2,6 @@
 
 import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
 import SalesReportsPanel, { type ReportTab } from "@/components/SalesReportsPanel";
-import PromoReportPanel from "@/components/PromoReportPanel";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
 import SalesRefreshBanner from "@/components/SalesRefreshBanner";
@@ -398,7 +397,7 @@ export default function StoreSalesSummaryDashboard() {
 
   // MARK 2026-11-10: 주간 전주比 — 눌러서 전주比(%)·전주금액·금액차이 3열을 펼쳐봄(같은 요일까지끼리 비교)
   const [showWowDetail, setShowWowDetail] = useState(false);
-  const [reportTab, setReportTab] = useState<"store" | "promo" | ReportTab>("store");
+  const [reportTab, setReportTab] = useState<"store" | ReportTab>("store");
   // 기간비교를 직접 골랐는지(날짜를 바꿀 때 직접 고른 기간만 유지하고, 기본값이면 새 날짜의 주로 바뀌게)
   const [rangeIsCustom, setRangeIsCustom] = useState(false);
 
@@ -878,7 +877,6 @@ export default function StoreSalesSummaryDashboard() {
               ["daily", "일별 매출달성"],
               ["annual", "연간실적"],
               ["annualStores", "연간실적(점포)"],
-              ["promo", "프로모션 결과"],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -892,9 +890,7 @@ export default function StoreSalesSummaryDashboard() {
           ))}
         </div>
 
-        {reportTab === "promo" ? (
-          <PromoReportPanel />
-        ) : reportTab !== "store" ? (
+        {reportTab !== "store" ? (
           <SalesReportsPanel tab={reportTab} />
         ) : (
         <>

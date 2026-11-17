@@ -206,7 +206,8 @@
 - 범위: 2025-11-01~2026-08-31(303일). Daily_Sales_History는 2026-06-09부터 있지만 6~8월 금액이 추정치(매출탭 대비 6월 1.42·7월 1.19·8월 0.92배,
   `/api/history-coverage`로 확인)라 8월까지 PIP로 받음. 9월부터는 Daily_Sales_History가 매출탭과 0.98~1.03배.
 - 검증: 2025-11-16 오프라인 91,353,806원 = 매출탭 원 단위 일치, 오프라인팀 소계=매장합. 하루 조회 약 5분(년도 다음해~3년 전 5개 코드), 판매 약 46KB/일.
-- 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 최근→과거 순. 잠금 `logs/pip-archive.lock`(8시간), 로그 `logs/pip-archive.log`.
+- 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 **오래된 날짜(2025-11-01)→최근** 순(소천님 요청, `--newest-first`로 반대). 잠금 `logs/pip-archive.lock`(pid, 그 pid가 죽었거나 8시간 지나면 무시,
+  `--takeover`면 돌던 작업이 지금 날짜 저장할 때까지 기다렸다가 끄고 이어받음), 로그 `logs/pip-archive.log`. ⚠ PC 스크립트(.js)를 고치면 run-all 재시작으로 돌던 보관 작업이 끊길 수 있음(그날짜만 다음에 다시 받음).
   run-now로 돌릴 땐 인자에 ':'가 안 돼서 `--until 0150`. 1회: `--date YYYYMMDD`. 첫 실행 2026-11-17 18:58 시작.
 - 읽는 쪽(대시보드)은 아직 없음 — 날짜 열(A)로 줄 찾고 조각 이어붙여 gunzip.
 

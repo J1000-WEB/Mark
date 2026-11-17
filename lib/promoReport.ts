@@ -6,6 +6,10 @@ import { loadChannelMaster } from "@/lib/channelMaster";
 import { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById } from "@/lib/googleSheets";
 import { pickDailySheetTitle } from "@/lib/dailySales";
 import { readPromoItems, type PromoItem } from "@/lib/promoGroups";
+import { readArchivedSales } from "@/lib/pipArchive";
+
+// 2026-09-01 전 날짜는 PIP 과거 보관 시트(MARK_PIP_ARCHIVE)에서 읽음 — Daily_Sales_History는 2026-06-09부터 있지만 8월까지 금액이 추정치.
+const ARCHIVE_BEFORE = "2026-09-01";
 
 const t = (v: any) => String(v ?? "").trim();
 const n = (v: any) => {
@@ -37,7 +41,16 @@ type WeekAgg = { byStyle: Map<string, Agg>; unitPrices: Map<string, Map<number, 
 
 async function aggregateWeek(start: string, styles: Set<string>, master: Map<string, any>): Promise<WeekAgg> {
   const dates = range7(start);
-  const rows = await readDailyHistoryRowsForExactDates(dates);
+  const histDates = dates.filter((d) => d >= ARCHIVE_BEFORE);
+  const archDates = dates.filter((d) => d < ARCHIVE_BEFORE);
+  const rows: { date: string; storeName: string; styleCode: string; qty: number; amount: number }[] = histDates.length
+    ? await readDailyHistoryRowsForExactDates(histDates)
+    : [];
+  if (archDates.length) {
+    const arch = await readArchivedSales(archDates).catch(() => ({ rows: [] as any[] }));
+    // 보관 시트는 ERP 팀명이 있어서 오프라인팀만 씀(온라인·글로벌·기타 제외), 매장주문/반품은 아래 isPromoExcludedStore가 뺌
+    for (const r of arch.rows) if (r.team === "오프라인팀") rows.push(r);
+  }
   const byStyle = new Map<string, Agg>();
   const unitPrices = new Map<string, Map<number, number>>(); // 스타일 → (개당 판매가 → 수량) — 현판가 추정용
   const total: Agg = { qty: 0, amount: 0 };

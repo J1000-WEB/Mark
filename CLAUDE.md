@@ -209,7 +209,8 @@
 - 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 **오래된 날짜(2025-11-01)→최근** 순(소천님 요청, `--newest-first`로 반대). 잠금 `logs/pip-archive.lock`(pid, 그 pid가 죽었거나 8시간 지나면 무시,
   `--takeover`면 돌던 작업이 지금 날짜 저장할 때까지 기다렸다가 끄고 이어받음), 로그 `logs/pip-archive.log`. ⚠ PC 스크립트(.js)를 고치면 run-all 재시작으로 돌던 보관 작업이 끊길 수 있음(그날짜만 다음에 다시 받음).
   run-now로 돌릴 땐 인자에 ':'가 안 돼서 `--until 0150`. 1회: `--date YYYYMMDD`. 첫 실행 2026-11-17 18:58 시작.
-- 읽는 쪽(대시보드)은 아직 없음 — 날짜 열(A)로 줄 찾고 조각 이어붙여 gunzip.
+- 읽는 쪽: `lib/pipArchive.ts` `readArchivedSales(dates)`(날짜 열 A 10분 캐시 → 그 줄만 읽어 gunzip, 팀명 포함). 프로모션 결과(`lib/promoReport.ts`)는
+  2026-09-01 전 날짜를 여기서 읽음(오프라인팀만) → 에센셜 전년 칸·러닝합산 채워짐, 작년 주차도 조회 가능.
 
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 

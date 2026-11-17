@@ -47,10 +47,8 @@ export default function PromoReportPanel() {
       .then((r) => r.json())
       .then((j) => {
         if (!alive) return;
-        if (j.ok) {
-          setData(j);
-          if (!week) setWeek(j.weekStart);
-        } else setError(j.error || "불러오지 못했어요.");
+        if (j.ok) setData(j);
+        else setError(j.error || "불러오지 못했어요.");
       })
       .catch(() => alive && setError("불러오지 못했어요."))
       .finally(() => alive && setLoading(false));
@@ -85,17 +83,17 @@ export default function PromoReportPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => week && setWeek(addDays(week, -7))}>
+          <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => data && setWeek(addDays(data.weekStart, -7))}>
             ◀ 전주
           </button>
           <input
             type="date"
-            value={week}
+            value={week || data?.weekStart || ""}
             onChange={(e) => e.target.value && setWeek(e.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
             title="그 주 아무 날짜나 고르면 월요일 기준 주로 맞춰요"
           />
-          <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => week && setWeek(addDays(week, 7))}>
+          <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => data && setWeek(addDays(data.weekStart, 7))}>
             다음주 ▶
           </button>
           <button

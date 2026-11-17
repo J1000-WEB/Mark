@@ -1,0 +1,197 @@
+// MARK 2026-11-17: 주간 IMC 프로모션 결과 리포트 — 팀이 매주 월요일 엑셀로 만들던 "N월 N주차 판매실적"의 "프로모션총요약"을
+// 대시보드 데이터(Daily_Sales_History)로 계산. 품번 목록은 MARK_DB "프로모션_품번"(lib/promoGroups.ts).
+// 범위: 오프라인 채널(위탁·면세 포함) — 온라인·글로벌·기타·매장주문·매장반품은 뺌(팀 파일 판매DB와 같은 범위).
+import { readDailyHistoryRowsForExactDates, isOnlineChannel } from "@/lib/dailySales";
+import { loadChannelMaster } from "@/lib/channelMaster";
+import { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById } from "@/lib/googleSheets";
+import { pickDailySheetTitle } from "@/lib/dailySales";
+import { readPromoItems, type PromoItem } from "@/lib/promoGroups";
+
+const t = (v: any) => String(v ?? "").trim();
+const n = (v: any) => {
+  const x = Number(String(v ?? "").replace(/,/g, ""));
+  return Number.isFinite(x) ? x : 0;
+};
+
+function addDays(ymd: string, days: number) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function mondayOf(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  const dow = (d.getUTCDay() + 6) % 7; // 월=0
+  return addDays(ymd, -dow);
+}
+const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+const range7 = (start: string) => Array.from({ length: 7 }, (_, i) => addDays(start, i));
+
+export function isPromoExcludedStore(storeName: string, master?: Map<string, any>) {
+  const s = t(storeName);
+  if (!s || /매장주문|매장반품/.test(s)) return true;
+  return isOnlineChannel(s, master as any);
+}
+
+type Agg = { qty: number; amount: number };
+type WeekAgg = { byStyle: Map<string, Agg>; total: Agg; dates: string[]; datesWithData: string[] };
+
+async function aggregateWeek(start: string, styles: Set<string>, master: Map<string, any>): Promise<WeekAgg> {
+  const dates = range7(start);
+  const rows = await readDailyHistoryRowsForExactDates(dates);
+  const byStyle = new Map<string, Agg>();
+  const total: Agg = { qty: 0, amount: 0 };
+  const seenDates = new Set<string>();
+  const excludedCache = new Map<string, boolean>();
+  for (const r of rows) {
+    if (!dates.includes(r.date)) continue;
+    let ex = excludedCache.get(r.storeName);
+    if (ex === undefined) {
+      ex = isPromoExcludedStore(r.storeName, master);
+      excludedCache.set(r.storeName, ex);
+    }
+    if (ex) continue;
+    seenDates.add(r.date);
+    total.qty += r.qty;
+    total.amount += r.amount;
+    const st = t(r.styleCode).toUpperCase();
+    if (!styles.has(st)) continue;
+    const a = byStyle.get(st) || { qty: 0, amount: 0 };
+    a.qty += r.qty;
+    a.amount += r.amount;
+    byStyle.set(st, a);
+  }
+  return { byStyle, total, dates, datesWithData: [...seenDates].sort() };
+}
+
+// 현판가: PIP(스타일별 채널별, 금액) 마스터 열 — 스타일=13, 소비자가=19, 판매가=20 (같은 스타일 여러 행이면 가장 많이 나온 값)
+async function readStylePrices(styles: Set<string>) {
+  const out = new Map<string, { consumer: number; current: number }>();
+  try {
+    const id = getDailySourceSheetId();
+    const title = pickDailySheetTitle(await getSpreadsheetTitlesById(id));
+    if (!title) return out;
+    const raw = await getSheetValuesById(id, title, "N4:U");
+    const votes = new Map<string, Map<string, number>>();
+    for (const r of raw) {
+      const st = t(r?.[0]).toUpperCase();
+      if (!styles.has(st)) continue;
+      const key = `${n(r?.[6])}|${n(r?.[7])}`;
+      const m = votes.get(st) || new Map<string, number>();
+      m.set(key, (m.get(key) || 0) + 1);
+      votes.set(st, m);
+    }
+    for (const [st, m] of votes) {
+      const best = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0].split("|").map(Number);
+      out.set(st, { consumer: best[0], current: best[1] });
+    }
+  } catch (e) {
+    console.error("promo prices read failed", e);
+  }
+  return out;
+}
+
+export type PromoStyleRow = {
+  order: number;
+  style: string;
+  name: string;
+  shipped: string;
+  consumerPrice: number;
+  currentPrice: number;
+  discountRate: number | null;
+  cur: Agg;
+  prev: Agg;
+  prevYear?: Agg;
+  runningGap?: Agg | null; // 같은 품명(재런칭 코드 포함) 금주 합 − 전년
+};
+
+export type PromoGroupReport = {
+  group: string;
+  title: string;
+  note: string;
+  prevYear: boolean;
+  rows: PromoStyleRow[];
+  cur: Agg;
+  prev: Agg;
+  prevYearTotal?: Agg;
+};
+
+export async function buildPromoReport(weekStartInput?: string) {
+  const items = await readPromoItems();
+  const lastMonday = addDays(mondayOf(kstToday()), -7);
+  const weekStart = weekStartInput && /^\d{4}-\d{2}-\d{2}$/.test(weekStartInput) ? mondayOf(weekStartInput) : lastMonday;
+  const prevStart = addDays(weekStart, -7);
+  const lyStart = addDays(weekStart, -364);
+  const styles = new Set(items.map((i) => i.style));
+  const needLy = items.some((i) => i.prevYear);
+  const lyStyles = new Set(items.filter((i) => i.prevYear).map((i) => i.style));
+
+  const master = await loadChannelMaster().catch(() => new Map());
+  // 7일씩 나눠 읽음(하루치에 전 SKU가 담겨 있어 한 번에 많이 읽으면 문자열 한도 초과)
+  const cur = await aggregateWeek(weekStart, styles, master);
+  const prev = await aggregateWeek(prevStart, styles, master);
+  const ly = needLy ? await aggregateWeek(lyStart, lyStyles, master) : null;
+  const prices = await readStylePrices(styles);
+
+  const groupsOrder: string[] = [];
+  for (const i of items) if (!groupsOrder.includes(i.group)) groupsOrder.push(i.group);
+  const zero = (): Agg => ({ qty: 0, amount: 0 });
+
+  const groups: PromoGroupReport[] = groupsOrder.map((g) => {
+    const list = items.filter((i) => i.group === g).sort((a, b) => a.order - b.order);
+    const head = list[0] as PromoItem;
+    const rows: PromoStyleRow[] = list.map((i) => {
+      const p = prices.get(i.style);
+      const consumer = p?.consumer || 0;
+      const current = p?.current || 0;
+      return {
+        order: i.order,
+        style: i.style,
+        name: i.name,
+        shipped: i.shipped,
+        consumerPrice: consumer,
+        currentPrice: current,
+        discountRate: consumer > 0 && current > 0 ? 1 - current / consumer : null,
+        cur: cur.byStyle.get(i.style) || zero(),
+        prev: prev.byStyle.get(i.style) || zero(),
+        prevYear: head.prevYear && ly ? ly.byStyle.get(i.style) || zero() : undefined,
+      };
+    });
+    if (head.prevYear) {
+      // 러닝합산: 같은 품명(예: 재런칭 GF7LKC501 + 예전 WBD3L04501) 금주 합계 − 전년(전년 판매가 있는 코드 줄에만 표시)
+      for (const r of rows) {
+        if (!r.prevYear || (!r.prevYear.qty && !r.prevYear.amount)) {
+          r.runningGap = null;
+          continue;
+        }
+        const same = rows.filter((x) => x.name === r.name);
+        const sumCur = same.reduce((s, x) => ({ qty: s.qty + x.cur.qty, amount: s.amount + x.cur.amount }), zero());
+        const sumLy = same.reduce((s, x) => ({ qty: s.qty + (x.prevYear?.qty || 0), amount: s.amount + (x.prevYear?.amount || 0) }), zero());
+        r.runningGap = { qty: sumCur.qty - sumLy.qty, amount: sumCur.amount - sumLy.amount };
+      }
+    }
+    const sum = (k: "cur" | "prev" | "prevYear") =>
+      rows.reduce((s, r) => ({ qty: s.qty + (r[k]?.qty || 0), amount: s.amount + (r[k]?.amount || 0) }), zero());
+    return {
+      group: g,
+      title: head.title || g,
+      note: head.note,
+      prevYear: head.prevYear,
+      rows,
+      cur: sum("cur"),
+      prev: sum("prev"),
+      prevYearTotal: head.prevYear ? sum("prevYear") : undefined,
+    };
+  });
+
+  return {
+    weekStart,
+    weekEnd: addDays(weekStart, 6),
+    prevStart,
+    prevEnd: addDays(prevStart, 6),
+    lyStart: needLy ? lyStart : null,
+    lyEnd: needLy ? addDays(lyStart, 6) : null,
+    total: { cur: cur.total, prev: prev.total },
+    dataDates: { cur: cur.datesWithData, prev: prev.datesWithData, ly: ly?.datesWithData || [] },
+    groups,
+  };
+}

@@ -100,7 +100,7 @@ function isExcludedSalesChannel(channelName: string) {
   );
 }
 
-function isOnlineChannel(channelName: string, masterMap?: Map<string, ChannelType>) {
+export function isOnlineChannel(channelName: string, masterMap?: Map<string, ChannelType>) {
   if (masterMap) {
     const type = masterMap.get(text(channelName));
     if (type) return isOnlineType(type);

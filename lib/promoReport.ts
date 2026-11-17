@@ -33,12 +33,13 @@ export function isPromoExcludedStore(storeName: string, master?: Map<string, any
 }
 
 type Agg = { qty: number; amount: number };
-type WeekAgg = { byStyle: Map<string, Agg>; total: Agg; dates: string[]; datesWithData: string[] };
+type WeekAgg = { byStyle: Map<string, Agg>; unitPrices: Map<string, Map<number, number>>; total: Agg; dates: string[]; datesWithData: string[] };
 
 async function aggregateWeek(start: string, styles: Set<string>, master: Map<string, any>): Promise<WeekAgg> {
   const dates = range7(start);
   const rows = await readDailyHistoryRowsForExactDates(dates);
   const byStyle = new Map<string, Agg>();
+  const unitPrices = new Map<string, Map<number, number>>(); // 스타일 → (개당 판매가 → 수량) — 현판가 추정용
   const total: Agg = { qty: 0, amount: 0 };
   const seenDates = new Set<string>();
   const excludedCache = new Map<string, boolean>();
@@ -59,11 +60,18 @@ async function aggregateWeek(start: string, styles: Set<string>, master: Map<str
     a.qty += r.qty;
     a.amount += r.amount;
     byStyle.set(st, a);
+    if (r.qty > 0 && r.amount > 0) {
+      const unit = Math.round(r.amount / r.qty / 100) * 100;
+      const m = unitPrices.get(st) || new Map<number, number>();
+      m.set(unit, (m.get(unit) || 0) + r.qty);
+      unitPrices.set(st, m);
+    }
   }
-  return { byStyle, total, dates, datesWithData: [...seenDates].sort() };
+  return { byStyle, unitPrices, total, dates, datesWithData: [...seenDates].sort() };
 }
 
-// 현판가: PIP(스타일별 채널별, 금액) 마스터 열 — 스타일=13, 소비자가=19, 판매가=20 (같은 스타일 여러 행이면 가장 많이 나온 값)
+// 소비자가: PIP(스타일별 채널별, 금액) 마스터 열 20(판매가) — 팀 파일의 "소비자가"(ERP 현판가 메뉴 소비자가)와 같은 값.
+// PIP 19열은 최초 TAG가라 안 씀. ERP "현판가"(할인 적용가)는 PIP에 없어서, 그 주 판매 줄의 개당 판매가 중 가장 많이 팔린 값으로 추정.
 async function readStylePrices(styles: Set<string>) {
   const out = new Map<string, { consumer: number; current: number }>();
   try {
@@ -82,12 +90,17 @@ async function readStylePrices(styles: Set<string>) {
     }
     for (const [st, m] of votes) {
       const best = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0].split("|").map(Number);
-      out.set(st, { consumer: best[0], current: best[1] });
+      out.set(st, { consumer: best[1], current: 0 });
     }
   } catch (e) {
     console.error("promo prices read failed", e);
   }
   return out;
+}
+
+function modeUnit(m?: Map<number, number>) {
+  if (!m || !m.size) return 0;
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
 }
 
 export type PromoStyleRow = {
@@ -142,7 +155,7 @@ export async function buildPromoReport(weekStartInput?: string) {
     const rows: PromoStyleRow[] = list.map((i) => {
       const p = prices.get(i.style);
       const consumer = p?.consumer || 0;
-      const current = p?.current || 0;
+      const current = modeUnit(cur.unitPrices.get(i.style)) || modeUnit(prev.unitPrices.get(i.style));
       return {
         order: i.order,
         style: i.style,

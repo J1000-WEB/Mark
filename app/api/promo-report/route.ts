@@ -9,16 +9,6 @@ export const maxDuration = 120;
 export async function GET(req: Request) {
   try {
     const sp = new URL(req.url).searchParams;
-    if (sp.get("debugPrice")) {
-      const { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById } = await import("@/lib/googleSheets");
-      const { pickDailySheetTitle } = await import("@/lib/dailySales");
-      const id = getDailySourceSheetId();
-      const title = pickDailySheetTitle(await getSpreadsheetTitlesById(id));
-      const head = await getSheetValuesById(id, title, "A1:AE3");
-      const body = await getSheetValuesById(id, title, "A4:AE");
-      const want = (sp.get("debugPrice") || "").split(",");
-      return NextResponse.json({ title, head, rows: body.filter((r: any[]) => r.some((c) => want.includes(String(c)))).slice(0, 12) });
-    }
     const week = sp.get("week") || undefined;
     return NextResponse.json({ ok: true, ...(await buildPromoReport(week)) }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {

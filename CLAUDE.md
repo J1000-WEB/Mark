@@ -93,6 +93,11 @@
 | PIP 직접조회 | **6:00** | `schedule-style-channel-upload.js` → `fetch-pip-direct.js` | ERP 화면·PA 없이 서버에 직접 조회(아래 섹션). 4:50 업로드 성공했으면 비교만, 실패면 직접 받은 파일로 업로드 |
 | 최종정리 | **4:55** | `schedule-cleanup.js` → `cleanup-4-30.au3` | PIP파일 있는지 확인 후 필요시 엑셀 저장 + 크롬/엑셀/ERP 종료 |
 
+> **2026-11-17 파워오토메이트 중단**(소천님 결정): 11/12부터 PA PIP 파일이 직접 조회보다 약 2,500행 적었음(직접 조회는 매일 15,297행 일정).
+> 이제 PIP = `fetch-pip-direct.js --force`가 **3:00 조회+업로드**, 실패 시 4:50·6:00 재시도(그날 `logs/pip-upload-ok-YYYYMMDD.txt` 있으면 건너뜀).
+> `schedule-power-automate.js` RUN_TIMES·`schedule-cleanup.js` CLEANUP_JOBS는 비움(주석으로 남김), 4:50 PA 파일 업로드(runUpload)도 안 씀.
+> 아래 표의 PA 1차/중간정리/PA 2차/PIP 4:50/최종정리 줄은 예전 기록.
+
 > 2026-11-04 변경: 하루 첫 ERP 실행(2:20)엔 자동 업데이트 때문에 60초 안에 로그인 준비('sjc')가 안 돼 업로드가 실패한 날이 있음
 > → `sgerp-login.au3` 대기 150초 + 5초마다 로그인창 핸들 다시 찾기, 실패는 종료코드 1(예전엔 실패도 0). 스케줄러는 AutoIt이 있으면
 > **.au3를 직접 실행**(exe 재컴파일 불필요). 그래서 ERP끄기 2:22→2:25, PA 1차 2:25→2:27.

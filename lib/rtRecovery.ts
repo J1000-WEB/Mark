@@ -156,9 +156,22 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
     inner.set(d, f(inner.get(d)));
   };
 
+  // 시트 읽기가 일시적으로 실패하면(동시 요청 많을 때 등) 빈 결과가 와서 "판매 0"으로 잘못 계산될 수 있음 →
+  // 그 날짜만 2번까지 다시 읽고, 그래도 없으면 missingDates로 알려줌(화면에 경고).
+  const readChunk = async (dates: string[]) => {
+    let rows = await readDailyHistoryRowsForExactDates(dates);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const got = new Set(rows.map((r) => r.date));
+      const miss = dates.filter((d) => !got.has(d));
+      if (!miss.length) break;
+      await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+      rows = rows.concat(await readDailyHistoryRowsForExactDates(miss));
+    }
+    return rows;
+  };
   for (let i = 0; i < allDates.length; i += 7) {
     const chunk = allDates.slice(i, i + 7);
-    const rows = await readDailyHistoryRowsForExactDates(chunk);
+    const rows = await readChunk(chunk);
     for (const r of rows) {
       if (!chunk.includes(r.date) || !isOff(r.storeName)) continue;
       datesWithData.add(r.date);
@@ -296,5 +309,6 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
     recovery: sum(doneLines, "lossAmt") > 0 ? sum(doneLines, "gainAmt") / sum(doneLines, "lossAmt") : null,
     verdicts: out.reduce((m, x) => ((m[x.verdict] = (m[x.verdict] || 0) + 1), m), {} as Record<string, number>),
   };
-  return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, yesterday, lines: out, summary, datesRead: allDates.length, datesWithData: datesWithData.size };
+  const missingDates = allDates.filter((d) => !datesWithData.has(d));
+  return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, yesterday, lines: out, summary, datesRead: allDates.length, datesWithData: datesWithData.size, missingDates };
 }

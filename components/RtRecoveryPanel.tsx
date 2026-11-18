@@ -1,7 +1,7 @@
 "use client";
 
 // MARK 2026-11-18: 재고CTRL 탭 "RT 기회로스 회수" — 계산 기준은 lib/rtRecovery.ts 맨 위 주석(지시 후 18일, 기준 28일).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const won = (n: number | null | undefined) => (n === null || n === undefined || !Number.isFinite(n) ? "-" : Math.round(n).toLocaleString("ko-KR"));
 const pct = (n: number | null | undefined) => (n === null || n === undefined || !Number.isFinite(n) ? "-" : `${Math.round(n * 100)}%`);
@@ -46,10 +46,6 @@ export default function RtRecoveryPanel() {
       setLoading(false);
     }
   }
-  useEffect(() => {
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const lines: any[] = data?.lines || [];
   const shown = filter === "전체" ? lines : lines.filter((l) => l.verdict === filter);
@@ -96,6 +92,14 @@ export default function RtRecoveryPanel() {
       </div>
 
       {error && <div className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</div>}
+      {!data && !loading && !error && (
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-center text-xs text-slate-400">지시일 기간을 고르고 "분석"을 누르면 계산해요(판매이력을 읽느라 1분 안팎 걸려요).</div>
+      )}
+      {data?.missingDates?.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
+          ⚠ 판매이력을 못 읽은 날짜가 있어요({data.missingDates.slice(0, 6).join(", ")}{data.missingDates.length > 6 ? " 외" : ""}) — 그 날짜는 판매 0으로 계산됐으니 "분석"을 한 번 더 눌러주세요.
+        </div>
+      )}
       {loading && !data && <div className="mt-4 rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-400">계산 중… 판매이력을 기간만큼 읽어서 1~2분 걸려요.</div>}
 
       {s && (

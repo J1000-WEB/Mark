@@ -611,6 +611,20 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
     rawRows.push({ date, storeName, amount: num(row?.[4]) });
   }
 
+  // MARK 2026-11-18: 시트가 3만 행을 넘으면서(2026-11 기준 31,396행) 맨 앞쪽(6~7월) 날짜가 "최근 3만 행" 밖으로 밀려나
+  // 스페셜오퍼위크 7월 실적이 0으로 덮어써지던 문제 — 창이 startDate까지 못 닿으면 그 앞 행들(A~E열만, 가벼움)도 마저 읽음.
+  let extraRead = 0;
+  const earliestInTail = rawRows.reduce((min, r) => (!min || r.date < min ? r.date : min), "");
+  if (tailStart > 2 && (!earliestInTail || earliestInTail > startDate)) {
+    const head = await getSheetValuesById(historyId, DAILY_HISTORY_SHEET, `A2:E${tailStart - 1}`).catch(() => [] as any[]);
+    extraRead = head.length;
+    for (const row of head) {
+      const date = normalizeDateKey(row?.[0]);
+      const storeName = text(row?.[1]);
+      if (!date || !storeName) continue;
+      rawRows.push({ date, storeName, amount: num(row?.[4]) });
+    }
+  }
   const rows = rawRows.filter((r) => r.date >= startDate && r.date <= end);
 
   const sample = (arr: DailyAmountRow[]) => arr.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
@@ -631,6 +645,7 @@ async function readDailyHistoryRowsForDateRangeInternal(startDate: string, endDa
       sampleLast5OfTail: sample(rawRows.slice(-5)),
       earliestDateInTail, // 이게 startDate보다 늦으면 창을 더 넓혀야 할 수도 있음
       windowFullyCoversStartDate: !earliestDateInTail || earliestDateInTail <= startDate,
+      extraHeadRowsRead: extraRead,
       rawRowsBeforeFilter: rawRows.length,
       rowsAfterFilter: rows.length,
     },

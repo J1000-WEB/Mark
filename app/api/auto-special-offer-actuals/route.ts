@@ -27,7 +27,7 @@ export const maxDuration = 60;
 // 넓은데(14일 이상) 결과가 비정상적으로 적으면(20건 미만) 실제로 매출이 없는 게 아니라 읽기
 // 자체가 실패했을 가능성이 크므로, 쓰기를 건너뛰고 에러로 중단합니다. 원인을 바로 알 수
 // 있게 읽기 진단(rangeDebug)도 응답에 같이 실어둡니다.
-async function runUpdate() {
+async function runUpdate(opts: { dryRun?: boolean } = {}) {
   const { rows: primaryRowsRaw, debug: rangeDebug } = await readDailyHistoryRowsForDateRangeWithDebug(AUTO_ACTUALS_START_DATE);
 
   const daySpan = Math.max(
@@ -50,7 +50,12 @@ async function runUpdate() {
   const fallbackRows = await loadStoreAmountRows().catch(() => []);
   const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
   const dailyFlatRows = flattenMergedAmounts(merged);
-  const result = await updateSpecialOfferActuals(dailyFlatRows);
+  let compareRows: { date: string; storeName: string; amount: number }[] | undefined;
+  if (opts.dryRun) {
+    const { readSalesSummarySnapshot } = await import("@/lib/dataBuilder");
+    compareRows = (await readSalesSummarySnapshot()).rows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+  }
+  const result = await updateSpecialOfferActuals(dailyFlatRows, { dryRun: opts.dryRun, compareRows });
   return { ...result, rangeDebug };
 }
 
@@ -81,9 +86,11 @@ export async function GET(req: Request) {
 
 // MARK 6.98: 크론(GET)은 CRON_SECRET이 걸려있어서 브라우저로 바로 못 부릅니다 — 지금처럼
 // "수동으로 한 번 확인해보고 싶을 때"를 위해 인증 없는 POST를 따로 둡니다(로직은 완전히 동일).
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const result = await runUpdate();
+    // ?dryRun=1 → 시트에 안 쓰고 계산 결과(지금 값·새 값·매출탭 값)만 돌려줌
+    const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
+    const result = await runUpdate({ dryRun });
 
     return NextResponse.json(
       { ok: true, ...result },

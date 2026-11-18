@@ -3,12 +3,12 @@
 // 기준(소천님 결정 2026-11-18)
 //   - 판매: Daily_Sales_History 실판매(오프라인, **매장주문/매장반품 제외**, 온라인 제외 — IMC 현황과 같은 isPromoExcludedStore)
 //   - 주간 = 월~일. 수량은 주간·2주전·3주전·4주전, 금액은 주간·2주전·누계(누계는 lib 주석 cumNote 참고)·비중(주간 금액 / 오프라인 전체)
-//   - 랭킹 = 주간 판매금액 순위(전사 오프라인), 2주전 랭킹, 등락(2주전 − 주간)
+//   - 랭킹 = 주간 판매금액 순위(전사 오프라인, 같은 값은 같은 순위), 2주전 랭킹, 등락(2주전 − 주간)
 //   - 상품·가격·라이프사이클·재고 = 대시보드 PIP 시트(최신 1일치, 재고 기준일 = PIP 기준일자)
 //       원가=18열, TAG가=소비자가 19열, 판매가=20열, OFF가=판매가×0.9, 프로모션가=판매가×0.8(엑셀과 같은 계산식), 할인율 0.2
 //       기획=21, 입고=22, 판매=26(채널 판매 누적), 재고=28(합계재고), 입고%=입고/기획, 판매%=판매/입고
-//       총재고 = 물류(25) + 점포(오프라인팀 채널 재고), 주수 = 물류재고 ÷ 주간 판매수량
-//   - 매장 23곳(엑셀과 같은 순서·S/A/B/C 등급): RANK(그 매장 안 주간 판매금액 순위), 전사비(전사 랭킹 − 매장 랭킹), 판매(주간 수량), 재고(PIP), 주수(재고÷판매)
+//       총재고 = 물류(25) + 점포(오프라인 매장 채널 재고 합, 매장주문/반품·온라인 제외), 주수 = 물류재고 ÷ 주간 판매수량
+//   - 매장 23곳(엑셀과 같은 순서·S/A/B/C 등급): RANK(그 매장 안 주간 판매**수량** 순위 — 엑셀 대조로 확인), 전사비(전사 랭킹 − 매장 랭킹), 판매(주간 수량), 재고(PIP), 주수(재고÷판매)
 //   - 빠진 것(소천님 결정): 기간한정가, 물류 온/오프, 초입고/초출고, 액션
 //   - 품번구분 = 4주 판매가 있거나 합계재고가 있는 전 품번, 컬러구분 = 올해 상품(년도=기준주 연도)만 품번+칼라
 //   - 재런칭·라인업 표시 = MARK_DB "상품_기준표"(lib/productRefs.ts)
@@ -147,7 +147,9 @@ export async function computeWeeklyProductReport(weekStart: string) {
       blocks.push({ name: t(h1[c]), stockCol: sc });
     }
   }
-  const offTeamCol = blocks.find((b) => b.name === "오프라인팀")?.stockCol ?? -1;
+  // 점포 재고 = 오프라인 매장 채널 재고 합(팀 소계·매장주문/반품·온라인·기타 제외) — 오프라인팀 소계엔 매장주문 마이너스 재고가 섞여 있었음
+  const TEAM_NAMES = new Set(["온라인팀", "오프라인팀", "글로벌팀", "기타", "팀합계", "합계"]);
+  const offStoreCols = blocks.filter((b) => b.stockCol >= 0 && !TEAM_NAMES.has(b.name) && isOff(b.name)).map((b) => b.stockCol);
   const storeStockCols = WEEKLY_STORES.map((_, i) => blocks.find((b) => normalizeStoreKey(b.name) === storeKeys[i])?.stockCol ?? -1);
   let stockDate = "";
   type P = {
@@ -170,7 +172,7 @@ export async function computeWeeklyProductReport(weekStart: string) {
     for (const [map, key] of [[pStyle, style], [pColor, `${style}|${color}`]] as [Map<string, P>, string][]) {
       const p = map.get(key) || newP(r);
       p.plan += n(r[21]); p.inQty += n(r[22]); p.wh += n(r[25]); p.sold += n(r[26]); p.stock += n(r[28]);
-      if (offTeamCol >= 0) p.store += n(r[offTeamCol]);
+      for (const c of offStoreCols) p.store += n(r[c]);
       storeStockCols.forEach((c, i) => { if (c >= 0) p.storeStock[i] += n(r[c]); });
       if (color) p.colors.add(color);
       map.set(key, p);
@@ -181,10 +183,11 @@ export async function computeWeeklyProductReport(weekStart: string) {
   const refs = buildRefMaps(await readProductRefs().catch(() => []));
   const baseYear = weekStart.slice(0, 4);
 
-  function rankMap(keys: string[], amtOf: (k: string) => number) {
-    const arr = keys.map((k) => [k, amtOf(k)] as [string, number]).filter(([, a]) => a > 0).sort((a, b) => b[1] - a[1]);
+  // 순위: 값이 같으면 같은 순위(엑셀 RANK와 같게, 1,2,3,4,4,6…). 값 0 이하는 순위 밖(last).
+  function rankMap(keys: string[], valOf: (k: string) => number) {
+    const arr = keys.map((k) => [k, valOf(k)] as [string, number]).filter(([, a]) => a > 0).sort((a, b) => b[1] - a[1]);
     const m = new Map<string, number>();
-    arr.forEach(([k], i) => m.set(k, i + 1));
+    arr.forEach(([k, v], i) => m.set(k, i > 0 && arr[i - 1][1] === v ? m.get(arr[i - 1][0])! : i + 1));
     return { m, last: arr.length + 1 };
   }
 
@@ -200,8 +203,8 @@ export async function computeWeeklyProductReport(weekStart: string) {
     });
     const r0 = rankMap(list, (k) => sMap.get(k)?.amt[0] || 0);
     const r1 = rankMap(list, (k) => sMap.get(k)?.amt[1] || 0);
-    // 매장별 랭킹
-    const storeRanks = WEEKLY_STORES.map((_, si) => rankMap(list, (k) => storeMap.get(`${si}|${k}`)?.amt || 0));
+    // 매장별 랭킹 = 그 매장 주간 판매 **수량** 순(엑셀 확인: 전사 랭킹은 금액, 매장 RANK는 수량)
+    const storeRanks = WEEKLY_STORES.map((_, si) => rankMap(list, (k) => storeMap.get(`${si}|${k}`)?.qty || 0));
     return list
       .map((k) => {
         const [style, color = ""] = k.split("|");
@@ -241,7 +244,7 @@ export async function computeWeeklyProductReport(weekStart: string) {
           stores: WEEKLY_STORES.map((_, si) => {
             const v = storeMap.get(`${si}|${k}`);
             const sr = storeRanks[si];
-            return [v?.amt ? sr.m.get(k) || sr.last : 0, v?.qty || 0, p?.storeStock[si] || 0];
+            return [v?.qty && v.qty > 0 ? sr.m.get(k) || sr.last : 0, v?.qty || 0, p?.storeStock[si] || 0];
           }),
         };
       })

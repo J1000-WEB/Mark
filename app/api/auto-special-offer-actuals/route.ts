@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readDailyHistoryRowsForDateRangeWithDebug } from "@/lib/dailySales";
 import { updateSpecialOfferActuals, AUTO_ACTUALS_START_DATE } from "@/lib/specialOfferWeek";
 import { loadStoreAmountRows } from "@/lib/dailyBriefing";
-import { mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
+import { readSalesSummarySnapshot, normalizeStoreKey } from "@/lib/dataBuilder";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,20 +41,32 @@ async function runUpdate(opts: { dryRun?: boolean } = {}) {
     );
   }
 
-  const primaryRows = primaryRowsRaw.map((r) => ({
+  const historyRows = primaryRowsRaw.map((r) => ({
     date: r.date,
     storeName: r.storeName,
     amount: r.amount,
   }));
-  // MARK 6.57: 일간/매장 탭과 동일하게, Daily_Sales_History가 없는 날짜는 일간매출(26년)으로 보완합니다.
+  // MARK 2026-11-18: 1순위 = 매출탭 `매출_일별_스냅샷`(ERP 점포 매출, 실제 금액). Daily_Sales_History는 8월 중순 전 금액이
+  // 수량×정가 추정치라(7월 광복 8,109만 vs 실제 6,087만) 매출탭에 없는 (점포, 날짜)만 채움. 그다음 일간매출(26년).
+  // 점포명은 normalizeStoreKey로 맞춰서 같은 점포·날짜가 두 번 더해지지 않게 함.
+  const snapshotRows = (await readSalesSummarySnapshot().catch(() => ({ rows: [] as any[] }))).rows
+    .filter((r: any) => r.date >= AUTO_ACTUALS_START_DATE)
+    .map((r: any) => ({ date: r.date, storeName: r.storeName, amount: Number(r.amount) || 0 }));
   const fallbackRows = await loadStoreAmountRows().catch(() => []);
-  const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
-  const dailyFlatRows = flattenMergedAmounts(merged);
-  let compareRows: { date: string; storeName: string; amount: number }[] | undefined;
-  if (opts.dryRun) {
-    const { readSalesSummarySnapshot } = await import("@/lib/dataBuilder");
-    compareRows = (await readSalesSummarySnapshot()).rows.map((r) => ({ date: r.date, storeName: r.storeName, amount: r.amount }));
+  const covered = new Set<string>();
+  const dailyFlatRows: { date: string; storeName: string; amount: number }[] = [];
+  for (const src of [snapshotRows, historyRows, fallbackRows as { date: string; storeName: string; amount: number }[]]) {
+    const added = new Set<string>();
+    for (const r of src) {
+      const k = `${normalizeStoreKey(r.storeName)}__${r.date}`;
+      if (covered.has(k)) continue;
+      dailyFlatRows.push(r);
+      added.add(k);
+    }
+    added.forEach((k) => covered.add(k));
   }
+  let compareRows: { date: string; storeName: string; amount: number }[] | undefined;
+  if (opts.dryRun) compareRows = historyRows; // 점검용: 예전 방식(Daily_Sales_History) 값과 비교
   const result = await updateSpecialOfferActuals(dailyFlatRows, { dryRun: opts.dryRun, compareRows });
   return { ...result, rangeDebug };
 }

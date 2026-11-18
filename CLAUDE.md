@@ -407,6 +407,11 @@
 - Vercel 크론 `/api/auto-special-offer-actuals`(매일 05:00 KST, 수동은 POST) → `lib/specialOfferWeek.ts` `updateSpecialOfferActuals`.
   2026-07-01 이후 시작 이벤트만: R열(실적) = Daily_Sales_History 기간 매출. **2026-11-13부터 G열(완료유무)도 날짜로 자동**:
   오늘 < 시작 "준비", 시작~종료 "진행", 종료 뒤 "완료"(칸이 비었거나 이 세 값일 때만 바꿈, 바뀐 내역은 응답 debug.statusChanges).
+- **2026-11-18 7월 실적이 0으로 지워지던 문제**: Daily_Sales_History가 31,396행이 되면서 "최근 3만 행만 읽기" 창 밖으로 6~7월이 밀려나
+  7/3~8/6 이벤트 8건이 0으로 덮어써짐. → `readDailyHistoryRowsForDateRangeInternal`이 창이 시작일까지 못 닿으면 앞 행(A~E)도 읽음,
+  그 기간 데이터를 하루도 못 읽으면 기존 값을 0으로 안 덮음. **실적 소스도 매출탭 `매출_일별_스냅샷`(ERP 실제 금액) 1순위로 바꿈**
+  (Daily_Sales_History는 8월 중순 전 금액이 추정치 — 7월 광복 8,109만 vs 실제 6,087만), 매출탭에 없는 점포·날짜만 Daily_Sales_History→일간매출(26년).
+  점검: POST `/api/auto-special-offer-actuals?dryRun=1`(안 쓰고 eventBreakdown에 currentValue·salesAmount·compareAmount(예전 방식)).
 
 ## 상품 이미지 (`components/ProductThumb.tsx`)
 

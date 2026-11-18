@@ -204,7 +204,7 @@ export async function updateSpecialOfferActuals(dailyFlatRows: DailyFlatRow[], o
     const last = eventBreakdown[eventBreakdown.length - 1];
     last.currentValue = currentValue;
     if (opts.compareRows) {
-      last.salesTabAmount = Math.round(
+      last.compareAmount = Math.round(
         opts.compareRows.filter((r) => r.date >= startDate && r.date <= endDate && normalizeStoreKey(r.storeName) === storeKey).reduce((t, r) => t + Number(r.amount || 0), 0)
       );
     }

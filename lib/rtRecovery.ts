@@ -36,7 +36,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { getSheetId, getSpreadsheetTitlesById, readRecentTailRowsById } from "@/lib/googleSheets";
-import { getStoreCodeNameMap, normalizeStoreKey } from "@/lib/dataBuilder";
+import { getStoreCodeNameMap, normalizeStoreKey, readSalesSummarySnapshot } from "@/lib/dataBuilder";
 import { loadChannelMaster } from "@/lib/channelMaster";
 import { isPromoExcludedStore } from "@/lib/promoReport";
 
@@ -81,8 +81,14 @@ async function readRtLines(fromDate: string, toDate: string): Promise<RtLine[]> 
   const titles = await getSpreadsheetTitlesById(mainId).catch(() => [] as string[]);
   if (!titles.includes("RT_Result")) return [];
   const rows = await readRecentTailRowsById(mainId, "RT_Result", "A:H", 20000, 1);
+  // 채널코드→매장명: 매출탭 스냅샷(채널코드·점포명이 같이 있음, 가장 정확)을 먼저, 없으면 객_전주 매핑
+  const snapMap = new Map<string, string>();
+  for (const r of (await readSalesSummarySnapshot().catch(() => ({ rows: [] as any[] }))).rows) {
+    const c = t(r.channelCode);
+    if (c && r.storeName && !snapMap.has(c)) snapMap.set(c, String(r.storeName));
+  }
   const codeMap = await getStoreCodeNameMap();
-  const nameOf = (code: string) => codeMap.get(code) || codeMap.get(normalizeStoreKey(code)) || code;
+  const nameOf = (code: string) => snapMap.get(code) || codeMap.get(code) || codeMap.get(normalizeStoreKey(code)) || code;
   const agg = new Map<string, RtLine>();
   for (const r of rows.slice(1)) {
     const date = normDate(r?.[6]) || normDate(r?.[7]);

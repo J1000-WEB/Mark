@@ -421,6 +421,21 @@
   소비자가=PIP 판매가(20열, 19열은 최초 TAG가), 현판가=그 주 판매 줄 개당가 최빈값(ERP 현판가 메뉴 아님). 전년(−364일)·러닝합산(같은 품명 재런칭 코드 합−전년)은
   계산은 넣었지만 Daily_Sales_History에 2025-11이 없어 비어 있음. 엑셀 다운로드는 나중에(소천님 요청).
 
+## 상품탭 주간데이터 (2026-11-18, `lib/weeklyProductReport.ts`, `/api/weekly-product`, `components/WeeklyProductPanel.tsx`)
+
+- 상품 탭 하위탭: **IMC 현황(메인, PromoReportPanel) / 주간데이터**(`components/ProductTabs.tsx`). 팀 "주간판매데이터" 엑셀의 품번구분·컬러구분 자동판.
+  컬러구분은 그 주 년도(올해) 상품만. 소천님 결정으로 기간한정가·물류 온/오프·초입고/초출고·액션은 뺌, **매장주문 미포함**.
+- 판매(주간~4주전 수량, 주간·2주전 금액) = Daily_Sales_History 오프라인(`isPromoExcludedStore`), 상품·가격·기획/입고/판매/재고·물류재고·매장재고 = PIP 시트(최신일).
+  랭킹 = 전사 주간 **판매금액**(동점 같은 순위), 매장 RANK = 그 매장 주간 **판매수량**(엑셀과 대조해 확인), 전사비 = 전사순위−매장순위, 주수 = 재고÷주간수량.
+  점포 재고 = 오프라인 매장 채널 재고 합(오프라인팀 소계엔 매장주문 마이너스 재고가 섞여 있어서 안 씀). OFF가 = 판매가×0.9, 프로모션가 = ×0.8.
+- 23개 매장·등급(S/A/B/C)은 `WEEKLY_STORES`에 고정(엑셀 순서). ERP Bust0120 shops에 grd_cd/grd_nm(등급)이 있어 나중에 자동화 가능.
+- 표시용 목록 MARK_DB `상품_기준표`(`lib/productRefs.ts`, GET/POST `/api/product-refs`): 재런칭(새 코드↔예전 코드) 36쌍, 라인업 107개(엑셀에서 옮김).
+  ERP PIP의 main_sty_cd가 재런칭 예전 코드 연결이라 나중에 자동화 가능.
+- 계산 약 45초 → MARK_DB `주간데이터_캐시`(주시작·저장시각·조각수·조각…, base64 gzip)에 저장, 다음부터 바로 읽음. "다시 계산" 버튼 = `refresh=1`.
+- 금액 **누계**는 아직 없음: ERP PIP에 누계 금액 필드가 없음(누계 수량만). PIP 보관(MARK_PIP_ARCHIVE, 2025-11-01~)+Daily_Sales_History로 더해야 해서
+  2025-11 이후 출시 상품만 정확, 그 전 상품은 "25.11~ 누계". 백필 끝나면 붙일 예정.
+- 엑셀과 차이: 수량은 매장주문만큼(GF7LKC501 1440 vs 1444), 재고는 기준일 차이(엑셀은 금요일 기준, 여기는 최신 PIP).
+
 ## 스페셜오퍼위크 세부일정 자동 기록 (대시보드 크론, erp-agent 아님)
 
 - Vercel 크론 `/api/auto-special-offer-actuals`(매일 05:00 KST, 수동은 POST) → `lib/specialOfferWeek.ts` `updateSpecialOfferActuals`.

@@ -258,6 +258,7 @@ export async function computeWeeklyProductReport(weekStart: string) {
     weekEnd: addDays(weekStart, 6),
     weeks: weeks.map((w) => ({ start: w, end: addDays(w, 6) })),
     stockDate,
+    storeChannels: blocks.filter((b) => offStoreCols.includes(b.stockCol)).map((b) => b.name),
     stores: WEEKLY_STORES.map((s, i) => ({ ...s, name: codeName.get(s.code) || s.short, stockCol: storeStockCols[i] >= 0 })),
     total: { qty: total.qty, amt: total.amt.map(Math.round) },
     datesWithData: seen.size,

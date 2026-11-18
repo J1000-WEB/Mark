@@ -431,6 +431,9 @@
 - 23개 매장·등급(S/A/B/C)은 `WEEKLY_STORES`에 고정(엑셀 순서). ERP Bust0120 shops에 grd_cd/grd_nm(등급)이 있어 나중에 자동화 가능.
 - 표시용 목록 MARK_DB `상품_기준표`(`lib/productRefs.ts`, GET/POST `/api/product-refs`): 재런칭(새 코드↔예전 코드) 36쌍, 라인업 107개(엑셀에서 옮김).
   ERP PIP의 main_sty_cd가 재런칭 예전 코드 연결이라 나중에 자동화 가능.
+- **매주 월요일 6:50 PC 스케줄러(`schedule-style-channel-upload.js` runWeeklyProduct)가 `/api/weekly-product?refresh=1`로 지난주를 계산·저장**
+  → 주마다 "월요일 아침 PIP 재고" 기준 스냅샷으로 고정(판매 숫자는 날짜별 기록이라 언제 계산해도 같지만, 재고·입고·누적판매는 계산 시점 PIP라서).
+  화면 "다시 계산"은 확인창 후 지금 재고로 덮어씀.
 - 계산 약 45초 → MARK_DB `주간데이터_캐시`(주시작·저장시각·조각수·조각…, base64 gzip)에 저장, 다음부터 바로 읽음. "다시 계산" 버튼 = `refresh=1`.
 - 금액 **누계**는 아직 없음: ERP PIP에 누계 금액 필드가 없음(누계 수량만). PIP 보관(MARK_PIP_ARCHIVE, 2025-11-01~)+Daily_Sales_History로 더해야 해서
   2025-11 이후 출시 상품만 정확, 그 전 상품은 "25.11~ 누계". 백필 끝나면 붙일 예정.

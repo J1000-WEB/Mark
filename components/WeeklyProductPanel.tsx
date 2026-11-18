@@ -134,11 +134,12 @@ export default function WeeklyProductPanel() {
             type="button"
             disabled={loading}
             onClick={() => {
+              if (!window.confirm("다시 계산하면 저장된 결과(월요일 아침 재고 기준)가 지금 재고 기준으로 바뀌어요. 계속할까요?")) return;
               setRefresh(true);
               setNonce((x) => x + 1);
             }}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 disabled:opacity-50"
-            title="저장된 결과 대신 지금 데이터로 다시 계산(1분 정도)"
+            title="저장된 결과 대신 지금 데이터로 다시 계산(1분 정도) — 재고가 지금 기준으로 바뀜"
           >
             다시 계산
           </button>
@@ -377,7 +378,7 @@ export default function WeeklyProductPanel() {
       )}
       {data && (
         <p className="text-[11px] text-slate-400">
-          계산 {data.generatedAt} · 주간 {md(data.weeks?.[0]?.start)}~{md(data.weeks?.[0]?.end)}, 2주전 {md(data.weeks?.[1]?.start)}~ · 3주전 {md(data.weeks?.[2]?.start)}~ · 4주전 {md(data.weeks?.[3]?.start)}~ ·
+          저장 {data.generatedAt}(재고 {data.stockDate}) · 주간 {md(data.weeks?.[0]?.start)}~{md(data.weeks?.[0]?.end)}, 2주전 {md(data.weeks?.[1]?.start)}~ · 3주전 {md(data.weeks?.[2]?.start)}~ · 4주전 {md(data.weeks?.[3]?.start)}~ ·
           OFF가=판매가×0.9, 프로모션가=판매가×0.8 · 금액 누계는 작년 PIP를 다 쌓은 뒤 붙일 예정
         </p>
       )}

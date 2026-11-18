@@ -9,6 +9,8 @@
 //
 // 단위: RT 한 건 = RT_Result 한 줄(지시일·보낸매장·받은매장·스타일·칼라·사이즈·수량).
 //       같은 지시일·같은 매장쌍·같은 SKU 줄은 수량을 합침.
+//       같은 지시일에 여러 매장에서 같은 SKU를 한 매장으로 보내면, 받은 매장 쪽(③④)은 그 SKU 전체 RT 수량으로 한 번 계산하고
+//       각 줄에는 수량 비율로 나눠 붙임(같은 판매를 두 번 세지 않게). ⑤ 보낸 매장 포기는 줄마다 따로.
 //
 // 기간 (D = RT_Result G열 승인날짜 = 지시일)
 //   - 평가기간 W: D+1 ~ D+18 (18일) — 입고까지 약 4일 + 입고 후 2주. 소천님 결정.
@@ -20,7 +22,7 @@
 //      a. 그 매장·그 SKU, B 중 "재고가 있던 날"(재고>0 또는 판매>0)만으로 계산. 그런 날이 7일 이상일 때.
 //      b. 그 매장·같은 스타일(전 칼라·사이즈) B 일평균 × 전사(오프라인) B에서 그 SKU가 스타일 판매에서 차지하는 비중.
 //      c. 전사(오프라인) 그 SKU B 일평균 × 그 매장의 B 오프라인 매출 비중.
-//   ② 예상 수요 E = r × 평가일수(18).
+//   ② 예상 수요 E = r × 평가일수(18).  (S0·T0는 지시일 전날 재고 — 지시일 당일 재고엔 이미 이동분이 잡힌 경우가 있었음)
 //   ③ 예상 기회로스(수량) = clamp(E − S0, 0, q)   — RT 없이 기존 재고로 못 채웠을 수요(최대 RT 수량까지).
 //   ④ RT 기여 판매(수량) = clamp(A − min(S0, E), 0, q)   — A = W 동안 받은 매장 그 SKU 실판매(반품 차감).
 //      (기존 재고로 팔 수 있었던 만큼은 RT 덕이 아니라고 보고 뺌)
@@ -211,6 +213,12 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
   }
 
   const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+  // 같은 지시일·받은 매장·SKU의 RT 총수량
+  const recvTotal = new Map<string, number>();
+  for (const l of lines) {
+    const k = `${l.date}|${storeKeyOf(l.to)}|${skuKey(l.style, l.color, l.size)}`;
+    recvTotal.set(k, (recvTotal.get(k) || 0) + l.qty);
+  }
   const out = lines.map((l) => {
     const sk = skuKey(l.style, l.color, l.size);
     const base = dateRange(addDays(l.date, -RT_BASE_DAYS), addDays(l.date, -1));
@@ -220,16 +228,18 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
     const done = evalEnd <= yesterday;
     const rc = storeSkuDay.get(`${storeKeyOf(l.to)}|${sk}`);
     const sc = storeSkuDay.get(`${storeKeyOf(l.from)}|${sk}`);
-    const S0 = Math.max(0, stockOn(rc, l.date));
-    const T0 = Math.max(0, stockOn(sc, l.date));
+    const S0 = Math.max(0, stockOn(rc, addDays(l.date, -1)));
+    const T0 = Math.max(0, stockOn(sc, addDays(l.date, -1)));
+    const Q = recvTotal.get(`${l.date}|${storeKeyOf(l.to)}|${sk}`) || l.qty;
+    const share = Q > 0 ? l.qty / Q : 1;
     const rr = rateFor(l.to, sk, l.style, base);
     const sr = rateFor(l.from, sk, l.style, base);
     const E = rr.rate * evalDays;
     const Es = sr.rate * evalDays;
     const A = win.reduce((s, d) => s + (rc?.get(d)?.qty || 0), 0);
     const Aamt = win.reduce((s, d) => s + (rc?.get(d)?.amount || 0), 0);
-    const lossQty = clamp(E - S0, 0, l.qty);
-    const gainQty = clamp(A - Math.min(S0, E), 0, l.qty);
+    const lossQty = clamp(E - S0, 0, Q) * share;
+    const gainQty = clamp(A - Math.min(S0, E), 0, Q) * share;
     const forgoneQty = clamp(Math.min(T0, Es) - Math.min(Math.max(T0 - l.qty, 0), Es), 0, l.qty);
     // 단가: 받은 매장 W 실판매가 → 전사 그 SKU (B+W) 평균가
     let price = A > 0 && Aamt > 0 ? Aamt / A : 0;
@@ -246,6 +256,7 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
     const verdict = !done ? "진행중" : lossAmt <= 0 ? "수요없음(판단보류)" : recovery! >= 0.7 ? "회수" : recovery! >= 0.3 ? "부분회수" : "미회수";
     return {
       ...l,
+      receiverRtTotal: Q,
       evalStart: win[0] || "",
       evalEnd,
       evalDays,

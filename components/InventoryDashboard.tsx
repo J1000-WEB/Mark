@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import RtRecoveryPanel from "@/components/RtRecoveryPanel";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
@@ -3331,6 +3332,7 @@ export default function InventoryDashboard() {
 
         <SalesAllocationSection />
 
+        <RtRecoveryPanel />
         <PerformanceTrackingSection data={data} />
 
         <section className="grid gap-4 md:grid-cols-3">

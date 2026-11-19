@@ -204,7 +204,7 @@
   - 응답 값 타입 13(이미지 img_thn, u16 길이+바이트)을 erp-mi.js에 추가. `client.call(..., {dumpPath})`로 풀린 응답을 파일로 남길 수 있음(`--dump`).
   - **화면 정의 찾는 법**: ERP 프로그램 캐시 `C:\Users\User\AppData\LocalLow\TOBESOFT\MiPlatform320U\Cache\GENERAL_ERP_*\<모듈>\win32\<화면ID>.xml`
     (0x46바이트 뒤부터 LZSS(Okumura, 4096/18, 공백 채움)로 압축 — 풀면 화면 XML: Title·gfn_Transaction의 서비스 경로·조회 조건·그리드 열). 그 PC에서 한 번 열어본 화면만 있음.
-- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js, pip-archive.js, fetch-onoff-stock.js).
+- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js, pip-archive.js, fetch-onoff-stock.js, fetch-rt-orders.js).
 
 ## PIP 과거 보관 (MARK_PIP_ARCHIVE, 2026-11-17)
 
@@ -303,6 +303,19 @@
   빈 날짜는 2번 재시도, 그래도 없으면 `missingDates`로 화면 경고(시트 읽기 실패가 "판매 0"으로 둔갑하는 것 방지 — 첫 시험 때 실제로 겪음).
   한 달치 약 40~45초(maxDuration 300). 패널은 자동 실행 안 함("분석" 버튼).
 - 첫 결과(2026-10 지시, 10/20 GF7LKC501 에센셜 109건 583장): 예상 기회로스 964만 · RT 생성 772만 · 보낸 매장 포기 254만 · 순 회수 517만 · 회수율 80%.
+
+### RT 지시이력 = ERP 이동 지시 현황 (2026-11-19, `lib/rtOrders.ts`, `/api/rt-orders`, PC `fetch-rt-orders.js`)
+- **RT 성과의 RT 출처를 바꿈**: 예전엔 MARK **메인 시트(GOOGLE_SHEET_ID)** `RT_Result`(대시보드에서 승인한 것만)를 읽어서, 재고MD님이 ERP에 직접 올린 RT가 대부분 빠졌음
+  (10월: RT_Result는 10/20 한 묶음 583장 vs ERP 이행 4,396장). 이제 ERP 메뉴 FSSPRD0040 `/fs/sprd/Sprd0040.do` getGrdMain(biz_div 100·from_dt·to_dt)을
+  PC가 매일 7:05에 최근 45일 다시 받아(이행상태가 며칠 뒤 바뀜) MARK_DB **`RT_지시이력`**에 그 기간을 통째로 교체 저장. 2026-07-07부터 백필됨(약 9천 줄).
+- 열: 지시일·차수·보낼/받을 채널코드·채널명·스타일·칼라·사이즈·지시량·**이행량**(fr_qty)·이행상태(이행/미이행)·이행일자(rt_fr_dt, 보낸 날)·확정일자(to_dt, 받은 매장 입고확정)·미이행사유·지시자·비고.
+- `lib/rtRecovery.ts`는 RT_지시이력을 1순위로, **이행량 기준**(미이행은 제외), 그 시트가 덮기 전 날짜만 RT_Result에서 보충. 화면에 "RT 지시 출처" 표시.
+  10월 결과: 2,155건·4,396장, 예상 기회로스 1.10억 · RT 생성 7,812만 · 포기 2,020만 · 순 회수 5,792만 · 회수율 71%.
+
+### 재고CTRL 하위 탭 (2026-11-19 정리, `InventoryDashboard.tsx` INV_TABS)
+- 출고·RT(지금은 기존 RtControlSection — 재고MD 출고·RT 제안기로 교체 예정) / 팩토리아울렛(용인 42005, 준비 중) / 온라인 이관요청 / 저소진·프로모션 / 성과(RT 기회로스 + 예전 성과표 접힘) / 데이터 관리.
+- 소천님 결정으로 뺀 것: 판매분 배분, 업로드 지연 알림, KPI·AI 브리핑, 품절/과재고 점포·상품 TOP, 위탁 투입 추천, 운영 프로세스 제안, 상품 AI 분석, 입고일 캡처, 과거 매출 백필 업로드(함수 코드는 남음).
+- 재고MD님 아티팩트 4개(판매분출고&RT·재고이관 요청·팩토리아울렛·저소진 랭킹) 소스를 받아 옮기는 중. RT 보내는 매장은 재고−2장 남김(A등급 최대 5장), 아티팩트 방식.
 
 ### 전사지시(Layer 0, VMD탭) — 별개 시스템
 - `lib/dataBuilder.ts`의 `styleDirectives`: 매장 확산도(오프라인 12곳↑ × 재고10장↑) 자격필터

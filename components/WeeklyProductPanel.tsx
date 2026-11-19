@@ -169,8 +169,8 @@ export default function WeeklyProductPanel() {
     };
   }, [filtered, stores]);
 
-  // 랭킹 3칸(각 36px)을 맨 왼쪽에 고정하고 품번은 그 오른쪽에 고정
-  const PL = show.랭킹 ? "left-[108px]" : "left-0";
+  // 랭킹 3칸(각 44px)을 맨 왼쪽에 고정하고 품번은 그 오른쪽에 고정
+  const PL = show.랭킹 ? "left-[132px]" : "left-0";
   const shownStores = stores.map((s, i) => ({ ...s, i })).filter((s) => grades[s.grade]);
   const weekStart = data?.weekStart || "";
   const sel = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold";
@@ -286,7 +286,7 @@ export default function WeeklyProductPanel() {
           <table className="text-[11px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
               <tr className="text-[10px]">
-                {show.랭킹 && <th colSpan={3} className="sticky left-0 z-20 w-[108px] min-w-[108px] bg-slate-50 px-1 font-black">랭킹</th>}
+                {show.랭킹 && <th colSpan={3} className="sticky left-0 z-20 w-[132px] min-w-[132px] bg-slate-50 px-1 font-black">랭킹</th>}
                 <th className={`sticky ${PL} z-20 bg-slate-50 px-2 py-1 text-left font-black`} colSpan={mode === "color" ? 3 : 2}>
                   상품
                 </th>
@@ -305,7 +305,7 @@ export default function WeeklyProductPanel() {
               <tr>
                 {show.랭킹 &&
                   ["주간", "2주전", "등락"].map((h, i) => (
-                    <th key={h} className={`${TH} sticky z-20 w-9 min-w-[36px] bg-slate-50 ${["left-0", "left-9", "left-[72px]"][i]}`}>
+                    <th key={h} className={`${TH} sticky z-20 w-[44px] min-w-[44px] max-w-[44px] bg-slate-50 ${["left-0", "left-[44px]", "left-[88px]"][i]}`}>
                       {h}
                     </th>
                   ))}
@@ -379,9 +379,9 @@ export default function WeeklyProductPanel() {
                   <tr key={r.k} className="border-t border-slate-100 hover:bg-slate-50">
                     {show.랭킹 && (
                       <>
-                        <td className={`${TD} sticky left-0 z-[1] w-9 bg-white font-black text-slate-900`}>{r.qty[0] || r.amt[0] ? r.rank : ""}</td>
-                        <td className={`${TD} sticky left-9 z-[1] w-9 bg-white`}>{r.amt[1] ? r.prevRank : ""}</td>
-                        <td className={`${TD} sticky left-[72px] z-[1] w-9 bg-white ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
+                        <td className={`${TD} sticky left-0 z-[1] w-[44px] min-w-[44px] max-w-[44px] bg-white font-black text-slate-900`}>{r.qty[0] || r.amt[0] ? r.rank : ""}</td>
+                        <td className={`${TD} sticky left-[44px] z-[1] w-[44px] min-w-[44px] max-w-[44px] bg-white`}>{r.amt[1] ? r.prevRank : ""}</td>
+                        <td className={`${TD} sticky left-[88px] z-[1] w-[44px] min-w-[44px] max-w-[44px] bg-white ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
                       </>
                     )}
                     <td className={`sticky ${PL} z-[1] bg-white px-2 py-1 font-black`}>

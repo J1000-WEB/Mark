@@ -397,6 +397,9 @@
   - 공휴일 목록 `lib/koreanHolidays.ts`(해마다 추가 필요). 시험용 데이터: GET `/api/sales-summary?exportDailyTotals=1[&realtimeOnly=1]`,
     `/api/realtime?exportHourly=1`.
   - 점포 목록은 `lib/salesStoreWhitelist.ts`(매출탭·실시간 미발생 매장 공용, 폐점 매장은 `REALTIME_CLOSED_STORES`).
+- **동일매장 전년比(2026-11-19)**: 합계·구분 소계 줄 전년比 칸 아래 작은 글씨 "동일 x%" = 그 기간 올해·전년 **둘 다 매출>0**인 매장끼리만
+  (`likeYoyOf`, `StoreSalesSummaryDashboard.tsx`). 마우스 올리면 매장 수·금액과 역신장 큰 매장 7곳(전년比·차액, 전년比 낮은 순). 신규·폐점 매장 때문에
+  전체 전년比가 부풀려지는 것(예: 11/18 일간 전체 +47% vs 동일 −4.7%) 보정용.
 - ⚠️ PC의 `sync-personal-sales-sheet.js`를 편집기로 열어둔 채 저장하면 원격으로 고친 내용이 덮어써짐(2026-10-29·11-02 두 번 겪음).
 
 ## 매출탭 리포트 3종 (2026-11-17, `lib/salesReports.ts`, `components/SalesReportsPanel.tsx`, `/api/sales-reports`)

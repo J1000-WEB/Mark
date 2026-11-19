@@ -766,14 +766,12 @@ export default function StoreSalesSummaryDashboard() {
     );
   }
 
+  // 전년금액 칸은 "동일" 표시 없이 금액만(소천님 요청 2026-11-19)
   function PrevYearAggCell({ p, bg = "" }: { p: PeriodCommon & { actual: number }; bg?: string }) {
-    const lk = p.like;
-    const has = !!lk && lk.count > 0;
     return (
       <td className={`group relative border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>
         <div>{wonOrDash(p.prevYearAmount)}</div>
-        {has && <div className="text-[10px] font-bold text-purple-400">동일 {wonOrDash(lk!.prev)}</div>}
-        {has && <LikePopup lk={lk!} byDiff />}
+
       </td>
     );
   }

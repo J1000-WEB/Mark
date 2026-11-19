@@ -261,7 +261,8 @@ export async function computeWeeklyProductReport(weekStart: string) {
           stores: WEEKLY_STORES.map((_, si) => {
             const v = storeMap.get(`${si}|${k}`);
             const sr = storeRanks[si];
-            return [v?.qty && v.qty > 0 ? sr.m.get(k) || sr.last : 0, v?.qty || 0, p?.storeStock[si] || 0];
+            // [그 매장 순위, 주간수량, 매장재고, 주간금액(2026-11-19 추가 — 구성비 점포별 그래프용)]
+            return [v?.qty && v.qty > 0 ? sr.m.get(k) || sr.last : 0, v?.qty || 0, p?.storeStock[si] || 0, Math.round(v?.amt || 0)];
           }),
         };
       })

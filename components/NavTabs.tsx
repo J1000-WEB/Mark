@@ -6,7 +6,8 @@
 //  - body에 has-sidenav 클래스를 붙여 PC에서 본문을 메뉴바 폭만큼 오른쪽으로 밀어냄(globals.css).
 // 예전 메모: 상품동향/VMD/스냅샷 탭은 안 써서 숨김(라우트는 남아 있음). 판매전체상/일간/월간은 매출 탭 안, 판매데이터는 재고CTRL 안.
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type NavKey = "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" | "rounding" | "product";
 
@@ -34,6 +35,23 @@ export default function NavTabs({ active }: { active: NavKey }) {
   useEffect(() => {
     document.body.classList.toggle("sidenav-collapsed", collapsed);
   }, [collapsed]);
+  // 모바일 위쪽 메뉴는 페이지마다 NavTabs 위치·여백이 달라서(실시간 탭은 제목 옆에 있어 깨졌음) body에 포털로 붙여 화면 맨 위에 고정하고,
+  // 그 높이만큼 body 위쪽 여백(--mnav-h)을 줌.
+  const [mounted, setMounted] = useState(false);
+  const mobileRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const el = mobileRef.current;
+    if (!el) return;
+    const set = () => document.body.style.setProperty("--mnav-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.body.style.removeProperty("--mnav-h");
+    };
+  }, [mounted]);
   const toggle = () => {
     setCollapsed((c) => {
       try {
@@ -102,7 +120,9 @@ export default function NavTabs({ active }: { active: NavKey }) {
       </aside>
 
       {/* 모바일: 위쪽 메뉴(한 줄 가로 스크롤) + 하위 탭 한 줄 */}
-      <div className="sticky top-0 z-40 -mx-4 -mt-6 mb-2 bg-[#0f172a] text-white shadow-md lg:hidden">
+      {mounted &&
+        createPortal(
+      <div ref={mobileRef} className="fixed inset-x-0 top-0 z-50 bg-[#0f172a] text-white shadow-md lg:hidden">
         <div className="flex items-center gap-3 px-4 pb-2 pt-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/gi-logo-white.png" alt="GENERAL IDEA" className="h-3.5 w-auto" />
@@ -122,7 +142,9 @@ export default function NavTabs({ active }: { active: NavKey }) {
           ))}
         </div>
         <div id="sidenav-sub-mobile" className="flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] empty:hidden [&:not(:empty)]:pb-2" />
-      </div>
+      </div>,
+          document.body
+        )}
     </>
   );
 }

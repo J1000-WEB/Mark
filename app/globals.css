@@ -68,3 +68,10 @@ body {
     column-count: 3;
   }
 }
+
+/* MARK 2026-11-19: 모바일 위쪽 고정 메뉴(NavTabs 포털) 높이만큼 본문을 내림 */
+@media (max-width: 1023px) {
+  body.has-sidenav {
+    padding-top: var(--mnav-h, 96px);
+  }
+}

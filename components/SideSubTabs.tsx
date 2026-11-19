@@ -17,7 +17,16 @@ export default function SideSubTabs<K extends string>({
 }) {
   const [targets, setTargets] = useState<{ d: HTMLElement | null; m: HTMLElement | null } | null>(null);
   useEffect(() => {
-    setTargets({ d: document.getElementById("sidenav-sub-desktop"), m: document.getElementById("sidenav-sub-mobile") });
+    // 모바일 메뉴는 NavTabs가 마운트 뒤 포털로 붙이므로 잠깐 기다렸다 찾음(최대 2초)
+    let n = 0;
+    const find = () => {
+      const d = document.getElementById("sidenav-sub-desktop"), m = document.getElementById("sidenav-sub-mobile");
+      if ((d && m) || n++ > 20) setTargets({ d, m });
+      else timer = setTimeout(find, 100);
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    find();
+    return () => clearTimeout(timer);
   }, []);
 
   if (!targets) return null;

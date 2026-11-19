@@ -41,6 +41,7 @@ import { getSheetId, getSpreadsheetTitlesById, readRecentTailRowsById } from "@/
 import { getStoreCodeNameMap, normalizeStoreKey, readSalesSummarySnapshot } from "@/lib/dataBuilder";
 import { loadChannelMaster } from "@/lib/channelMaster";
 import { isPromoExcludedStore } from "@/lib/promoReport";
+import { readRtOrders, type RtOrder } from "@/lib/rtOrders";
 
 export const RT_EVAL_DAYS = 18;
 export const RT_BASE_DAYS = 28;
@@ -78,7 +79,30 @@ const skuKey = (style: string, color: string, size: string) => `${t(style).toUpp
 
 export type RtLine = { date: string; fromCode: string; toCode: string; from: string; to: string; style: string; color: string; size: string; qty: number };
 
+// MARK 2026-11-19: RT 지시는 MARK_DB "RT_지시이력"(ERP 이동 지시 현황을 PC가 매일 받아 저장)을 1순위로 읽음.
+//   - 수량 = **이행량**(실제로 보낸 수량, 미이행 줄은 0이라 빠짐) — 지시만 하고 안 보낸 건 성과에 안 넣음.
+//   - 그 시트가 덮는 날짜(coverFrom~) 밖의 지시만 예전 MARK 메인 시트 RT_Result(대시보드 승인분)에서 보충.
+export let lastRtLineSource = "";
 async function readRtLines(fromDate: string, toDate: string): Promise<RtLine[]> {
+  const erp = await readRtOrders(fromDate, toDate).catch(() => ({ rows: [] as RtOrder[], coverFrom: "", coverTo: "" }));
+  const erpAgg = new Map<string, RtLine>();
+  for (const o of erp.rows) {
+    if (!o.doneQty) continue;
+    const color = normColor(o.color), size = normSize(o.size);
+    const k = [o.date, o.fromCode, o.toCode, o.style, color, size].join("|");
+    const e = erpAgg.get(k) || { date: o.date, fromCode: o.fromCode, toCode: o.toCode, from: o.from || o.fromCode, to: o.to || o.toCode, style: o.style, color, size, qty: 0 };
+    e.qty += o.doneQty;
+    erpAgg.set(k, e);
+  }
+  const legacyTo = erp.coverFrom ? addDays(erp.coverFrom, -1) : toDate;
+  const legacy = legacyTo >= fromDate ? await readLegacyRtLines(fromDate, legacyTo < toDate ? legacyTo : toDate) : [];
+  lastRtLineSource = erp.coverFrom
+    ? `ERP 이동지시(RT_지시이력 ${erp.coverFrom}~${erp.coverTo}, 이행량 기준)${legacy.length ? ` + 그 전은 RT_Result ${legacy.length}건` : ""}`
+    : "RT_Result(대시보드 승인분)";
+  return [...erpAgg.values(), ...legacy].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.to.localeCompare(b.to)));
+}
+
+async function readLegacyRtLines(fromDate: string, toDate: string): Promise<RtLine[]> {
   const mainId = getSheetId();
   const titles = await getSpreadsheetTitlesById(mainId).catch(() => [] as string[]);
   if (!titles.includes("RT_Result")) return [];
@@ -114,7 +138,7 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
   const to = opts.to || yesterday;
   const from = opts.from || addDays(to, -29);
   const lines = await readRtLines(from, to);
-  if (!lines.length) return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, lines: [], summary: null, note: "기간 안에 RT_Result 지시가 없어요." };
+  if (!lines.length) return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, lines: [], summary: null, note: "기간 안에 RT 지시(이행분)가 없어요." };
 
   // 필요한 날짜·키
   const minD = lines.reduce((m, l) => (l.date < m ? l.date : m), lines[0].date);
@@ -310,5 +334,5 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
     verdicts: out.reduce((m, x) => ((m[x.verdict] = (m[x.verdict] || 0) + 1), m), {} as Record<string, number>),
   };
   const missingDates = allDates.filter((d) => !datesWithData.has(d));
-  return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, yesterday, lines: out, summary, datesRead: allDates.length, datesWithData: datesWithData.size, missingDates };
+  return { from, to, evalDays: RT_EVAL_DAYS, baseDays: RT_BASE_DAYS, yesterday, lines: out, summary, datesRead: allDates.length, datesWithData: datesWithData.size, missingDates, source: lastRtLineSource };
 }

@@ -95,6 +95,7 @@ export default function RtRecoveryPanel() {
       {!data && !loading && !error && (
         <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-center text-xs text-slate-400">지시일 기간을 고르고 "분석"을 누르면 계산해요(판매이력을 읽느라 1분 안팎 걸려요).</div>
       )}
+      {data?.source && <div className="mt-3 text-[11px] font-semibold text-slate-500">RT 지시 출처: {data.source}</div>}
       {data?.missingDates?.length > 0 && (
         <div className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
           ⚠ 판매이력을 못 읽은 날짜가 있어요({data.missingDates.slice(0, 6).join(", ")}{data.missingDates.length > 6 ? " 외" : ""}) — 그 날짜는 판매 0으로 계산됐으니 "분석"을 한 번 더 눌러주세요.

@@ -126,7 +126,10 @@ function shortStoreName(storeName: string): string {
 // target·actual, 이번달은 periodTarget·actual, 연간은 ytdTarget·ytdActual) — 백엔드
 // (lib/dataBuilder.ts StoreSalesSummaryRow)와 정확히 같은 이름을 씁니다. 공통 필드만
 // PeriodCommon으로 묶고, target/actual류는 각 기간 타입에서 실제 이름 그대로 선언합니다.
+// MARK 2026-11-19: 합계·소계 줄의 "동일매장 전년比" — 올해·전년 둘 다 매출 있는 매장끼리만 비교 + 역신장 큰 매장 목록(마우스 올리면 보임)
+type LikeYoy = { rate: number | null; actual: number; prev: number; count: number; total: number; worst: { name: string; rate: number; diff: number }[] };
 type PeriodCommon = {
+  like?: LikeYoy;
   achievementRate: number | null;
   avgReceiptAmount: number | null;
   receiptCount: number;
@@ -239,7 +242,35 @@ function aggregatePeriod(rows: AggregatableRow[]): PeriodAgg {
   };
 }
 
+function likeYoyOf(rows: StoreSalesSummaryRow[], pick: (s: StoreSalesSummaryRow) => { actual: number; prev: number } | null): LikeYoy {
+  let actual = 0, prev = 0, count = 0;
+  const list: { name: string; rate: number; diff: number }[] = [];
+  for (const s of rows) {
+    const v = pick(s);
+    if (!v || !(v.actual > 0) || !(v.prev > 0)) continue;
+    actual += v.actual;
+    prev += v.prev;
+    count++;
+    const rate = (v.actual - v.prev) / v.prev;
+    if (rate < 0) list.push({ name: shortStoreName(s.storeName), rate, diff: v.actual - v.prev });
+  }
+  list.sort((a, b) => a.rate - b.rate);
+  return { rate: prev ? (actual - prev) / prev : null, actual, prev, count, total: rows.length, worst: list.slice(0, 7) };
+}
+
 function buildTotalRow(rows: StoreSalesSummaryRow[], label: string): StoreSalesSummaryRow | null {
+  const row = buildTotalRowBase(rows, label);
+  if (!row) return null;
+  row.daily.like = likeYoyOf(rows, (s) => ({ actual: s.daily.actual, prev: s.daily.prevYearAmount }));
+  row.weekly.like = likeYoyOf(rows, (s) => ({ actual: s.weekly.actual, prev: s.weekly.prevYearAmount }));
+  row.monthly.like = likeYoyOf(rows, (s) => ({ actual: s.monthly.actual, prev: s.monthly.prevYearAmount }));
+  row.prevMonth.like = likeYoyOf(rows, (s) => ({ actual: s.prevMonth.actual, prev: s.prevMonth.prevYearAmount }));
+  row.annual.like = likeYoyOf(rows, (s) => ({ actual: s.annual.ytdActual, prev: s.annual.prevYearAmount }));
+  if (row.customPeriod) row.customPeriod.like = likeYoyOf(rows, (s) => (s.customPeriod ? { actual: s.customPeriod.actual, prev: s.customPeriod.prevYearAmount } : null));
+  return row;
+}
+
+function buildTotalRowBase(rows: StoreSalesSummaryRow[], label: string): StoreSalesSummaryRow | null {
   if (!rows.length) return null;
   const daily = aggregatePeriod(rows.map((s) => s.daily));
   const weekly = aggregatePeriod(rows.map((s) => s.weekly));
@@ -669,7 +700,7 @@ export default function StoreSalesSummaryDashboard() {
           </>
         )}
         <td className={`border-t border-slate-100 ${TD_NUM} ${bg}`}>{pct(p.achievementRate)}</td>
-        <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${growthColor(p.yoyGrowthRate)} ${bg}`}>{growthPct(p.yoyGrowthRate)}</td>
+        <YoyAggCell p={p} bg={bg} />
         {showYoyDetail && (
           <>
             <td className={`border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>{wonOrDash(p.prevYearAmount)}</td>
@@ -677,6 +708,46 @@ export default function StoreSalesSummaryDashboard() {
           </>
         )}
       </>
+    );
+  }
+
+  // MARK 2026-11-19: 합계·소계 전년比 칸 — 위: 전체 전년比, 아래 작은 글씨: 동일매장 전년比. 마우스 올리면 역신장 큰 매장.
+  function YoyAggCell({ p, bg = "" }: { p: PeriodCommon & { actual: number }; bg?: string }) {
+    const lk = p.like;
+    return (
+      <td className={`group relative border-t border-slate-100 ${TD_NUM} ${bg}`}>
+        <div className={`font-bold ${growthColor(p.yoyGrowthRate)}`}>{growthPct(p.yoyGrowthRate)}</div>
+        {lk && lk.count > 0 && (
+          <div className={`text-[10px] font-bold ${growthColor(lk.rate)}`} title="">
+            동일 {growthPct(lk.rate)}
+          </div>
+        )}
+        {lk && lk.count > 0 && (
+          <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-60 rounded-xl border border-slate-200 bg-white p-2.5 text-left text-[11px] font-normal text-slate-700 shadow-xl group-hover:block">
+            <div className="font-black text-slate-900">동일매장 전년比 {growthPct(lk.rate)}</div>
+            <div className="mt-0.5 text-slate-500">
+              올해·전년 둘 다 매출 있는 {lk.count}개 매장(전체 {lk.total}개)
+              <br />
+              {wonOrDash(lk.actual)} vs 전년 {wonOrDash(lk.prev)}
+            </div>
+            {lk.worst.length ? (
+              <>
+                <div className="mt-2 font-black text-rose-600">역신장 큰 매장</div>
+                {lk.worst.map((w) => (
+                  <div key={w.name} className="flex justify-between gap-2 tabular-nums">
+                    <span className="truncate">{w.name}</span>
+                    <span className="whitespace-nowrap text-rose-600">
+                      {growthPct(w.rate)} <span className="text-slate-400">({diffWon(w.diff + 0, 0)})</span>
+                    </span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="mt-2 font-bold text-blue-600">역신장 매장 없음</div>
+            )}
+          </div>
+        )}
+      </td>
     );
   }
 

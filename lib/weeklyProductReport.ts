@@ -108,9 +108,14 @@ export async function computeWeeklyProductReport(weekStart: string) {
   for (let i = 0; i < dates.length; i += 7) {
     const chunk = dates.slice(i, i + 7);
     let rows = await readDailyHistoryRowsForExactDates(chunk);
-    const got = new Set(rows.map((r) => r.date));
-    const miss = chunk.filter((d) => !got.has(d) && d < kstToday());
-    if (miss.length) rows = rows.concat(await readDailyHistoryRowsForExactDates(miss));
+    // 시트 읽기가 가끔 빈 결과를 줌 → 빠진 날짜만 최대 3번 더 읽음(11/19 실제로 주간 판매가 전부 0으로 저장된 적 있음)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const got = new Set(rows.map((r) => r.date));
+      const miss = chunk.filter((d) => !got.has(d) && d < kstToday());
+      if (!miss.length) break;
+      await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+      rows = rows.concat(await readDailyHistoryRowsForExactDates(miss));
+    }
     for (const r of rows) {
       const wi = weekIdx.get(r.date);
       if (wi === undefined || !isOff(r.storeName)) continue;
@@ -132,6 +137,10 @@ export async function computeWeeklyProductReport(weekStart: string) {
       }
     }
   }
+
+  // 그 주(주간) 날짜를 하루라도 못 읽었으면 저장하지 않고 실패로 돌려보냄(0으로 둔갑한 결과가 캐시에 남는 것 방지)
+  const missWeek0 = dates.filter((d) => weekIdx.get(d) === 0 && d < kstToday() && !seen.has(d));
+  if (missWeek0.length) throw new Error(`판매 기록을 못 읽은 날짜가 있어요(${missWeek0.join(", ")}). 잠시 뒤 다시 계산해 주세요.`);
 
   // ── PIP(상품·가격·라이프사이클·재고) ──
   const pipId = getDailySourceSheetId();

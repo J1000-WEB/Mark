@@ -77,7 +77,8 @@ export default function WeeklyProductPanel() {
         (!f.lineup || r.lineup === f.lineup) &&
         (!f.salesOnly || r.qty?.[0] > 0) &&
         (!q || r.style.includes(q) || String(r.name).toUpperCase().includes(q) || `${r.style}${r.color}`.includes(q))
-    );
+    ).sort((a, b) => (b.amt?.[0] || 0) - (a.amt?.[0] || 0) || (b.qty?.[0] || 0) - (a.qty?.[0] || 0) || (b.totalStock || 0) - (a.totalStock || 0));
+    // MARK 2026-11-19: 기본 정렬 = 주간 판매금액 높은 순(같으면 수량, 재고 순)
   }, [rows, f]);
   useEffect(() => setLimit(PAGE), [f, mode, week]);
 

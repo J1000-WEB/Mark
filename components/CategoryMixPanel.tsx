@@ -2,7 +2,10 @@
 
 // MARK 2026-11-19: 상품탭 "구성비" — 품목(KNIT·OUTER·BOTTOM…) → 복종(CARDIGAN·PANTS…) → 아이템 단위로
 // 판매·재고 비중을 봄. 데이터는 주간데이터(/api/weekly-product?mode=style, 품번 단위 캐시)를 그대로 묶어서 계산.
+// 2026-11-19: 성별(여성·공용·남성 — MARK_PIP_ARCHIVE 상품정보 L열, /api/style-sex) 필터·맨 앞 단계 + 점포별 100% 막대(StoreMixChart).
 import { Fragment, useEffect, useMemo, useState } from "react";
+import StoreMixChart from "@/components/StoreMixChart";
+import { parseStyleCode } from "@/lib/productCode";
 
 type Row = any;
 type Agg = {
@@ -34,12 +37,29 @@ function Bar({ v, color }: { v: number; color: string }) {
   );
 }
 
+// 보관 시트 성별 값을 여성·공용·남성으로 맞춤(코드·이름 둘 다 대응)
+function sexLabel(v: string) {
+  const x = String(v || "").trim();
+  if (!x) return "(미분류)";
+  if (/^(여|W|F|L)/i.test(x)) return "여성";
+  if (/^(남|M)/i.test(x)) return "남성";
+  if (/^(공|U|C|유니)/i.test(x)) return "공용";
+  return x;
+}
+
 export default function CategoryMixPanel() {
   const [week, setWeek] = useState("");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [f, setF] = useState({ year: "", season: "", activeOnly: true });
+  const [f, setF] = useState({ year: "", season: "", sex: "", activeOnly: true, bySex: false });
+  const [sexMap, setSexMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch("/api/style-sex").then((r) => r.json()).then((j) => j.ok && setSexMap(j.map || {})).catch(() => {});
+  }, []);
+  // 보관 시트 L열 → 없으면 품번 체계(신 4번째·구 5번째 글자 L/U/M)로
+  const sexOf = (r: Row) =>
+    sexLabel(sexMap[String(r.style || "").toUpperCase()] || sexMap[String(r.main || "").toUpperCase()] || parseStyleCode(r.style)?.gender || "");
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -61,16 +81,25 @@ export default function CategoryMixPanel() {
   const rows: Row[] = data?.rows || [];
   const opts = useMemo(() => {
     const u = (k: string) => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort();
-    return { year: u("year"), season: u("season") };
-  }, [rows]);
+    return { year: u("year"), season: u("season"), sex: [...new Set(rows.map((r) => sexOf(r)))].sort() };
+  }, [rows, sexMap]);
 
+  const filtered = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          (!f.year || r.year === f.year) &&
+          (!f.season || r.season === f.season) &&
+          (!f.sex || sexOf(r) === f.sex) &&
+          (!f.activeOnly || r.qty?.some((x: number) => x > 0) || r.totalStock > 0)
+      ),
+    [rows, f, sexMap]
+  );
+  const depth = f.bySex ? 4 : 3;
   const tree = useMemo(() => {
     const root = newAgg("", "합계", 0);
-    const filtered = rows.filter(
-      (r) => (!f.year || r.year === f.year) && (!f.season || r.season === f.season) && (!f.activeOnly || r.qty?.some((x: number) => x > 0) || r.totalStock > 0)
-    );
     for (const r of filtered) {
-      const path = [r.cat || "(미분류)", r.bok || "(미분류)", r.item || "(미분류)"];
+      const path = [...(f.bySex ? [sexOf(r)] : []), r.cat || "(미분류)", r.bok || "(미분류)", r.item || "(미분류)"];
       const nodes = [root];
       let cur = root;
       path.forEach((p, i) => {
@@ -98,7 +127,7 @@ export default function CategoryMixPanel() {
       }
     }
     return root;
-  }, [rows, f]);
+  }, [filtered, f.bySex, sexMap]);
 
   const flat: Agg[] = [];
   const walk = (a: Agg) => {
@@ -134,6 +163,13 @@ export default function CategoryMixPanel() {
             <option value="">시즌 전체</option>
             {opts.season.map((v) => <option key={v}>{v}</option>)}
           </select>
+          <select className={sel} value={f.sex} onChange={(e) => setF({ ...f, sex: e.target.value })}>
+            <option value="">성별 전체</option>
+            {opts.sex.map((v) => <option key={v}>{v}</option>)}
+          </select>
+          <label className="flex items-center gap-1 text-xs font-bold">
+            <input type="checkbox" checked={f.bySex} onChange={(e) => { setF({ ...f, bySex: e.target.checked }); setOpen({}); }} /> 성별부터 나누기
+          </label>
           <label className="flex items-center gap-1 text-xs font-bold">
             <input type="checkbox" checked={f.activeOnly} onChange={(e) => setF({ ...f, activeOnly: e.target.checked })} /> 판매·재고 있는 품번만
           </label>
@@ -165,7 +201,7 @@ export default function CategoryMixPanel() {
                       setOpen(next);
                     }}
                   >
-                    {allOpen ? "− 접기" : "+ 품목 펼치기"}
+                    {allOpen ? "− 접기" : f.bySex ? "+ 성별 펼치기" : "+ 품목 펼치기"}
                   </button>
                 </th>
                 <th colSpan={5} className="border-l border-slate-200 px-1 font-black">판매금액</th>
@@ -218,7 +254,7 @@ export default function CategoryMixPanel() {
             </thead>
             <tbody>
               {flat.map((a) => {
-                const has = a.children.size > 0 && a.level < 3;
+                const has = a.children.size > 0 && a.level < depth;
                 const diff = a.amt1 ? a.amt0 / a.amt1 - 1 : null;
                 const sAmt = T.amt0 ? a.amt0 / T.amt0 : 0;
                 const sStock = T.stock ? a.stock / T.stock : 0;
@@ -259,6 +295,14 @@ export default function CategoryMixPanel() {
             </tbody>
           </table>
         </div>
+      )}
+      {!loading && data && (
+        <StoreMixChart
+          rows={filtered}
+          stores={data.stores || []}
+          groupOf={{ cat: (r: Row) => r.cat || "(미분류)", sex: sexOf, bok: (r: Row) => r.bok || "(미분류)" }}
+          dims={[["cat", "품목"], ["sex", "성별"], ["bok", "복종"]]}
+        />
       )}
       {data && (
         <p className="text-[11px] text-slate-400">

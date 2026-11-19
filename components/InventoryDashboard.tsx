@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import RtRecoveryPanel from "@/components/RtRecoveryPanel";
 import SideSubTabs from "@/components/SideSubTabs";
 import ShipRtPanel from "@/components/ShipRtPanel";
+import { OutletPanel, OnlineTransferPanel, SlowMoverPanel } from "@/components/MdToolPanels";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
@@ -3282,16 +3283,21 @@ export default function InventoryDashboard() {
           </>
         )}
 
-        {invTab === "outlet" && (
-          <Card title="🏭 팩토리아울렛(용인) 출고 제안" tone="white">
-            <p className="text-sm font-semibold text-slate-500">재고MD님 "팩토리아울렛 판매분" 로직(창고 출고만, 매장당 최대 10장)을 옮기는 중이에요.</p>
-          </Card>
-        )}
+        {invTab === "outlet" && <OutletPanel />}
 
-        {invTab === "online" && <AllocationLookupSection data={data} />}
+        {invTab === "online" && (
+          <>
+            <OnlineTransferPanel />
+            <details className="rounded-3xl border border-slate-200 bg-white p-4">
+              <summary className="cursor-pointer text-sm font-black text-slate-600">예전 온라인재고 이관 요청(품번 조회) 보기</summary>
+              <div className="mt-4"><AllocationLookupSection data={data} /></div>
+            </details>
+          </>
+        )}
 
         {invTab === "slow" && (
           <>
+            <SlowMoverPanel />
             <StockInboundAlertCard />
             <PromotionReportSection data={data} />
             <PromotionSection data={data} />

@@ -14,7 +14,14 @@ export async function POST(req: Request) {
     let result: any;
     if (b.tool === "outlet") result = await computeOutlet(b.config || {});
     else if (b.tool === "online") result = await computeOnlineTransfer({ topN: Number(b.topN) || 50, days: Number(b.days) || 28, styles: Array.isArray(b.styles) ? b.styles : [] });
-    else if (b.tool === "slow") result = await computeSlowMovers({ days: Number(b.days) || 28 });
+    else if (b.tool === "storeNames") {
+      // 점검용: 기간 판매에 나오는 매장 이름별 수량
+      const { readDailyHistoryFlatRange } = await import("@/lib/dataBuilder");
+      const rows = await readDailyHistoryFlatRange(String(b.from), String(b.to), { strict: true });
+      const m: Record<string, number> = {};
+      for (const r of rows as any[]) if (Number(r.qty || 0)) m[r.storeName] = (m[r.storeName] || 0) + Number(r.qty || 0);
+      result = { stores: m };
+    } else if (b.tool === "slow") result = await computeSlowMovers({ days: Number(b.days) || 28 });
     else return NextResponse.json({ ok: false, error: "tool을 지정해 주세요." }, { status: 400 });
     return NextResponse.json({ ok: true, ...result, computeMs: Date.now() - t0 });
   } catch (e: any) {

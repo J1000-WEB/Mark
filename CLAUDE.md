@@ -509,7 +509,7 @@
 
 ## 메뉴 레이아웃 (2026-11-19, `components/NavTabs.tsx`, `components/SideSubTabs.tsx`)
 
-- 탭 순서: 매출 · 상품 · 실시간 · 재고CTRL · 매장 · 라운딩 · 주간(소천님 요청).
+- 탭 순서: 매출 · 상품 · 실시간 · 재고CTRL · 주간 · 매장 · 라운딩(소천님 요청). PC 메뉴바는 ‹/› 버튼으로 접기(아이콘만, w-16, `body.sidenav-collapsed`, localStorage `sidenavCollapsed`).
 - PC(lg↑): 왼쪽 고정 메뉴바(남색, 진짜 로고 `public/gi-logo-white.png` — 소천님이 준 로고를 흰색 투명 PNG로 변환, 검정판 `gi-logo-black.png`),
   `body.has-sidenav`가 본문을 14rem 밀어냄(globals.css). 모바일: 위쪽 로고 + 가로 스크롤 메뉴 + 하위 탭 줄(sticky).
 - 페이지 안 하위 탭은 `SideSubTabs`가 메뉴바(#sidenav-sub-desktop / #sidenav-sub-mobile)로 포털 — 지금 상품(IMC/주간데이터/구성비)·매출(점포별/일별/연간/연간(점포)).

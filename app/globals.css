@@ -37,6 +37,10 @@ body {
 @media (min-width: 1024px) {
   body.has-sidenav {
     padding-left: 14rem;
+    transition: padding-left 0.2s;
+  }
+  body.has-sidenav.sidenav-collapsed {
+    padding-left: 4rem;
   }
 }
 

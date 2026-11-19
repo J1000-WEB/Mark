@@ -95,6 +95,8 @@
 
 > **2026-11-17 파워오토메이트 중단**(소천님 결정): 11/12부터 PA PIP 파일이 직접 조회보다 약 2,500행 적었음(직접 조회는 매일 15,297행 일정).
 > 이제 PIP = `fetch-pip-direct.js --force`가 **3:00 조회+업로드**, 실패 시 4:50·6:00 재시도(그날 `logs/pip-upload-ok-YYYYMMDD.txt` 있으면 건너뜀).
+> **2026-11-19 9:30 다시 받기 추가**(`PIP_REFRESH_TIMES`): 무신사·용인 등 위탁 매출을 아침에 ERP에 수동 업로드 → 9:30엔 들어와 있으니 성공 기록과 상관없이
+> 한 번 더 조회+업로드(어제 기준, PIP 시트·Daily_Sales_History 갱신). 업로드 중 몇 분은 PIP 시트가 다시 만들어지는 중.
 > `schedule-power-automate.js` RUN_TIMES·`schedule-cleanup.js` CLEANUP_JOBS는 비움(주석으로 남김), 4:50 PA 파일 업로드(runUpload)도 안 씀.
 > 아래 표의 PA 1차/중간정리/PA 2차/PIP 4:50/최종정리 줄은 예전 기록.
 

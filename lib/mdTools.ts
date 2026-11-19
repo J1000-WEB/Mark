@@ -24,12 +24,14 @@ const normSize = (v: any) => {
 };
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-/** Daily_Sales_History를 7일씩 나눠 읽음(한 번에 많이 읽으면 문자열 한도 초과 — 라운딩 탭에서 겪음) */
+/** Daily_Sales_History를 7일씩 나눠 읽고 판매가 있는 줄만 남김(하루치에 전 SKU 재고 줄이 있어 통째로 모으면 너무 큼 —
+ *  라운딩 탭에서 문자열 한도, 여기선 배열 spread로 콜스택 초과를 겪음) */
 async function readFlatChunks(from: string, to: string) {
   const out: any[] = [];
   for (let s = from; s <= to; s = addDays(s, 7)) {
     const e = addDays(s, 6) < to ? addDays(s, 6) : to;
-    out.push(...(await readDailyHistoryFlatRange(s, e, { strict: true })));
+    const part = await readDailyHistoryFlatRange(s, e, { strict: true });
+    for (const r of part) if (Number(r.qty || 0) !== 0) out.push({ date: r.date, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty });
   }
   return out;
 }

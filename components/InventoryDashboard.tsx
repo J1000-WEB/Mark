@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import RtRecoveryPanel from "@/components/RtRecoveryPanel";
+import SideSubTabs from "@/components/SideSubTabs";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
@@ -2954,6 +2955,35 @@ function RtControlSection() {
   );
 }
 
+const INV_TABS = [
+  ["rt", "출고·RT"],
+  ["outlet", "팩토리아울렛"],
+  ["online", "온라인 이관요청"],
+  ["slow", "저소진·프로모션"],
+  ["perf", "성과"],
+  ["data", "데이터 관리"],
+] as const;
+type InvTabKey = (typeof INV_TABS)[number][0];
+
+// MARK 2026-11-19: ERP ONOFF 재고 직접 조회(PC fetch-onoff-stock.js, 매일 7:00·9:40·13:00) 마지막 갱신 시각
+function OnOffStockStatus() {
+  const [meta, setMeta] = useState<any>(null);
+  useEffect(() => {
+    fetch("/api/onoff-stock-upload", { cache: "no-store" }).then((r) => r.json()).then(setMeta).catch(() => {});
+  }, []);
+  const w = meta?.warehouse, o = meta?.online;
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-bold text-slate-500">물류 가용재고(온·오프) — ERP 직접 조회, 매일 7:00 · 9:40 · 13:00 자동</p>
+      <p className="mt-1 text-sm font-black text-slate-900">
+        {w ? `마지막 갱신 ${w.uploadedAt} · ${Number(w.rowCount || 0).toLocaleString("ko-KR")} SKU` : "불러오는 중..."}
+        {o && w && o.uploadedAt !== w.uploadedAt ? ` (온라인 가용 ${o.uploadedAt})` : ""}
+      </p>
+      <p className="mt-1 text-[11px] font-semibold text-slate-400">{w?.fileName || ""}</p>
+    </div>
+  );
+}
+
 export default function InventoryDashboard() {
   const [dashboardData, setDashboardData] = useState<any>(markData);
   const [dataStatus, setDataStatus] = useState("내장 데이터");
@@ -2970,6 +3000,17 @@ export default function InventoryDashboard() {
   const [backfillProgress, setBackfillProgress] = useState("");
   const [backfillLog, setBackfillLog] = useState<string[]>([]);
   const [launchCaptureStatus, setLaunchCaptureStatus] = useState("");
+  const [invTab, setInvTab] = useState<InvTabKey>("rt");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("invTab") as InvTabKey | null;
+      if (v && INV_TABS.some(([k]) => k === v)) setInvTab(v);
+    } catch {}
+  }, []);
+  const pickInvTab = (k: InvTabKey) => {
+    setInvTab(k);
+    try { localStorage.setItem("invTab", k); } catch {}
+  };
 
   useEffect(() => {
     fetch("/api/data", { cache: "no-store" })
@@ -3214,25 +3255,55 @@ export default function InventoryDashboard() {
 
   const data = dashboardData?.inventory || {};
 
+  // MARK 2026-11-19: 재고CTRL 정리(소천님 결정) — 세로로 쌓여 있던 기능을 왼쪽 메뉴 하위 탭으로 나눔.
+  //   출고·RT / 팩토리아울렛 / 온라인 이관요청 / 저소진·프로모션 / 성과 / 데이터 관리
+  //   뺀 것: 판매분 배분, 업로드 지연 알림, KPI·AI 브리핑, 품절/과재고 점포·상품 TOP, 위탁 투입 추천, 운영 프로세스 제안,
+  //          상품 AI 분석, 입고일 캡처(1회성), 과거 매출 백필 업로드(PIP 보관 시트로 대체). 함수 코드는 남아 있음.
   return (
     <main className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">재고 컨트롤</h1>
-            <p className="mt-1 text-sm text-slate-500">RT 제안, 온라인 이관 제안, 프로모션 제안</p><p className="mt-1 text-xs font-semibold text-blue-600">{dataStatus}</p>
+            <p className="mt-1 text-sm text-slate-500">{INV_TABS.find(([k]) => k === invTab)?.[1]}</p>
           </div>
           <NavTabs active="inventory" />
         </header>
+        <SideSubTabs items={INV_TABS} active={invTab} onPick={pickInvTab} />
 
-        <section className="rounded-3xl bg-slate-900 p-4 text-sm font-bold text-white shadow-sm">
-          {data.periodLabel}
-        </section>
+        {invTab === "rt" && <RtControlSection />}
 
-        <SystemHealthPanel />
+        {invTab === "outlet" && (
+          <Card title="🏭 팩토리아울렛(용인) 출고 제안" tone="white">
+            <p className="text-sm font-semibold text-slate-500">재고MD님 "팩토리아울렛 판매분" 로직(창고 출고만, 매장당 최대 10장)을 옮기는 중이에요.</p>
+          </Card>
+        )}
 
-        {/* MARK 2026-09-25: 탭 정리 요청 — 판매데이터 탭을 독립 탭에서 빼서 재고CTRL 탭 안으로
-            옮기고, 여기서 클릭하면 들어갈 수 있게 바로가기로 둡니다. */}
+        {invTab === "online" && <AllocationLookupSection data={data} />}
+
+        {invTab === "slow" && (
+          <>
+            <StockInboundAlertCard />
+            <PromotionReportSection data={data} />
+            <PromotionSection data={data} />
+          </>
+        )}
+
+        {invTab === "perf" && (
+          <>
+            <RtRecoveryPanel />
+            <details className="rounded-3xl border border-slate-200 bg-white p-4">
+              <summary className="cursor-pointer text-sm font-black text-slate-600">예전 성과표(받은 매장 실행주 vs 전주) 보기</summary>
+              <div className="mt-4"><PerformanceTrackingSection data={data} /></div>
+            </details>
+          </>
+        )}
+
+        {invTab === "data" && (
+          <>
+            <p className="text-xs font-semibold text-blue-600">{dataStatus}{data.periodLabel ? ` · ${data.periodLabel}` : ""}</p>
+            <SystemHealthPanel />
+            <OnOffStockStatus />
         <a
           href="/sales-data"
           className="flex items-center justify-between rounded-3xl bg-gradient-to-r from-slate-800 to-slate-900 p-5 text-white shadow-sm transition hover:from-slate-900 hover:to-black"
@@ -3280,8 +3351,6 @@ export default function InventoryDashboard() {
           {styleSheetError && <p className="mt-2 text-xs font-black text-red-600">⚠ {styleSheetError}</p>}
         </div>
 
-        <StockInboundAlertCard />
-
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-5 shadow-sm">
           <div>
             <p className="text-xs font-bold text-slate-500">품번별 실제 평균단가 (Style_Price_History)</p>
@@ -3306,135 +3375,8 @@ export default function InventoryDashboard() {
           </button>
         </div>
 
-        {uploadStatuses && Object.entries(uploadStatuses.statuses || {}).some(([, info]: [string, any]) => {
-          const kind = Object.keys(uploadStatuses.statuses).find((k) => uploadStatuses.statuses[k] === info);
-          const threshold = uploadStatuses.thresholds?.[kind as string] ?? 7;
-          return info.daysSince !== null && info.daysSince >= threshold;
-        }) && (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-4">
-            <p className="text-sm font-black text-red-700">⚠ 업로드 지연 알림</p>
-            <div className="mt-2 space-y-1">
-              {Object.entries(uploadStatuses.statuses || {}).map(([kind, info]: [string, any]) => {
-                const threshold = uploadStatuses.thresholds?.[kind] ?? 7;
-                const stale = info.daysSince !== null && info.daysSince >= threshold;
-                if (!stale) return null;
-                return (
-                  <p key={kind} className="text-xs font-bold text-red-600">
-                    · {kind}: 마지막 업로드로부터 {info.daysSince}일 경과 (기준 {threshold}일) — 새 파일을 올려주세요.
-                  </p>
-                );
-              })}
-            </div>
-          </div>
+          </>
         )}
-
-        <RtControlSection />
-
-        <SalesAllocationSection />
-
-        <RtRecoveryPanel />
-        <PerformanceTrackingSection data={data} />
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <Kpi title="온라인 이관 제안" value={`${data.onlineTransferSuggestions?.length || data.allocationSuggestions?.length || 0}건`} tone="green" />
-          <Kpi title="품절 위험" value={`${data.stockoutRisk?.length || 0}품번`} tone="orange" />
-          <Kpi title="과재고 위험" value={`${data.overstockRisk?.length || 0}품번`} tone="purple" />
-        </section>
-
-        <Briefing lines={data.aiBriefing || []} />
-
-        <PromotionSection data={data} />
-        <PromotionReportSection data={data} />
-
-        <section className="grid gap-6 xl:grid-cols-2">
-          <Card title="품절 위험 점포 TOP5" tone="purple">
-            <StoreRiskList items={data.stockoutStoreTop5 || []} type="stockout" />
-          </Card>
-          <Card title="과재고 점포 TOP5" tone="yellow">
-            <StoreRiskList items={data.overstockStoreTop5 || []} type="over" />
-          </Card>
-        </section>
-
-        <section className="grid gap-6">
-          <AllocationLookupSection data={data} />
-          <Card title="온라인 이관 제안 TOP5">
-            <ItemList items={data.onlineTransferSuggestions || data.allocationSuggestions || []} type="alloc" maxHeight="h-[520px]" />
-          </Card>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-2">
-          <Card title="품절 위험 상품 TOP10">
-            <ItemList items={data.stockoutRisk || []} type="risk" maxHeight="h-[520px]" />
-          </Card>
-          <Card title="과재고 상품 TOP10">
-            <ItemList items={data.overstockRisk || []} type="over" maxHeight="h-[520px]" />
-          </Card>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-2">
-          <Card title="위탁 상품 투입 추천" tone="beige">
-            <ItemList items={data.consignmentRecommendations || []} type="consign" maxHeight="h-[420px]" />
-          </Card>
-          <Card title="운영 프로세스 제안" tone="yellow">
-            <ul className="space-y-3 text-sm leading-6 text-slate-700">
-              <li>• 1차: 점포간 RT로 부족 매장을 보완합니다.</li>
-              <li>• 2차: RT로 해결이 어려운 품번은 온라인 이관 제안을 요청합니다.</li>
-              <li>• 3차: 위탁채널은 전사 TOP 상품과 가용재고를 함께 보고 투입 후보를 정합니다.</li>
-              <li>• 4차: 장기 미소진 상품은 프로모션/가격조정을 검토합니다.</li>
-            </ul>
-          </Card>
-        </section>
-
-        <ProductAnalysisSection data={data} />
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold text-slate-500">입고일 캡처 (1회성)</p>
-          <p className="mt-1 text-xs font-semibold text-slate-400">
-            "금주/전주" 시트에서 입고일(최초출고일)을 한 번 읽어와 저장해둡니다. 이미 저장된 품번은 안 건드리고, 새 품번만 추가돼요.
-          </p>
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={runCaptureLaunchDates}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white"
-            >
-              입고일 캡처 실행
-            </button>
-            {launchCaptureStatus && <p className="text-xs font-bold text-blue-600">{launchCaptureStatus}</p>}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold text-slate-500">과거 일자별 매출 백필 업로드</p>
-          <p className="mt-1 text-xs font-semibold text-slate-400">
-            지난주 수요일 이전 Daily_Sales_History는 금액이 정확하지 않아요. 그날짜의 "스타일별채널별(금액)" 파일을 하나씩(또는 여러 개 한번에) 올리면, 그 날짜 데이터만 정확한 값으로 교체돼요.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              multiple
-              onChange={(e) => setBackfillFiles(e.target.files)}
-              className="text-xs"
-            />
-            <button
-              type="button"
-              onClick={runBackfillUpload}
-              disabled={backfillUploading || !backfillFiles || !backfillFiles.length}
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white disabled:opacity-50"
-            >
-              {backfillUploading ? "처리 중..." : "백필 업로드"}
-            </button>
-          </div>
-          {backfillProgress && <p className="mt-2 text-xs font-bold text-blue-600">{backfillProgress}</p>}
-          {backfillLog.length > 0 && (
-            <div className="mt-3 max-h-52 overflow-y-auto rounded-xl bg-slate-50 p-3 text-xs font-semibold">
-              {backfillLog.map((line, i) => (
-                <p key={i} className={line.startsWith("⚠") ? "text-red-600" : "text-slate-600"}>{line}</p>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </main>
   );

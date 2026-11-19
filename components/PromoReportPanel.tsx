@@ -94,6 +94,71 @@ export default function PromoReportPanel() {
     [groups]
   );
 
+  // MARK 2026-11-19: 엑셀 다운로드(소천님 요청) — 지금 화면에 체크된 프로모션만, 요약 시트 + 상세 시트(팀 "프로모션총요약"처럼 블록으로)
+  const [downloading, setDownloading] = useState(false);
+  async function downloadExcel() {
+    if (!data) return;
+    setDownloading(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const HEAD = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1E293B" } };
+      const SUM = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFF1F5F9" } };
+      const TITLE = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFEF3C7" } };
+      const thin = { style: "thin" as const, color: { argb: "FFCBD5E1" } };
+      const border = { top: thin, bottom: thin, left: thin, right: thin };
+      const styleHead = (row: any) => row.eachCell((c: any) => { c.fill = HEAD; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = border; });
+      const styleBody = (row: any, numFrom = 2) => row.eachCell((c: any, i: number) => { c.border = border; if (i >= numFrom && typeof c.value === "number") c.numFmt = Math.abs(c.value) < 1 && c.value !== 0 ? "0.0%" : "#,##0"; });
+      const g2 = (cur: Agg, prev: Agg) => (prev.amount ? cur.amount / prev.amount - 1 : cur.amount ? "신규" : "");
+      const period = `${md(data.weekStart)}~${md(data.weekEnd)}`;
+
+      // 요약
+      const ws = wb.addWorksheet("프로모션총요약");
+      ws.addRow([`IMC 프로모션 결과 (${data.weekStart} ~ ${data.weekEnd}) · 오프라인(위탁·면세 포함), 매장주문/반품·온라인 제외 · 전주 ${data.prevStart} ~ ${data.prevEnd}`]).font = { bold: true, size: 13 };
+      ws.addRow([]);
+      ws.addRow(["", "금주 전체매출(오프)", total.cur.amount, "전주 전체매출(오프)", total.prev.amount, "전주비", g2(total.cur, total.prev)]).eachCell((c: any) => { if (typeof c.value === "number") c.numFmt = Math.abs(c.value) < 1 ? "0.0%" : "#,##0"; });
+      ws.addRow([]);
+      styleHead(ws.addRow(["프로모션", "금주 수량", "금주 금액", "전체매출비중", "전주 수량", "전주 금액", "GAP 수량", "GAP 금액", "신장률"]));
+      for (const s of summary) {
+        styleBody(ws.addRow([s.group, s.cur.qty, s.cur.amount, share(s.cur.amount, total.cur.amount) ?? "", s.prev.qty, s.prev.amount, s.cur.qty - s.prev.qty, s.cur.amount - s.prev.amount, g2(s.cur, s.prev)]));
+      }
+      ws.columns = [{ width: 22 }, { width: 12 }, { width: 16 }, { width: 13 }, { width: 12 }, { width: 16 }, { width: 11 }, { width: 14 }, { width: 10 }];
+
+      // 상세(프로모션별 블록)
+      const wd = wb.addWorksheet("프로모션별 상세");
+      wd.columns = [{ width: 6 }, { width: 13 }, { width: 30 }, { width: 11 }, { width: 11 }, { width: 8 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 9 }, { width: 13 }, { width: 10 }, { width: 13 }];
+      for (const g of groups) {
+        const title = wd.addRow([g.title]);
+        title.font = { bold: true, size: 12 };
+        title.getCell(1).fill = TITLE;
+        if (g.note) wd.addRow([String(g.note).replace(/\n/g, " / ")]).font = { italic: true, color: { argb: "FF64748B" } };
+        const head = ["출고", "품번", "품명", "소비자가", "현판가", "할인율", `금주(${period}) 수량`, "금주 금액", `전주 수량`, "전주 금액", "GAP 수량", "GAP 금액", "신장률"];
+        if (g.prevYear) head.push("전년 수량", "전년 금액", "러닝−전년 수량", "러닝−전년 금액");
+        styleHead(wd.addRow(head));
+        for (const r of g.rows) {
+          const row = [r.shipped, r.style, r.name, r.consumerPrice || "", r.currentPrice || "", r.consumerPrice && r.currentPrice ? 1 - r.currentPrice / r.consumerPrice : "", r.cur.qty, r.cur.amount, r.prev.qty, r.prev.amount, r.cur.qty - r.prev.qty, r.cur.amount - r.prev.amount, g2(r.cur, r.prev)];
+          if (g.prevYear) row.push(r.prevYear?.qty ?? "", r.prevYear?.amount ?? "", r.runningGap?.qty ?? "", r.runningGap?.amount ?? "");
+          styleBody(wd.addRow(row), 4);
+        }
+        const sum = [`합계 (${g.rows.length}종)`, "", "", "", "", "", g.cur.qty, g.cur.amount, g.prev.qty, g.prev.amount, g.cur.qty - g.prev.qty, g.cur.amount - g.prev.amount, g2(g.cur, g.prev)];
+        if (g.prevYear) sum.push(g.prevYearTotal?.qty ?? "", g.prevYearTotal?.amount ?? "", "", "");
+        const sr = wd.addRow(sum);
+        styleBody(sr, 4);
+        sr.eachCell((c: any) => { c.fill = SUM; c.font = { bold: true }; });
+        wd.addRow([]);
+      }
+      const buf = await wb.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `IMC_프로모션결과_${data.weekStart.replace(/-/g, "")}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="mt-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -140,6 +205,14 @@ export default function PromoReportPanel() {
           />
           <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => data && setWeek(addDays(data.weekStart, 7))}>
             다음주 ▶
+          </button>
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={!data || downloading}
+            className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-black text-white disabled:opacity-50"
+          >
+            {downloading ? "만드는 중..." : "⬇ 엑셀"}
           </button>
           <button
             type="button"

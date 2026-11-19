@@ -3299,18 +3299,12 @@ export default function InventoryDashboard() {
           <>
             <SlowMoverPanel />
             <StockInboundAlertCard />
-            <PromotionReportSection data={data} />
-            <PromotionSection data={data} />
           </>
         )}
 
         {invTab === "perf" && (
           <>
             <RtRecoveryPanel />
-            <details className="rounded-3xl border border-slate-200 bg-white p-4">
-              <summary className="cursor-pointer text-sm font-black text-slate-600">예전 성과표(받은 매장 실행주 vs 전주) 보기</summary>
-              <div className="mt-4"><PerformanceTrackingSection data={data} /></div>
-            </details>
           </>
         )}
 

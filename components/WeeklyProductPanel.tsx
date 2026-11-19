@@ -385,7 +385,7 @@ export default function WeeklyProductPanel() {
                         <td className={`${TD} sticky left-[88px] z-[1] w-[44px] min-w-[44px] max-w-[44px] bg-white ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
                       </>
                     )}
-                    <td className={`sticky ${PL} z-[1] bg-white px-2 py-1 font-black`}>
+                    <td className={`sticky ${PL} z-[1] whitespace-nowrap bg-white px-2 py-1 font-black`}>
                       {r.style}
                       {r.merged?.length ? (
                         <button

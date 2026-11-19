@@ -127,7 +127,7 @@ function shortStoreName(storeName: string): string {
 // (lib/dataBuilder.ts StoreSalesSummaryRow)와 정확히 같은 이름을 씁니다. 공통 필드만
 // PeriodCommon으로 묶고, target/actual류는 각 기간 타입에서 실제 이름 그대로 선언합니다.
 // MARK 2026-11-19: 합계·소계 줄의 "동일매장 전년比" — 올해·전년 둘 다 매출 있는 매장끼리만 비교 + 역신장 큰 매장 목록(마우스 올리면 보임)
-type LikeYoy = { rate: number | null; actual: number; prev: number; count: number; total: number; worst: { name: string; rate: number; diff: number }[] };
+type LikeYoy = { rate: number | null; actual: number; prev: number; count: number; total: number; worst: { name: string; rate: number; diff: number }[]; worstByDiff: { name: string; rate: number; diff: number }[] };
 type PeriodCommon = {
   like?: LikeYoy;
   achievementRate: number | null;
@@ -254,8 +254,9 @@ function likeYoyOf(rows: StoreSalesSummaryRow[], pick: (s: StoreSalesSummaryRow)
     const rate = (v.actual - v.prev) / v.prev;
     if (rate < 0) list.push({ name: shortStoreName(s.storeName), rate, diff: v.actual - v.prev });
   }
+  const byDiff = [...list].sort((a, b) => a.diff - b.diff).slice(0, 7);
   list.sort((a, b) => a.rate - b.rate);
-  return { rate: prev ? (actual - prev) / prev : null, actual, prev, count, total: rows.length, worst: list.slice(0, 7) };
+  return { rate: prev ? (actual - prev) / prev : null, actual, prev, count, total: rows.length, worst: list.slice(0, 7), worstByDiff: byDiff };
 }
 
 function buildTotalRow(rows: StoreSalesSummaryRow[], label: string): StoreSalesSummaryRow | null {
@@ -703,50 +704,87 @@ export default function StoreSalesSummaryDashboard() {
         <YoyAggCell p={p} bg={bg} />
         {showYoyDetail && (
           <>
-            <td className={`border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>{wonOrDash(p.prevYearAmount)}</td>
-            <td className={`border-t border-slate-100 ${TD_NUM} font-bold ${diffColor(p.actual, p.prevYearAmount)} ${bg}`}>{diffWon(p.actual, p.prevYearAmount)}</td>
+            <PrevYearAggCell p={p} bg={bg} />
+            <DiffAggCell p={p} bg={bg} />
           </>
         )}
       </>
     );
   }
 
-  // MARK 2026-11-19: 합계·소계 전년比 칸 — 위: 전체 전년比, 아래 작은 글씨: 동일매장 전년比. 마우스 올리면 역신장 큰 매장.
+  // MARK 2026-11-19: 합계·소계 전년比·전년금액·금액차이 칸 — 위: 전체 값, 아래 작은 글씨: 동일매장 값. 마우스 올리면 역신장 큰 매장
+  // (전년比 칸은 전년比 낮은 순, 금액 칸들은 빠진 금액 큰 순).
+  function LikePopup({ lk, byDiff }: { lk: LikeYoy; byDiff?: boolean }) {
+    const list = byDiff ? lk.worstByDiff : lk.worst;
+    return (
+      <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-60 rounded-xl border border-slate-200 bg-white p-2.5 text-left text-[11px] font-normal text-slate-700 shadow-xl group-hover:block">
+        <div className="font-black text-slate-900">
+          동일매장 전년比 {growthPct(lk.rate)} <span className="font-bold text-slate-500">({diffWon(lk.actual, lk.prev)})</span>
+        </div>
+        <div className="mt-0.5 text-slate-500">
+          올해·전년 둘 다 매출 있는 {lk.count}개 매장(전체 {lk.total}개)
+          <br />
+          {wonOrDash(lk.actual)} vs 전년 {wonOrDash(lk.prev)}
+        </div>
+        {list.length ? (
+          <>
+            <div className="mt-2 font-black text-rose-600">역신장 큰 매장{byDiff ? "(금액순)" : ""}</div>
+            {list.map((w) => (
+              <div key={w.name} className="flex justify-between gap-2 tabular-nums">
+                <span className="truncate">{w.name}</span>
+                <span className="whitespace-nowrap text-rose-600">
+                  {byDiff ? (
+                    <>
+                      {diffWon(w.diff, 0)} <span className="text-slate-400">({growthPct(w.rate)})</span>
+                    </>
+                  ) : (
+                    <>
+                      {growthPct(w.rate)} <span className="text-slate-400">({diffWon(w.diff, 0)})</span>
+                    </>
+                  )}
+                </span>
+              </div>
+            ))}
+          </>
+        ) : (
+          <div className="mt-2 font-bold text-blue-600">역신장 매장 없음</div>
+        )}
+      </div>
+    );
+  }
+
   function YoyAggCell({ p, bg = "" }: { p: PeriodCommon & { actual: number }; bg?: string }) {
     const lk = p.like;
+    const has = !!lk && lk.count > 0;
     return (
       <td className={`group relative border-t border-slate-100 ${TD_NUM} ${bg}`}>
         <div className={`font-bold ${growthColor(p.yoyGrowthRate)}`}>{growthPct(p.yoyGrowthRate)}</div>
-        {lk && lk.count > 0 && (
-          <div className={`text-[10px] font-bold ${growthColor(lk.rate)}`} title="">
-            동일 {growthPct(lk.rate)}
-          </div>
-        )}
-        {lk && lk.count > 0 && (
-          <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-60 rounded-xl border border-slate-200 bg-white p-2.5 text-left text-[11px] font-normal text-slate-700 shadow-xl group-hover:block">
-            <div className="font-black text-slate-900">동일매장 전년比 {growthPct(lk.rate)}</div>
-            <div className="mt-0.5 text-slate-500">
-              올해·전년 둘 다 매출 있는 {lk.count}개 매장(전체 {lk.total}개)
-              <br />
-              {wonOrDash(lk.actual)} vs 전년 {wonOrDash(lk.prev)}
-            </div>
-            {lk.worst.length ? (
-              <>
-                <div className="mt-2 font-black text-rose-600">역신장 큰 매장</div>
-                {lk.worst.map((w) => (
-                  <div key={w.name} className="flex justify-between gap-2 tabular-nums">
-                    <span className="truncate">{w.name}</span>
-                    <span className="whitespace-nowrap text-rose-600">
-                      {growthPct(w.rate)} <span className="text-slate-400">({diffWon(w.diff + 0, 0)})</span>
-                    </span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="mt-2 font-bold text-blue-600">역신장 매장 없음</div>
-            )}
-          </div>
-        )}
+        {has && <div className={`text-[10px] font-bold ${growthColor(lk!.rate)}`}>동일 {growthPct(lk!.rate)}</div>}
+        {has && <LikePopup lk={lk!} />}
+      </td>
+    );
+  }
+
+  function PrevYearAggCell({ p, bg = "" }: { p: PeriodCommon & { actual: number }; bg?: string }) {
+    const lk = p.like;
+    const has = !!lk && lk.count > 0;
+    return (
+      <td className={`group relative border-t border-slate-100 ${TD_NUM} text-purple-600 ${bg}`}>
+        <div>{wonOrDash(p.prevYearAmount)}</div>
+        {has && <div className="text-[10px] font-bold text-purple-400">동일 {wonOrDash(lk!.prev)}</div>}
+        {has && <LikePopup lk={lk!} byDiff />}
+      </td>
+    );
+  }
+
+  function DiffAggCell({ p, bg = "" }: { p: PeriodCommon & { actual: number }; bg?: string }) {
+    const lk = p.like;
+    const has = !!lk && lk.count > 0;
+    return (
+      <td className={`group relative border-t border-slate-100 ${TD_NUM} ${bg}`}>
+        <div className={`font-bold ${diffColor(p.actual, p.prevYearAmount)}`}>{diffWon(p.actual, p.prevYearAmount)}</div>
+        {has && <div className={`text-[10px] font-bold ${diffColor(lk!.actual, lk!.prev)}`}>동일 {diffWon(lk!.actual, lk!.prev)}</div>}
+        {has && <LikePopup lk={lk!} byDiff />}
       </td>
     );
   }

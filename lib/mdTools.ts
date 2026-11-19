@@ -31,7 +31,17 @@ async function readFlatChunks(from: string, to: string) {
   const out: any[] = [];
   for (let s = from; s <= to; s = addDays(s, 7)) {
     const e = addDays(s, 6) < to ? addDays(s, 6) : to;
-    const part = await readDailyHistoryFlatRange(s, e, { strict: true });
+    // 구간 찾기·읽기가 가끔 순간 실패(구글 쿼터) → 3번까지 다시
+    let part: any[] = [];
+    for (let attempt = 1; ; attempt++) {
+      try {
+        part = await readDailyHistoryFlatRange(s, e, { strict: true });
+        break;
+      } catch (err) {
+        if (attempt >= 3) throw err;
+        await new Promise((r) => setTimeout(r, 3000 * attempt));
+      }
+    }
     for (const r of part) if (Number(r.qty || 0) !== 0) out.push({ date: r.date, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty });
   }
   return out;

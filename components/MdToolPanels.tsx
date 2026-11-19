@@ -110,7 +110,7 @@ export function OutletPanel() {
       {R.err && <div className="rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{R.err}</div>}
       {res && (
         <>
-          <p className="text-[11px] font-semibold text-slate-500">대상 매장: {res.stores.join(", ") || "없음"} · 기간판매 {res.inputs.period} · 매장 재고 PIP {res.inputs.pip} · 물류 가용 {res.inputs.warehouse}</p>
+          <p className="text-[11px] font-semibold text-slate-500">대상 매장: {res.stores.join(", ") || "없음"} · 기간판매 {res.inputs.period}({res.inputs.salesDates}) · 매장 재고 PIP {res.inputs.pip} · 물류 가용 {res.inputs.warehouse}</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
             {[["품절임박", res.statusCounts["품절임박"]], ["보충대상", res.statusCounts["보충"]], ["과잉", res.statusCounts["과잉"]], ["출고 건수", res.chulgoUpload.length], ["출고 합계", res.totals.shipQtySum], ["창고로도 못 채움", res.totals.unmetTotal]].map(([l, v]) => (
               <div key={String(l)} className="rounded-2xl border border-slate-200 p-3"><p className="text-[11px] font-bold text-slate-500">{l}</p><p className="mt-1 text-base font-black">{fmt(v)}</p></div>

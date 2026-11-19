@@ -10,6 +10,7 @@ import { pickDailySheetTitle } from "./dailySales";
 import { loadChannelMaster } from "./channelMaster";
 import { isPromoExcludedStore } from "./promoReport";
 import { readShipRtConfig, normStoreKey } from "./shipRtCompute";
+import { readArchivedSales } from "./pipArchive";
 
 const kstDate = (off = 0) => new Date(Date.now() + 9 * 3600 * 1000 + off * 86400000).toISOString().slice(0, 10);
 function addDays(ymd: string, d: number) {
@@ -61,7 +62,11 @@ export async function computeOutlet(cfgIn: Partial<OutletConfig> = {}) {
   const from = addDays(yesterday, -(cfg.periodDays - 1));
   const kw = normStoreKey(cfg.storeKeyword || "용인");
   const isOutlet = (name: string) => normStoreKey(name).includes(kw);
-  const [pip, wh, flat, info] = await Promise.all([readStoreStockSnapshot({ strict: true }), readWarehouseStockSnapshot(), readFlatChunks(from, yesterday), readStyleInfo().catch(() => new Map())]);
+  // 용인 같은 인샵 매장은 Daily_Sales_History에 없음(2026-11-19 확인) → 판매는 PIP 보관 시트(판매_일별, 전 채널)에서
+  const dates: string[] = [];
+  for (let d = from; d <= yesterday; d = addDays(d, 1)) dates.push(d);
+  const [pip, wh, arch, info] = await Promise.all([readStoreStockSnapshot({ strict: true }), readWarehouseStockSnapshot(), readArchivedSales(dates), readStyleInfo().catch(() => new Map())]);
+  const flat = arch.rows.map((r) => ({ storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty }));
   const codeOf = (name: string) => (/용인/.test(name) ? "42005" : name);
   const agg = new Map<string, any>();
   for (const r of pip.rows as any[]) {
@@ -148,7 +153,7 @@ export async function computeOutlet(cfgIn: Partial<OutletConfig> = {}) {
       .slice(0, 8000)
       .map((r) => ({ storeName: r.storeName, style: r.style, styleName: r.styleName, color: r.color, size: r.size, cum: r.cum, period: r.period, stock: r.stock, stockWeeks: r1(r.stockWeeks), properStock: r1(r.properStock), status: r.status, availOff: r.availOff, shortage: r.shortage, shipQty: r.shipQty, unmet: r.unmet })),
     totals: { shipQtySum: chulgoRows.reduce((a, r) => a + r.qty, 0), unmetTotal: rows.reduce((a, r) => a + Math.max(0, r.unmet), 0), skuRows: rows.length },
-    inputs: { period: `${from}~${yesterday}`, pip: (pip as any).meta?.uploadedAt || null, warehouse: (wh as any).meta?.uploadedAt || null },
+    inputs: { period: `${from}~${yesterday}`, salesDates: `${arch.foundDates.length}/${dates.length}일(PIP 보관)`, pip: (pip as any).meta?.uploadedAt || null, warehouse: (wh as any).meta?.uploadedAt || null },
   };
 }
 

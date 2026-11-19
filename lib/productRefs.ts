@@ -32,15 +32,17 @@ export async function saveProductRefs(items: ProductRef[]) {
 /** 재런칭 품번 집합(새 코드·예전 코드 둘 다), 라인업: "품번|칼라" 또는 "품번|" → 이름 */
 export function buildRefMaps(refs: ProductRef[]) {
   const relaunch = new Set<string>();
+  const main = new Map<string, string>(); // 새 품번 → 통합(메인) 품번
   const lineup = new Map<string, string>();
   for (const r of refs) {
     if (r.kind === "재런칭") {
       relaunch.add(r.style);
-      if (r.value) relaunch.add(r.value.toUpperCase());
+      if (r.value) { relaunch.add(r.value.toUpperCase()); main.set(r.style, r.value.toUpperCase()); }
     } else if (r.kind === "라인업") {
       lineup.set(`${r.style}|${r.color}`, r.value);
     }
   }
   const lineupOf = (style: string, color = "") => lineup.get(`${style}|${color}`) || lineup.get(`${style}|`) || (color ? "" : [...lineup.entries()].find(([k]) => k.startsWith(`${style}|`))?.[1] || "");
-  return { relaunch, lineupOf };
+  const mainOf = (style: string) => main.get(style) || style;
+  return { relaunch, lineupOf, mainOf };
 }

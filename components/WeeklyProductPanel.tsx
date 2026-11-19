@@ -59,8 +59,78 @@ export default function WeeklyProductPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week, mode, nonce]);
 
-  const rows: Row[] = data?.rows || [];
+  // MARK 2026-11-19: 러닝 합산 — 러닝 재런칭 품번(예: 에센셜 크루넥 가디건 WBD3L04501 → GF7LKC501)을 한 줄로 합쳐 판매·재고를 합산.
+  // 연결은 MARK_DB 상품_기준표 "재런칭"(새 품번 → 통합 품번, ERP main_sty_cd와 같음). 합친 뒤 전사·매장 순위는 다시 계산.
+  const [merge, setMerge] = useState(true);
+  const [mainMap, setMainMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("weeklyMergeRunning");
+      if (v === "0") setMerge(false);
+    } catch {}
+    fetch("/api/product-refs")
+      .then((r) => r.json())
+      .then((j) => j.ok && setMainMap(new Map(j.items.filter((x: any) => x.kind === "재런칭" && x.value).map((x: any) => [x.style, String(x.value).toUpperCase()]))))
+      .catch(() => {});
+  }, []);
+  const rawRows: Row[] = data?.rows || [];
   const stores: any[] = data?.stores || [];
+  const rows: Row[] = useMemo(() => {
+    if (!merge || !mainMap.size) return rawRows.filter((r) => !r.extra);
+    const groups = new Map<string, Row[]>();
+    for (const r of rawRows) {
+      const main = mainMap.get(r.style) || r.style;
+      const g = `${main}|${mode === "color" ? r.color : ""}`;
+      (groups.get(g) || groups.set(g, []).get(g)!).push(r);
+    }
+    const out: Row[] = [];
+    for (const list of groups.values()) {
+      if (list.length === 1) {
+        if (!list[0].extra) out.push(list[0]);
+        continue;
+      }
+      if (list.every((r) => r.extra)) continue;
+      // 표시 기준 = 새 품번(재런칭 쪽) 줄, 없으면 이번 주 판매 많은 줄
+      const base = list.find((r) => mainMap.has(r.style)) || [...list].sort((a, b) => b.amt[0] - a.amt[0])[0];
+      const others = list.filter((r) => r !== base).map((r) => r.style);
+      const sum = (fn: (r: Row) => number) => list.reduce((a, r) => a + (fn(r) || 0), 0);
+      out.push({
+        ...base,
+        k: `M:${base.k}`,
+        merged: [...new Set(others)],
+        relaunch: true,
+        plan: sum((r) => r.plan),
+        inQty: sum((r) => r.inQty),
+        sold: sum((r) => r.sold),
+        stock: sum((r) => r.stock),
+        amt: [sum((r) => r.amt[0]), sum((r) => r.amt[1])],
+        share: sum((r) => r.share),
+        qty: [0, 1, 2, 3].map((i) => sum((r) => r.qty[i])),
+        totalStock: sum((r) => r.totalStock),
+        wh: sum((r) => r.wh),
+        storeStockSum: sum((r) => r.storeStockSum),
+        stores: base.stores.map((_: any, i: number) => [0, sum((r) => r.stores[i][1]), sum((r) => r.stores[i][2])]),
+        _needRank: true,
+      });
+    }
+    // 순위 다시 계산(전사=금액, 매장=수량, 같은 값은 같은 순위)
+    const rankBy = (val: (r: Row) => number) => {
+      const arr = out.map((r) => val(r)).filter((v) => v > 0).sort((a, b) => b - a);
+      const first = new Map<number, number>();
+      arr.forEach((v, i) => !first.has(v) && first.set(v, i + 1));
+      const last = arr.length + 1;
+      return (r: Row) => (val(r) > 0 ? first.get(val(r))! : last);
+    };
+    const r0 = rankBy((r) => r.amt[0]);
+    const r1 = rankBy((r) => r.amt[1]);
+    const sr = stores.map((_, i) => rankBy((r) => r.stores[i][1]));
+    return out.map((r) => ({
+      ...r,
+      rank: r0(r),
+      prevRank: r1(r),
+      stores: r.stores.map((x: number[], i: number) => [x[1] > 0 ? sr[i](r) : 0, x[1], x[2]]),
+    }));
+  }, [rawRows, merge, mainMap, mode, stores]);
   const opts = useMemo(() => {
     const u = (k: string) => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort();
     return { year: u("year"), season: u("season"), cat: u("cat"), item: u("item"), lineup: u("lineup") };
@@ -76,7 +146,7 @@ export default function WeeklyProductPanel() {
         (!f.relaunch || r.relaunch) &&
         (!f.lineup || r.lineup === f.lineup) &&
         (!f.salesOnly || r.qty?.[0] > 0) &&
-        (!q || r.style.includes(q) || String(r.name).toUpperCase().includes(q) || `${r.style}${r.color}`.includes(q))
+        (!q || r.style.includes(q) || (r.merged || []).some((x: string) => x.includes(q)) || String(r.name).toUpperCase().includes(q) || `${r.style}${r.color}`.includes(q))
     ).sort((a, b) => (b.amt?.[0] || 0) - (a.amt?.[0] || 0) || (b.qty?.[0] || 0) - (a.qty?.[0] || 0) || (b.totalStock || 0) - (a.totalStock || 0));
     // MARK 2026-11-19: 기본 정렬 = 주간 판매금액 높은 순(같으면 수량, 재고 순)
   }, [rows, f]);
@@ -171,6 +241,19 @@ export default function WeeklyProductPanel() {
         </select>
         <label className="flex items-center gap-1 text-xs font-bold">
           <input type="checkbox" checked={f.relaunch} onChange={(e) => setF({ ...f, relaunch: e.target.checked })} /> 재런칭만
+        </label>
+        <label className="flex items-center gap-1 rounded-lg bg-violet-50 px-1.5 py-0.5 text-xs font-black text-violet-700" title="러닝 재런칭 품번(예전 품번 + 새 품번)을 한 줄로 합쳐서 판매·재고를 합산">
+          <input
+            type="checkbox"
+            checked={merge}
+            onChange={(e) => {
+              setMerge(e.target.checked);
+              try {
+                localStorage.setItem("weeklyMergeRunning", e.target.checked ? "1" : "0");
+              } catch {}
+            }}
+          />{" "}
+          러닝 합산
         </label>
         <label className="flex items-center gap-1 text-xs font-bold">
           <input type="checkbox" checked={f.salesOnly} onChange={(e) => setF({ ...f, salesOnly: e.target.checked })} /> 이번 주 판매 있는 것만
@@ -287,7 +370,10 @@ export default function WeeklyProductPanel() {
                 const rankUp = r.prevRank - r.rank;
                 return (
                   <tr key={r.k} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="sticky left-0 bg-white px-2 py-1 font-black">{r.style}</td>
+                    <td className="sticky left-0 bg-white px-2 py-1 font-black">
+                      {r.style}
+                      {r.merged?.length ? <span className="ml-1 text-[10px] font-bold text-violet-500" title="러닝 합산된 예전 품번">+{r.merged.join(",")}</span> : null}
+                    </td>
                     {mode === "color" && (
                       <td className="whitespace-nowrap px-1 py-1 font-bold">
                         {r.color} <span className="font-normal text-slate-400">{r.colorName}</span>

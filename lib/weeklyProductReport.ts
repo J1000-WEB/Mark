@@ -207,15 +207,18 @@ export async function computeWeeklyProductReport(weekStart: string) {
     const sMap = level === "style" ? byStyle : byColor;
     const storeMap = level === "style" ? storeStyleW0 : storeColorW0;
     const keys = new Set<string>([...pMap.keys(), ...sMap.keys()]);
+    // 컬러구분 = 올해 상품만. 단 러닝 재런칭 예전 품번(상품_기준표 재런칭)은 "러닝 합산"용으로 같이 내려보내고 extra 표시(순위 계산엔 안 넣음)
+    const isExtra = (k: string) => level === "color" && (pMap.get(k)?.year || "") !== baseYear;
     const list = [...keys].filter((k) => {
       const p = pMap.get(k), s = sMap.get(k);
-      if (level === "color" && (p?.year || "") !== baseYear) return false;
+      if (isExtra(k) && !refs.relaunch.has(k.split("|")[0])) return false;
       return (s && s.qty.some((x) => x !== 0)) || (p && p.stock > 0);
     });
-    const r0 = rankMap(list, (k) => sMap.get(k)?.amt[0] || 0);
-    const r1 = rankMap(list, (k) => sMap.get(k)?.amt[1] || 0);
+    const rankList = list.filter((k) => !isExtra(k));
+    const r0 = rankMap(rankList, (k) => sMap.get(k)?.amt[0] || 0);
+    const r1 = rankMap(rankList, (k) => sMap.get(k)?.amt[1] || 0);
     // 매장별 랭킹 = 그 매장 주간 판매 **수량** 순(엑셀 확인: 전사 랭킹은 금액, 매장 RANK는 수량)
-    const storeRanks = WEEKLY_STORES.map((_, si) => rankMap(list, (k) => storeMap.get(`${si}|${k}`)?.qty || 0));
+    const storeRanks = WEEKLY_STORES.map((_, si) => rankMap(rankList, (k) => storeMap.get(`${si}|${k}`)?.qty || 0));
     return list
       .map((k) => {
         const [style, color = ""] = k.split("|");
@@ -234,6 +237,8 @@ export async function computeWeeklyProductReport(weekStart: string) {
           bok: p?.bok || "",
           item: p?.item || "",
           relaunch: refs.relaunch.has(style),
+          main: refs.mainOf(style),
+          extra: isExtra(k),
           lineup: refs.lineupOf(style, level === "color" ? color : ""),
           name: p?.name || "",
           nColors: p?.colors.size || 0,

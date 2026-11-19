@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSheetValuesById, getSheetsClient, getDailySourceSheetId, getSpreadsheetTitlesById, ensureGridColsById } from "@/lib/googleSheets";
 import { pickDailySheetTitle } from "@/lib/dailySales";
 import { PIP_ARCHIVE_SHEET_ID } from "@/lib/pipArchive";
+import { readProductRefs } from "@/lib/productRefs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -10,7 +11,8 @@ export const maxDuration = 120;
 // 소스: ① 지금 PIP 시트(스타일 단위) ② POST body.map {스타일: [성별, 품목, 복종, 원가]}(소천님이 준 ERP 스타일 엑셀). ②가 우선.
 // 이미 값이 있는 칸은 안 건드림. POST ?dryRun=1 이면 쓰지 않고 몇 줄 채워지는지만.
 const TAB = "상품정보";
-const HEADER = ["키", "스타일", "스타일명", "칼라", "칼라명", "사이즈", "년도", "시즌", "아이템", "소비자가", "판매가", "성별", "품목", "복종", "원가"];
+// 2026-11-19 P열 통합품번(러닝 재런칭이면 예전 메인 품번, 아니면 자기 품번 — ERP main_sty_cd, MARK_DB 상품_기준표 재런칭과 같음)
+const HEADER = ["키", "스타일", "스타일명", "칼라", "칼라명", "사이즈", "년도", "시즌", "아이템", "소비자가", "판매가", "성별", "품목", "복종", "원가", "통합품번"];
 const t = (v: any) => String(v ?? "").trim();
 
 export async function POST(req: Request) {
@@ -36,16 +38,19 @@ export async function POST(req: Request) {
       map.set(s.toUpperCase(), a.map((x, i) => x || old[i]));
       fromFile++;
     }
-    const rows = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, TAB, "A:O");
+    const mainOf = new Map((await readProductRefs()).filter((r) => r.kind === "재런칭" && r.value).map((r) => [r.style, r.value.toUpperCase()]));
+    const rows = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, TAB, "A:P");
     const out: any[][] = [];
     let filled = 0, missing = 0;
     const missingStyles = new Set<string>();
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i] || [];
-      const cur = [t(r[11]), t(r[12]), t(r[13]), t(r[14])];
-      const m = map.get(t(r[1]).toUpperCase());
-      if (!m) { if (!cur[1]) { missing++; missingStyles.add(t(r[1])); } out.push(cur); continue; }
-      const next = cur.map((x, k) => x || m[k] || "");
+      const st = t(r[1]).toUpperCase();
+      const cur = [t(r[11]), t(r[12]), t(r[13]), t(r[14]), t(r[15])];
+      const m0 = map.get(st);
+      const m = [...(m0 || ["", "", "", ""]), mainOf.get(st) || st];
+      if (!m0 && !cur[1]) { missing++; missingStyles.add(t(r[1])); }
+      const next = cur.map((x, k) => (k === 4 ? m[4] : x || m[k] || ""));
       if (next.join("|") !== cur.join("|")) filled++;
       out.push(next.map((x, k) => (k === 3 && x !== "" && Number.isFinite(Number(x)) ? Number(x) : x)));
     }
@@ -54,14 +59,14 @@ export async function POST(req: Request) {
       const sheets = await getSheetsClient();
       await sheets.spreadsheets.values.update({
         spreadsheetId: PIP_ARCHIVE_SHEET_ID,
-        range: `'${TAB}'!A1:O1`,
+        range: `'${TAB}'!A1:P1`,
         valueInputOption: "RAW",
         requestBody: { values: [HEADER] },
       });
       if (out.length) {
         await sheets.spreadsheets.values.update({
           spreadsheetId: PIP_ARCHIVE_SHEET_ID,
-          range: `'${TAB}'!L2:O${out.length + 1}`,
+          range: `'${TAB}'!L2:P${out.length + 1}`,
           valueInputOption: "RAW",
           requestBody: { values: out },
         });

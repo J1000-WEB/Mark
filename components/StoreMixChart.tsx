@@ -16,7 +16,8 @@ export default function StoreMixChart({ rows, stores, groupOf, dims }: {
   dims: [string, string][];
 }) {
   const hasAmt = rows.some((r) => Array.isArray(r.stores) && r.stores.some((s: any) => s && s.length > 3));
-  const [metric, setMetric] = useState<Metric>(hasAmt ? "amt" : "qty");
+  // 기본은 판매금액(소천님 요청) — 그 주에 점포별 금액이 없으면(11/19 전 계산분) 그때만 수량으로 보여줌
+  const [metric, setMetric] = useState<Metric>("amt");
   const [dim, setDim] = useState(dims[0][0]);
   const [sortBy, setSortBy] = useState<string>("");
   const m: Metric = metric === "amt" && !hasAmt ? "qty" : metric;

@@ -211,6 +211,11 @@
 - 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 **오래된 날짜(2025-11-01)→최근** 순(소천님 요청, `--newest-first`로 반대). 잠금 `logs/pip-archive.lock`(pid, 그 pid가 죽었거나 8시간 지나면 무시,
   `--takeover`면 돌던 작업이 지금 날짜 저장할 때까지 기다렸다가 끄고 이어받음), 로그 `logs/pip-archive.log`. ⚠ PC 스크립트(.js)를 고치면 run-all 재시작으로 돌던 보관 작업이 끊길 수 있음(그날짜만 다음에 다시 받음).
   run-now로 돌릴 땐 인자에 ':'가 안 돼서 `--until 0150`. 1회: `--date YYYYMMDD`. 첫 실행 2026-11-17 18:58 시작.
+- **2026-11-19 확장(소천님 결정)**: 과거 받기 끝을 8/31 → **어제까지**(DEFAULT_TO), 다 차면 판매는 보관 시트 하나에서 읽도록 옮길 예정.
+  **매일 재고**는 별도 파일 `MARK_STOCK_ARCHIVE_STOCK(2026)`(`1aURwa577GjSwDG1J-70BsmyeQS95KEtIU633Ha2rDOg`, env `GOOGLE_SHEET_ID_STOCK_ARCHIVE`) "재고_일별" 탭,
+  2026-09-01 이후 날짜만(그 전은 일요일 재고만 재고_주별). 같은 형식(s=[[채널i,품목i,재고]], 물류창고 포함). 연도별 새 파일 예정.
+  매일 자동: 3:00·9:30 PIP 업로드 성공 뒤 `pip-archive.js --date 어제`(9:30이 덮어써서 위탁 매출 반영). 11/18 시험: 오프라인 49,455,202원 = 매출탭 일치,
+  재고 103,230줄(11조각 ≈ 480KB/일 → 1년 약 175MB·4천 칸, 칸 한도 1000만과 무관. 파일을 브라우저로 열면 무거움).
 - 읽는 쪽: `lib/pipArchive.ts` `readArchivedSales(dates)`(날짜 열 A 10분 캐시 → 그 줄만 읽어 gunzip, 팀명 포함). 프로모션 결과(`lib/promoReport.ts`)는
   2026-09-01 전 날짜를 여기서 읽음(ERP 오프라인팀만 — 무신사 위탁 매장 포함) → 에센셜 전년 칸·러닝합산 채워짐, 작년 주차도 조회 가능.
 

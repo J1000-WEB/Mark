@@ -31,3 +31,36 @@ body {
   color: #111827;
   font-family: "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+
+
+/* MARK 2026-11-19: PC 왼쪽 메뉴바(NavTabs) 폭만큼 본문을 밀어냄 */
+@media (min-width: 1024px) {
+  body.has-sidenav {
+    padding-left: 14rem;
+  }
+}
+
+/* MARK 2026-11-19: 매장 탭 — 휴대폰은 한 줄(440px), PC는 카드를 여러 열로 펼침 */
+@media (min-width: 1024px) {
+  .store-brief-wide {
+    max-width: 1320px !important;
+    display: block !important;
+    column-count: 2;
+    column-gap: 18px;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .store-brief-wide > * {
+    break-inside: avoid;
+    margin-bottom: 18px;
+  }
+  .store-brief-wide > .sb-span {
+    column-span: all;
+  }
+}
+@media (min-width: 1600px) {
+  .store-brief-wide {
+    max-width: 1600px !important;
+    column-count: 3;
+  }
+}

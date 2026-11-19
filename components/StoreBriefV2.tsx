@@ -929,7 +929,9 @@ export default function StoreBriefV2({
     <main style={{ minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", alignItems: "center" }}>
       {/* MARK 6.76: 이 화면은 휴대폰으로 주로 보는데 PC에서 넓게 벌어지면 비율이 깨져 보인다는
           요청이 있어서, PC에서 봐도 항상 휴대폰 폭(440px)으로 고정하고 가운데 정렬합니다. */}
+      {/* MARK 2026-11-19: PC(lg↑, 매장 탭으로 직접 열 때)는 카드를 2~3열로 펼쳐 보여줌(globals.css .store-brief-wide). 휴대폰은 그대로 한 줄. */}
       <div
+        className={!hideNavTabs ? "store-brief-wide" : undefined}
         style={{
           width: "100%",
           maxWidth: 440,
@@ -943,7 +945,7 @@ export default function StoreBriefV2({
       >
         {!hideNavTabs && <NavTabs active="store" />}
         {!hideStoreSwitcher && (
-          <div>
+          <div className="sb-span">
             <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".14em", color: ACCENT }}>매장 아침 브리핑 (가안)</div>
             <select
               value={storeName}
@@ -958,7 +960,7 @@ export default function StoreBriefV2({
           </div>
         )}
 
-        {status && <p style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
+        {status && <p className="sb-span" style={{ fontSize: 13, color: ACCENT, fontWeight: 700 }}>{status}</p>}
 
         {cards && (
           <>

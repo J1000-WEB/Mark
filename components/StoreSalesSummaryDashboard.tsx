@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "reac
 import SalesReportsPanel, { type ReportTab } from "@/components/SalesReportsPanel";
 import Link from "next/link";
 import NavTabs from "@/components/NavTabs";
+import SideSubTabs from "@/components/SideSubTabs";
 import SalesRefreshBanner from "@/components/SalesRefreshBanner";
 
 // MARK 2026-09-24: "글씨가 너무많아서 한판에 안보여서" 요청 — 표 안 금액이 다 9자리라
@@ -979,25 +980,18 @@ export default function StoreSalesSummaryDashboard() {
         <SalesRefreshBanner refreshKey={driveMessage} onReimport={runDriveImport} importing={driveImporting} />
 
         {/* MARK 2026-11-17: 팀 시트의 "일별 매출달성"·"연간실적"·"연간실적(점포)"를 매출탭 안 탭으로 */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {(
+        <SideSubTabs
+          items={
             [
               ["store", "점포별"],
               ["daily", "일별 매출달성"],
               ["annual", "연간실적"],
               ["annualStores", "연간실적(점포)"],
             ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setReportTab(k)}
-              className={`rounded-xl px-4 py-2 text-sm font-black ${reportTab === k ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          }
+          active={reportTab}
+          onPick={(k) => setReportTab(k as typeof reportTab)}
+        />
 
         {reportTab !== "store" ? (
           <SalesReportsPanel tab={reportTab} />

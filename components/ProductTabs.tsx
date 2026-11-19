@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import PromoReportPanel from "@/components/PromoReportPanel";
 import WeeklyProductPanel from "@/components/WeeklyProductPanel";
 import CategoryMixPanel from "@/components/CategoryMixPanel";
+import SideSubTabs from "@/components/SideSubTabs";
 
 export default function ProductTabs() {
   const [tab, setTab] = useState<"imc" | "weekly" | "mix">("imc");
@@ -22,19 +23,17 @@ export default function ProductTabs() {
   };
   return (
     <>
-      <div className="mt-4 flex gap-2">
-        {(
+      <SideSubTabs
+        items={
           [
             ["imc", "IMC 현황"],
             ["weekly", "주간데이터"],
             ["mix", "구성비"],
           ] as const
-        ).map(([k, label]) => (
-          <button key={k} type="button" onClick={() => pick(k)} className={`rounded-xl px-4 py-2 text-sm font-black ${tab === k ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+        }
+        active={tab}
+        onPick={pick}
+      />
       {tab === "imc" ? <PromoReportPanel /> : tab === "weekly" ? <WeeklyProductPanel /> : <CategoryMixPanel />}
     </>
   );

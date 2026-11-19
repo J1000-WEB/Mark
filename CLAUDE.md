@@ -197,7 +197,14 @@
 - **주간탭 주차별 스냅샷(2026-11-13)**: Vercel 크론 `/api/auto-weekly-snapshot`(월 12:10 KST)이 9/14 이후 한 번도 안 쌓였음(수동 호출은 정상 —
   11/13 수동 실행으로 11/9 주차 저장됨). 원인 확인용으로 호출마다 MARK_DB `주간스냅샷_자동로그`(시각·호출자 vercel-cron/pc-erp-agent/manual·결과)를
   남기고, PC `schedule-style-channel-upload.js`가 월요일 6:40에 `?caller=pc-erp-agent`로 백업 호출(같은 주차는 덮어씀).
-- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js).
+- **ONOFF 재고현황 직접 조회(2026-11-19, `fetch-onoff-stock.js`)**: 메뉴 FSDSSR0140, `/fs/dssr/Dssr0140.do` mainList, inDs(wh_cd 9001·stock_chk Y·fr_dt 오늘) →
+  outDs SKU당 1줄(재고 stock_qty·할당 asgn_qty·가용(온) aval_qty·가용(오프) aval_qty_1·가용(합계) aval_qty_t·bar_cd·main_sty_cd·분류). 조회 약 10초, 재고 있는 SKU 약 1.2만.
+  매일 7:00·9:40·13:00(`schedule-style-channel-upload.js` ONOFF_TIMES) → 대시보드 POST `/api/onoff-stock-upload`가 **물류가용재고_스냅샷 + 온라인이관_재고_스냅샷**을 같이 갱신
+  (예전엔 손으로 올린 10/28 파일이 마지막, 온라인 가용은 저장된 적 없었음). 결과 사본 `cache/onoff-stock-YYYYMMDD-HHMM.json`(14일), 로그 `logs/onoff-stock.log`.
+  - 응답 값 타입 13(이미지 img_thn, u16 길이+바이트)을 erp-mi.js에 추가. `client.call(..., {dumpPath})`로 풀린 응답을 파일로 남길 수 있음(`--dump`).
+  - **화면 정의 찾는 법**: ERP 프로그램 캐시 `C:\Users\User\AppData\LocalLow\TOBESOFT\MiPlatform320U\Cache\GENERAL_ERP_*\<모듈>\win32\<화면ID>.xml`
+    (0x46바이트 뒤부터 LZSS(Okumura, 4096/18, 공백 채움)로 압축 — 풀면 화면 XML: Title·gfn_Transaction의 서비스 경로·조회 조건·그리드 열). 그 PC에서 한 번 열어본 화면만 있음.
+- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js, pip-archive.js, fetch-onoff-stock.js).
 
 ## PIP 과거 보관 (MARK_PIP_ARCHIVE, 2026-11-17)
 

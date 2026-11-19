@@ -11,13 +11,14 @@ export default function NavTabs({ active }: { active: "schedule" | "sales-data" 
   // 라우트 자체는 그대로라 주소로 직접 들어가도 열립니다). 매출은 이름을 "매출"로 바꾸고
   // 맨 왼쪽으로 옮겼습니다.
   const tabs = [
+    // 2026-11-19 소천님 요청 순서: 매출 상품 실시간 재고CTRL 매장 라운딩 (주간은 맨 뒤로)
     { key: "store-sales", label: "매출", href: "/store-sales" },
-    { key: "weekly", label: "주간", href: "/weekly" },
-    { key: "inventory", label: "재고CTRL", href: "/inventory" },
     { key: "product", label: "상품", href: "/product" }, // 2026-11-17 프로모션 결과 등 상품 단위 리포트
     { key: "realtime", label: "실시간", href: "/realtime" },
+    { key: "inventory", label: "재고CTRL", href: "/inventory" },
     { key: "store", label: "매장", href: "/store" },
     { key: "rounding", label: "라운딩", href: "/rounding" },
+    { key: "weekly", label: "주간", href: "/weekly" },
   ] as const;
 
   function logout() {

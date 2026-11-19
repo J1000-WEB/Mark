@@ -62,6 +62,7 @@ export default function WeeklyProductPanel() {
   // MARK 2026-11-19: 러닝 합산 — 러닝 재런칭 품번(예: 에센셜 크루넥 가디건 WBD3L04501 → GF7LKC501)을 한 줄로 합쳐 판매·재고를 합산.
   // 연결은 MARK_DB 상품_기준표 "재런칭"(새 품번 → 통합 품번, ERP main_sty_cd와 같음). 합친 뒤 전사·매장 순위는 다시 계산.
   const [merge, setMerge] = useState(true);
+  const [openMerged, setOpenMerged] = useState<Record<string, boolean>>({}); // 합쳐진 예전 품번 펼침(기본 닫힘)
   const [mainMap, setMainMap] = useState<Map<string, string>>(new Map());
   useEffect(() => {
     try {
@@ -386,7 +387,17 @@ export default function WeeklyProductPanel() {
                     )}
                     <td className={`sticky ${PL} z-[1] bg-white px-2 py-1 font-black`}>
                       {r.style}
-                      {r.merged?.length ? <span className="ml-1 text-[10px] font-bold text-violet-500" title="러닝 합산된 예전 품번">+{r.merged.join(",")}</span> : null}
+                      {r.merged?.length ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenMerged((o) => ({ ...o, [r.k]: !o[r.k] }))}
+                          className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-black text-violet-600"
+                          title="러닝 합산된 예전 품번 보기"
+                        >
+                          {openMerged[r.k] ? "−" : "+"}
+                        </button>
+                      ) : null}
+                      {r.merged?.length && openMerged[r.k] ? <div className="text-[10px] font-bold text-violet-500">{r.merged.join(", ")}</div> : null}
                     </td>
                     {mode === "color" && (
                       <td className="whitespace-nowrap px-1 py-1 font-bold">

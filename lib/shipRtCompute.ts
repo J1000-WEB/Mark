@@ -111,8 +111,9 @@ export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: 
 
   return {
     ...result,
-    // 응답이 너무 커지지 않게 재고분석 전체는 정상 아닌 줄 + 움직임 있는 줄만
-    analysisRows: result.analysisRows.filter((r) => r.status !== "정상" || r.shipQty > 0 || r.rtNeed > 0).slice(0, 25000),
+    // 응답 크기 때문에(전체 8만 줄 ≈ 20MB) 재고분석은 부족·출고·RT가 걸린 줄만, 보충RT 매칭 원본(bonusRt)은 업로드 양식만 보냄
+    analysisRows: result.analysisRows.filter((r) => r.shortage > 0 || r.shipQty > 0 || r.rtNeed > 0).slice(0, 15000),
+    bonusRt: undefined,
     analysisTotal: result.analysisRows.length,
     inputs: {
       today,

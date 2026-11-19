@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import RtRecoveryPanel from "@/components/RtRecoveryPanel";
 import SideSubTabs from "@/components/SideSubTabs";
+import ShipRtPanel from "@/components/ShipRtPanel";
 import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
@@ -2846,7 +2847,7 @@ function RtControlSection() {
         </div>
       </div>
 
-      <RtReferenceUploads />
+      {/* MARK 2026-11-19: 전주·전전주 판매/물류 가용 업로드 칸 제거 — Daily_Sales_History·ERP 자동 조회로 대체 */}
 
       {computing && (
         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-bold text-blue-700">
@@ -3271,7 +3272,15 @@ export default function InventoryDashboard() {
         </header>
         <SideSubTabs items={INV_TABS} active={invTab} onPick={pickInvTab} />
 
-        {invTab === "rt" && <RtControlSection />}
+        {invTab === "rt" && (
+          <>
+            <ShipRtPanel />
+            <details className="rounded-3xl border border-slate-200 bg-white p-4">
+              <summary className="cursor-pointer text-sm font-black text-slate-600">예전 RT 화면(품번 방식 RT · SKU 방식 비교 · 점포요청 RT) 보기</summary>
+              <div className="mt-4"><RtControlSection /></div>
+            </details>
+          </>
+        )}
 
         {invTab === "outlet" && (
           <Card title="🏭 팩토리아울렛(용인) 출고 제안" tone="white">

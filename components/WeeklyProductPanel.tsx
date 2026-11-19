@@ -169,6 +169,8 @@ export default function WeeklyProductPanel() {
     };
   }, [filtered, stores]);
 
+  // 랭킹 3칸(각 36px)을 맨 왼쪽에 고정하고 품번은 그 오른쪽에 고정
+  const PL = show.랭킹 ? "left-[108px]" : "left-0";
   const shownStores = stores.map((s, i) => ({ ...s, i })).filter((s) => grades[s.grade]);
   const weekStart = data?.weekStart || "";
   const sel = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold";
@@ -284,13 +286,13 @@ export default function WeeklyProductPanel() {
           <table className="text-[11px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
               <tr className="text-[10px]">
-                <th className="sticky left-0 z-20 bg-slate-50 px-2 py-1 text-left font-black" colSpan={mode === "color" ? 3 : 2}>
+                {show.랭킹 && <th colSpan={3} className="sticky left-0 z-20 w-[108px] min-w-[108px] bg-slate-50 px-1 font-black">랭킹</th>}
+                <th className={`sticky ${PL} z-20 bg-slate-50 px-2 py-1 text-left font-black`} colSpan={mode === "color" ? 3 : 2}>
                   상품
                 </th>
                 {show.카테고리 && <th colSpan={7} className="border-l border-slate-200 px-1 font-black">카테고리</th>}
                 {show.가격 && <th colSpan={6} className="border-l border-slate-200 px-1 font-black">상품가격</th>}
                 {show.라이프사이클 && <th colSpan={6} className="border-l border-slate-200 px-1 font-black">제품라이프사이클</th>}
-                {show.랭킹 && <th colSpan={3} className="border-l border-slate-200 px-1 font-black">랭킹</th>}
                 {show.금액판매 && <th colSpan={3} className="border-l border-slate-200 px-1 font-black">금액판매</th>}
                 {show.수량판매 && <th colSpan={4} className="border-l border-slate-200 px-1 font-black">수량판매</th>}
                 {show.재고 && <th colSpan={4} className="border-l border-slate-200 px-1 font-black">재고</th>}
@@ -301,13 +303,18 @@ export default function WeeklyProductPanel() {
                 ))}
               </tr>
               <tr>
-                <th className="sticky left-0 z-20 bg-slate-50 px-2 py-1 text-left font-black">품번</th>
+                {show.랭킹 &&
+                  ["주간", "2주전", "등락"].map((h, i) => (
+                    <th key={h} className={`${TH} sticky z-20 w-9 min-w-[36px] bg-slate-50 ${["left-0", "left-9", "left-[72px]"][i]}`}>
+                      {h}
+                    </th>
+                  ))}
+                <th className={`sticky ${PL} z-20 bg-slate-50 px-2 py-1 text-left font-black`}>품번</th>
                 {mode === "color" && <th className="bg-slate-50 px-1 text-left font-black">컬러</th>}
                 <th className="bg-slate-50 px-1 text-left font-black">품명</th>
                 {show.카테고리 && ["년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업"].map((h, i) => <th key={h} className={`${TH} text-left ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.가격 && ["원가", "TAG가", "판매가", "OFF가", "프로모션가", "할인율"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.라이프사이클 && ["기획", "입고%", "입고", "판매", "재고", "판매%"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
-                {show.랭킹 && ["주간", "2주전", "등락"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.금액판매 && ["주간", "2주전", "비중"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.수량판매 && ["주간", "2주전", "3주전", "4주전"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.재고 && ["총재고", "물류", "점포", "주수"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`} title={h === "주수" ? "물류재고 ÷ 주간 판매수량" : ""}>{h}</th>)}
@@ -323,7 +330,8 @@ export default function WeeklyProductPanel() {
               </tr>
               {/* 합계 줄 */}
               <tr className="bg-amber-50 text-slate-800">
-                <td className="sticky left-0 z-20 bg-amber-50 px-2 py-1 font-black" colSpan={mode === "color" ? 3 : 2}>
+                {show.랭킹 && <td colSpan={3} className="sticky left-0 z-20 bg-amber-50" />}
+                <td className={`sticky ${PL} z-20 bg-amber-50 px-2 py-1 font-black`} colSpan={mode === "color" ? 3 : 2}>
                   합계 ({filtered.length.toLocaleString()}개)
                 </td>
                 {show.카테고리 && <td colSpan={7} className="border-l border-slate-200" />}
@@ -338,7 +346,6 @@ export default function WeeklyProductPanel() {
                     <td className={TD}>{pct(totals.inQty ? totals.sold / totals.inQty : null)}</td>
                   </>
                 )}
-                {show.랭킹 && <td colSpan={3} className="border-l border-slate-200" />}
                 {show.금액판매 && (
                   <>
                     <td className={`${TD} border-l border-slate-200 font-black`}>{num(totals.amt0)}</td>
@@ -370,7 +377,14 @@ export default function WeeklyProductPanel() {
                 const rankUp = r.prevRank - r.rank;
                 return (
                   <tr key={r.k} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="sticky left-0 bg-white px-2 py-1 font-black">
+                    {show.랭킹 && (
+                      <>
+                        <td className={`${TD} sticky left-0 z-[1] w-9 bg-white font-black text-slate-900`}>{r.qty[0] || r.amt[0] ? r.rank : ""}</td>
+                        <td className={`${TD} sticky left-9 z-[1] w-9 bg-white`}>{r.amt[1] ? r.prevRank : ""}</td>
+                        <td className={`${TD} sticky left-[72px] z-[1] w-9 bg-white ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
+                      </>
+                    )}
+                    <td className={`sticky ${PL} z-[1] bg-white px-2 py-1 font-black`}>
                       {r.style}
                       {r.merged?.length ? <span className="ml-1 text-[10px] font-bold text-violet-500" title="러닝 합산된 예전 품번">+{r.merged.join(",")}</span> : null}
                     </td>
@@ -411,13 +425,6 @@ export default function WeeklyProductPanel() {
                         <td className={TD}>{num(r.sold)}</td>
                         <td className={TD}>{num(r.stock)}</td>
                         <td className={TD}>{pct(r.inQty ? r.sold / r.inQty : null)}</td>
-                      </>
-                    )}
-                    {show.랭킹 && (
-                      <>
-                        <td className={`${TD} border-l border-slate-100 font-black`}>{r.qty[0] || r.amt[0] ? r.rank : ""}</td>
-                        <td className={TD}>{r.amt[1] ? r.prevRank : ""}</td>
-                        <td className={`${TD} ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
                       </>
                     )}
                     {show.금액판매 && (

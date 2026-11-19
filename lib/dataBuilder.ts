@@ -786,7 +786,7 @@ export type OnlineTransferStockSkuRow = {
   offlineStock: number;
 };
 
-async function readOnlineTransferStockSnapshot(): Promise<{ rows: OnlineTransferStockSkuRow[]; meta: { uploadedAt: string; rowCount: number; fileName: string } | null }> {
+export async function readOnlineTransferStockSnapshot(): Promise<{ rows: OnlineTransferStockSkuRow[]; meta: { uploadedAt: string; rowCount: number; fileName: string } | null }> {
   const dbId = getDbSheetId();
   const [dataRows, metaRows] = await Promise.all([
     getSheetValuesById(dbId, ONLINE_TRANSFER_STOCK_SNAPSHOT_SHEET, "A2:G60000").catch(() => [] as any[]),

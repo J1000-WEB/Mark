@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { computeWeeklyProductReport, readWeeklyCache, writeWeeklyCache, lastCompletedWeek, mondayOf } from "@/lib/weeklyProductReport";
+import { debugStyleChannelStock, computeWeeklyProductReport, readWeeklyCache, writeWeeklyCache, lastCompletedWeek, mondayOf } from "@/lib/weeklyProductReport";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,6 +10,7 @@ export const maxDuration = 300;
 export async function GET(req: Request) {
   try {
     const sp = new URL(req.url).searchParams;
+    if (sp.get("debugStyle")) return NextResponse.json({ ok: true, channels: await debugStyleChannelStock(sp.get("debugStyle")!) });
     const w = sp.get("week");
     const week = w && /^\d{4}-\d{2}-\d{2}$/.test(w) ? mondayOf(w) : lastCompletedWeek();
     const mode = sp.get("mode") === "color" ? "color" : "style";

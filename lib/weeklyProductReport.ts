@@ -320,3 +320,20 @@ export async function writeWeeklyCache(weekStart: string, data: any) {
   await sheets.spreadsheets.values.update({ spreadsheetId: id, range: `'${CACHE_SHEET}'!A${rowNo}`, valueInputOption: "RAW", requestBody: { values: [row] } });
   return { chunks: chunks.length, kb: Math.round(b64.length / 1024) };
 }
+
+/** 점검용: 한 품번의 채널별 재고(PIP 시트, 사이즈·컬러 합) */
+export async function debugStyleChannelStock(style: string) {
+  const pipId = getDailySourceSheetId();
+  const pipTitle = pickDailySheetTitle(await getSpreadsheetTitlesById(pipId));
+  const pipRows = expandStyleChannelRows(await getSheetValuesById(pipId, pipTitle, "A:ZZ"));
+  const h1 = pipRows[1] || [], h2 = pipRows[2] || [];
+  const out = new Map<string, number>();
+  for (const r of pipRows.slice(3)) {
+    if (String(r[13] ?? "").trim().toUpperCase() !== style.toUpperCase()) continue;
+    for (let c = 29; c < h2.length; c++) {
+      if (String(h2[c] ?? "").trim() !== "일간" || !String(h1[c] ?? "").trim()) continue;
+      for (let k = c + 1; k < c + 6; k++) if (String(h2[k] ?? "").trim() === "재고") { out.set(String(h1[c]).trim(), (out.get(String(h1[c]).trim()) || 0) + (Number(r[k]) || 0)); break; }
+    }
+  }
+  return [...out.entries()].filter(([, v]) => v !== 0).sort((a, b) => a[1] - b[1]);
+}

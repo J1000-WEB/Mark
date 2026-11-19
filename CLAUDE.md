@@ -439,6 +439,16 @@
   2025-11 이후 출시 상품만 정확, 그 전 상품은 "25.11~ 누계". 백필 끝나면 붙일 예정.
 - 엑셀과 차이: 수량은 매장주문만큼(GF7LKC501 1440 vs 1444), 재고는 기준일 차이(엑셀은 금요일 기준, 여기는 최신 PIP).
 
+## 상품탭 구성비 + PIP 보관 상품정보 분류 (2026-11-19)
+
+- 상품 탭 3번째 하위탭 **구성비**(`components/CategoryMixPanel.tsx`): 주간데이터 품번 캐시(`/api/weekly-product?mode=style`)를
+  품목(KNIT/OUTER/BOTTOM/INNER(W/O KNIT)/ACC…) → 복종(CARDIGAN/PANTS/JP/JK…) → 아이템으로 묶어 판매금액·수량 비중, 재고 비중(물류/점포),
+  재고주수(총재고÷4주 평균), 판매율(PIP 누적판매÷입고), 재고원가(원가×총재고), 원가율을 보여줌. 재고 비중이 판매 비중의 1.5배↑면 빨간 막대.
+  ※ 소천님이 말하는 "복종(니트·아우터·바지)"은 ERP 용어로 **품목**(it), ERP **복종**(it_gb)은 그 아래 단계.
+- MARK_PIP_ARCHIVE `상품정보` 탭에 L~O열 **성별·품목·복종·원가** 추가. 예전 줄은 `POST /api/pip-archive-info`(PIP 시트 스타일 정보로 빈 칸만 채움,
+  body.map {스타일:[성별,품목,복종,원가]}로 추가 소스, `?dryRun=1`)로 11/19에 10,867줄 채움. 남은 161개 스타일(2022년 등 PIP 시트에 없는 것)은
+  `pip-archive.js`가 밤마다 조회에 나오면 채움(로그 "분류 채움 N개"). 새 품목은 처음부터 ERP sex/it/it_gb/cost_prce로 저장.
+
 ## 스페셜오퍼위크 세부일정 자동 기록 (대시보드 크론, erp-agent 아님)
 
 - Vercel 크론 `/api/auto-special-offer-actuals`(매일 05:00 KST, 수동은 POST) → `lib/specialOfferWeek.ts` `updateSpecialOfferActuals`.

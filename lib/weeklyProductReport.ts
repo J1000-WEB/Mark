@@ -159,7 +159,8 @@ export async function computeWeeklyProductReport(weekStart: string) {
   // 점포 재고 = 오프라인 매장 채널 재고 합(팀 소계·매장주문/반품·온라인·기타 제외) — 오프라인팀 소계엔 매장주문 마이너스 재고가 섞여 있었음
   const TEAM_NAMES = new Set(["온라인팀", "오프라인팀", "글로벌팀", "기타", "팀합계", "합계"]);
   // 창고·본사·후원·브랜딩팀·외부(제이미/위즈원)·무신사 물류센터·"오프라인_채널"(매장주문) 같은 비매장 채널도 뺌 — 안 빼면 01.정상창고 재고가 점포로 잡혔음
-  const NOT_STORE = /창고|물류|본사|브랜딩|후원|기부|위즈원|제이미|샘플|^오프라인_채널$/;
+  // 2026-11-19: "오프라인_…" 위탁·면세·무신사·한컬렉션 채널도 뺌 — 판매만 올라가고 재고는 관리 안 돼 마이너스로 쌓임(WBD3L04501 면세 −3,646 등)
+  const NOT_STORE = /창고|물류|본사|브랜딩|후원|기부|위즈원|제이미|샘플|^오프라인_/;
   const offStoreCols = blocks.filter((b) => b.stockCol >= 0 && !TEAM_NAMES.has(b.name) && !NOT_STORE.test(b.name) && isOff(b.name)).map((b) => b.stockCol);
   const storeStockCols = WEEKLY_STORES.map((_, i) => blocks.find((b) => normalizeStoreKey(b.name) === storeKeys[i])?.stockCol ?? -1);
   let stockDate = "";

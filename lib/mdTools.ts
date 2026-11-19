@@ -67,6 +67,8 @@ export async function computeOutlet(cfgIn: Partial<OutletConfig> = {}) {
   for (let d = from; d <= yesterday; d = addDays(d, 1)) dates.push(d);
   const [pip, wh, arch, info] = await Promise.all([readStoreStockSnapshot({ strict: true }), readWarehouseStockSnapshot(), readArchivedSales(dates), readStyleInfo().catch(() => new Map())]);
   const flat = arch.rows.map((r) => ({ storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty }));
+  // 보관 시트에 아직 없는 날이 있으면 있는 날 수로 주간 판매를 환산(없는 날을 판매 0으로 보지 않게)
+  const effDays = arch.foundDates.length || cfg.periodDays;
   const codeOf = (name: string) => (/용인/.test(name) ? "42005" : name);
   const agg = new Map<string, any>();
   for (const r of pip.rows as any[]) {
@@ -103,7 +105,7 @@ export async function computeOutlet(cfgIn: Partial<OutletConfig> = {}) {
     const mask = r.period > 0 || r.stock > 0 || (r.stock === 0 && r.cum > 0);
     if (!mask) continue;
     const stock = Math.max(0, r.stock);
-    const weekly = (r.period / cfg.periodDays) * 7;
+    const weekly = (r.period / effDays) * 7;
     const stockWeeks = r.period === 0 ? (stock === 0 ? 0 : 99) : stock / weekly;
     const properStock = r.period === 0 ? (stock === 0 ? 0 : Math.min(cfg.minStock, stock)) : cfg.defaultWeeks * weekly;
     const diff = stock - properStock;

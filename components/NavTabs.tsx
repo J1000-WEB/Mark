@@ -69,7 +69,7 @@ export default function NavTabs({ active }: { active: NavKey }) {
       </aside>
 
       {/* 모바일: 위쪽 메뉴(한 줄 가로 스크롤) + 하위 탭 한 줄 */}
-      <div className="sticky top-0 z-40 -mx-4 mb-2 bg-[#0f172a] text-white shadow-md lg:hidden">
+      <div className="sticky top-0 z-40 -mx-4 -mt-6 mb-2 bg-[#0f172a] text-white shadow-md lg:hidden">
         <div className="flex items-center gap-3 px-4 pb-2 pt-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/gi-logo-white.png" alt="GENERAL IDEA" className="h-3.5 w-auto" />

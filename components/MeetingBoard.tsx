@@ -188,6 +188,130 @@ export default function MeetingBoard() {
     return () => ro.disconnect();
   }, []);
 
+  // ---------------- 회의자료 다운(PNG / HTML / 텍스트)
+  const [dlOpen, setDlOpen] = useState(false);
+  const fileBase = () => `주간리더회의_${doc?.team || ""}_${(label.match(/^(.*?주차)/)?.[1] || week).replace(/\s+/g, "")}`;
+  const slideEl = async () => {
+    setEdit(false);
+    await new Promise((r) => setTimeout(r, 250));
+    return document.getElementById("meeting-slide") as HTMLElement | null;
+  };
+  const saveBlob = (blob: Blob, name: string) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  async function downloadPng() {
+    const el = await slideEl();
+    if (!el) return;
+    setBusy("PNG 만드는 중…");
+    try {
+      const { toPng } = await import("html-to-image");
+      const opt: any = { width: 1280, height: 720, pixelRatio: 1.5, style: { transform: "none", boxShadow: "none" }, cacheBust: true };
+      let url: string;
+      try {
+        url = await toPng(el, opt);
+      } catch {
+        url = await toPng(el, { ...opt, skipFonts: true }); // 글꼴 못 불러오면 글꼴 없이라도
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileBase()}.png`;
+      a.click();
+      setMsg("PNG(1920×1080)를 내려받았어요.");
+    } catch (e: any) {
+      setMsg(`PNG 실패: ${e?.message || e}`);
+    } finally {
+      setBusy("");
+    }
+  }
+  async function downloadHtml() {
+    const el = await slideEl();
+    if (!el) return;
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.transform = "none";
+    clone.style.boxShadow = "none";
+    let css = "";
+    const links: string[] = [];
+    for (const ss of Array.from(document.styleSheets)) {
+      try {
+        for (const r of Array.from(ss.cssRules)) css += r.cssText + "\n";
+      } catch {
+        if ((ss as CSSStyleSheet).href) links.push(`<link rel="stylesheet" href="${(ss as CSSStyleSheet).href}">`);
+      }
+    }
+    const title = `${doc?.team || ""} 주간 리더 회의 ${label}`;
+    const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>${links.join("")}
+<style>${css}</style>
+<style>
+@page { size: 1280px 720px; margin: 0; }
+html, body { margin: 0; background: #6b7280; }
+.mtg-bar { position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: #111827; color: #e5e7eb; font: 13px/1.4 sans-serif; }
+.mtg-bar button { background: #2f6b4f; color: #fff; border: 0; border-radius: 999px; padding: 8px 16px; font-weight: 800; cursor: pointer; }
+.mtg-wrap { display: flex; justify-content: center; padding: 24px; }
+#meeting-slide { position: static !important; transform: none !important; flex: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media print { html, body { background: #fff; } .mtg-bar { display: none; } .mtg-wrap { padding: 0; } #meeting-slide { position: fixed !important; left: 0; top: 0; } }
+</style></head><body>
+<div class="mtg-bar"><button onclick="window.print()">인쇄 · PDF 저장</button><span>인쇄 창에서 대상 “PDF로 저장”, 여백 “없음”, “배경 그래픽” 체크하면 슬라이드 한 장 그대로 나와요.</span></div>
+<div class="mtg-wrap">${clone.outerHTML}</div>
+</body></html>`;
+    saveBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${fileBase()}.html`);
+    setMsg("HTML 파일을 내려받았어요. 열어서 '인쇄 · PDF 저장'을 누르면 돼요.");
+  }
+  function meetingText() {
+    if (!doc) return "";
+    const conv = (t: string) =>
+      t
+        .split("\n")
+        .map((raw) => {
+          const x = raw.replace(/\*\*/g, "");
+          if (!x.trim()) return "";
+          const b = x.match(/^\[(\d+)\]\s*(.*)$/);
+          if (b) return ` ${b[1]}) ${b[2]}`;
+          const deep = x.match(/^\s{2,}(.*)$/);
+          if (deep) return `     ${deep[1]}`;
+          const d = x.match(/^-\s?(.*)$/);
+          if (d) return `   - ${d[1]}`;
+          return x;
+        })
+        .filter((l, i, arr) => !(l === "" && arr[i - 1] === ""))
+        .join("\n")
+        .trim();
+    const its = doc.monthItems || [];
+    const L = [
+      `[주간 리더 회의] ${doc.teamBadge} ${doc.team}`,
+      `${label}${doc.presenter ? ` · 발표 ${doc.presenter}` : ""}`,
+      "",
+      "■ 지난주",
+      conv(doc.lastWeek),
+      "",
+      "■ 이번주",
+      conv(doc.thisWeek),
+    ];
+    if (its.length) {
+      L.push("", `■ 이번달 (총 ${its.length}건 · 완료 ${its.filter((m) => m.done).length}건 · 잔여 ${its.filter((m) => !m.done).length}건)`);
+      for (const m of its) L.push(`${m.done ? "✅" : "⬜"} ${m.pri} ${m.cat} ${m.text} — ${m.progress}%`);
+    }
+    if (doc.coop.trim()) L.push("", `■ 협조 요청: ${doc.coop.trim()}`);
+    return L.join("\n");
+  }
+  async function copyText() {
+    const t = meetingText();
+    try {
+      await navigator.clipboard.writeText(t);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setMsg("회의 내용을 복사했어요. 메신저에 붙여넣으면 돼요.");
+  }
+
   const items = doc?.monthItems || [];
   const doneN = items.filter((m) => m.done).length;
   const btn = "h-9 rounded-full px-4 text-xs font-black";
@@ -212,7 +336,23 @@ export default function MeetingBoard() {
         <button type="button" className={`${btn} ${edit ? "bg-slate-900 text-white" : "border border-slate-300 bg-white"}`} onClick={() => setEdit(!edit)} disabled={!doc}>{edit ? "✓ 미리보기" : "✏️ 수정"}</button>
         <button type="button" className={`${btn} border border-slate-300 bg-white`} onClick={() => doc && autoFill(doc, true)} disabled={!doc || !!busy}>↻ MARK 데이터로 다시 채우기</button>
         <button type="button" className={`${btn} bg-emerald-600 text-white disabled:opacity-50`} onClick={save} disabled={!doc || !!busy}>저장{dirty ? " *" : ""}</button>
-        <button type="button" className={`${btn} bg-slate-900 text-white`} onClick={() => { setEdit(false); setTimeout(() => window.print(), 150); }} disabled={!doc}>⬇ PDF(인쇄)</button>
+        <div className="relative">
+          <button type="button" className={`${btn} bg-slate-900 text-white`} onClick={() => setDlOpen(!dlOpen)} disabled={!doc}>⬇ 회의자료 다운 ▾</button>
+          {dlOpen && (
+            <div className="absolute left-0 top-10 z-30 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg">
+              {([
+                ["PNG 이미지", "1920 × 1080", downloadPng],
+                ["HTML 파일", "슬라이드 크기로 인쇄·PDF 저장", downloadHtml],
+                ["텍스트 복사", "메신저 공유", copyText],
+              ] as const).map(([t, sub, fn]) => (
+                <button key={t} type="button" className="block w-full px-4 py-2 text-left hover:bg-slate-50" onClick={() => { setDlOpen(false); fn(); }}>
+                  <span className="block text-sm font-black text-slate-900">{t}</span>
+                  <span className="block text-[11px] font-semibold text-slate-500">{sub}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="text-[11px] font-semibold text-slate-500">{busy || msg}{!busy && doc?.savedAt ? ` · 마지막 저장 ${doc.savedAt}` : ""}</span>
       </div>
 

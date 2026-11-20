@@ -16,6 +16,7 @@
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "googleapis": "^140.0.1",
+    "html-to-image": "^1.11.11",
     "iconv-lite": "^0.7.3",
     "next": "14.2.5",
     "otplib": "^13.4.1",

@@ -3,6 +3,7 @@
 // MARK 2026-11-19: 재고CTRL — 재고MD님 아티팩트 3개(팩토리아울렛 판매분 / 재고이관 요청 리스트 / 저소진 품번 랭킹)를 MARK 데이터로.
 // 계산은 /api/md-tools(lib/mdTools.ts). 파일 업로드 없음.
 import { useEffect, useMemo, useState } from "react";
+import StorePicker from "./StorePicker";
 
 const fmt = (n: any) => (typeof n === "number" ? n.toLocaleString("ko-KR", { maximumFractionDigits: 1 }) : n ?? "");
 const stamp = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, "");
@@ -219,6 +220,7 @@ export function SlowMoverPanel() {
   const [excludeNoStock, setExcludeNoStock] = useState(true);
   const [off, setOff] = useState<Record<string, Record<string, boolean>>>({ category: { ACC: true, 기타: true }, year: {}, season: {} });
   const [res, setRes] = useState<any>(null);
+  const [pick, setPick] = useState<string[]>([]); // 비면 전체 매장(소천님 요청: 기본 전체)
   const R = useRunner();
   useEffect(() => {
     try {
@@ -235,13 +237,24 @@ export function SlowMoverPanel() {
   const all: any[] = res?.rows || [];
   const vals = (k: string) => [...new Set(all.map((r) => r[k]).filter(Boolean))].sort();
   const result = useMemo(() => {
-    const rows = all
+    // 매장을 고르면: 그 매장들 판매 ÷ (판매 + 그 매장들 재고) — 물류는 매장별이 아니라 소진율에서 빼고 참고로만 보여줌
+    const sel = pick.length ? pick : null;
+    const base = !sel
+      ? all
+      : all.map((r) => {
+          let st = 0, pe = 0;
+          for (const c of sel) { const v = r.by?.[c]; if (v) { st += v[0]; pe += v[1]; } }
+          const period = Math.max(0, pe);
+          const d = period + st;
+          return { ...r, storeStock: st, period, totalStock: st, rate: d > 0 ? period / d : null };
+        }).filter((r) => r.rate !== null);
+    const rows = base
       .filter((r) => !(r.category && off.category?.[r.category]) && !(r.year && off.year?.[r.year]) && !(r.season && off.season?.[r.season]))
       .filter((r) => !excludeNoStock || r.totalStock > 0)
       .sort((a, b) => (b.storeStock > 0 ? 1 : 0) - (a.storeStock > 0 ? 1 : 0) || a.rate - b.rate || b.totalStock - a.totalStock);
     const top = rows.slice(0, topN).map((r, i) => ({ rank: i + 1, ...r, ratePct: Math.round(r.rate * 1000) / 10 }));
     return { total: rows.length, top, avg: top.length ? top.reduce((a, r) => a + r.rate, 0) / top.length : 0, stock: top.reduce((a, r) => a + r.totalStock, 0) };
-  }, [all, off, excludeNoStock, topN]);
+  }, [all, off, excludeNoStock, topN, pick]);
   const chips = (f: string, label: string) => (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="w-10 text-[11px] font-black text-slate-500">{label}</span>
@@ -271,6 +284,8 @@ export function SlowMoverPanel() {
             {chips("category", "품목")}
             {chips("year", "년도")}
             {chips("season", "시즌")}
+            {res.storeList && <StorePicker stores={res.storeList} value={pick} onChange={setPick} />}
+            {pick.length > 0 && <p className="text-[11px] font-semibold text-amber-600">선택 매장 기준: 소진율 = 그 매장들 판매 ÷ (판매 + 그 매장들 재고). 물류 재고는 소진율에 안 넣고 참고로만 보여줘요.</p>}
             <div className="flex flex-wrap items-center gap-3 pt-1 text-xs font-bold text-slate-600">
               <label className="flex items-center gap-1"><input type="checkbox" checked={excludeNoStock} onChange={(e) => setExcludeNoStock(e.target.checked)} /> 재고 0인 품번 제외(이미 완판)</label>
               <label className="flex items-center gap-1">상위 <input type="number" value={topN} onChange={(e) => setTopN(Number(e.target.value) || 100)} className="h-7 w-16 rounded border border-slate-300 px-1" /> 위까지</label>

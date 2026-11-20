@@ -226,11 +226,26 @@ export async function computeSlowMovers(opts: { days?: number } = {}) {
   const from = addDays(yesterday, -(days - 1));
   const [{ config }, pip, wh, flat, info] = await Promise.all([readShipRtConfig(), readStoreStockSnapshot({ strict: true }), readWarehouseStockSnapshot(), readFlatChunks(from, yesterday), readStyleInfo().catch(() => new Map())]);
   // 원본과 같은 22개 매장(출고·RT 설정의 매장 목록) — 매장반품·주문 같은 사유 채널 제외
-  const known = new Set(config.stores.map((s) => normStoreKey(s.name)));
-  const agg = new Map<string, { style: string; storeStock: number; period: number; whStock: number }>();
-  const get = (st: string) => agg.get(st) || agg.set(st, { style: st, storeStock: 0, period: 0, whStock: 0 }).get(st)!;
-  for (const r of pip.rows as any[]) if (known.has(normStoreKey(r.storeName))) get(up(r.styleCode)).storeStock += Math.max(0, Number(r.stock || 0));
-  for (const r of flat) if (r.styleCode && known.has(normStoreKey(r.storeName))) get(up(r.styleCode)).period += Number(r.qty || 0);
+  // MARK 2026-11-20: 매장 선택용으로 매장별 [재고, 기간판매]도 같이 내려보냄(by)
+  const codeOf = new Map(config.stores.map((s) => [normStoreKey(s.name), String(s.code)] as [string, string]));
+  const agg = new Map<string, { style: string; storeStock: number; period: number; whStock: number; by: Record<string, [number, number]> }>();
+  const get = (st: string) => agg.get(st) || agg.set(st, { style: st, storeStock: 0, period: 0, whStock: 0, by: {} }).get(st)!;
+  for (const r of pip.rows as any[]) {
+    const code = codeOf.get(normStoreKey(r.storeName));
+    if (!code) continue;
+    const e = get(up(r.styleCode));
+    const v = Math.max(0, Number(r.stock || 0));
+    e.storeStock += v;
+    (e.by[code] = e.by[code] || [0, 0])[0] += v;
+  }
+  for (const r of flat) {
+    const code = r.styleCode ? codeOf.get(normStoreKey(r.storeName)) : undefined;
+    if (!code) continue;
+    const e = get(up(r.styleCode));
+    const v = Number(r.qty || 0);
+    e.period += v;
+    (e.by[code] = e.by[code] || [0, 0])[1] += v;
+  }
   for (const r of wh.rows as any[]) get(up(r.styleCode)).whStock += Math.max(0, Number(r.offlineStock || 0));
   const rows = [...agg.values()]
     .map((e) => {
@@ -238,8 +253,8 @@ export async function computeSlowMovers(opts: { days?: number } = {}) {
       const totalStock = e.storeStock + e.whStock;
       const denom = period + totalStock;
       const i = info.get(e.style);
-      return { style: e.style, styleName: i?.name || "", year: i?.year || "", season: i?.season || "", category: i?.cat || "", bok: i?.bok || "", storeStock: e.storeStock, whStock: e.whStock, totalStock, period, rate: denom > 0 ? period / denom : null };
+      return { style: e.style, styleName: i?.name || "", year: i?.year || "", season: i?.season || "", category: i?.cat || "", bok: i?.bok || "", storeStock: e.storeStock, whStock: e.whStock, totalStock, period, rate: denom > 0 ? period / denom : null, by: e.by };
     })
     .filter((r) => r.rate !== null);
-  return { period: `${from}~${yesterday}`, days, rows, stores: config.stores.length, inputs: { pip: (pip as any).meta?.uploadedAt || null, warehouse: (wh as any).meta?.uploadedAt || null } };
+  return { period: `${from}~${yesterday}`, days, rows, stores: config.stores.length, storeList: [...config.stores].sort((a, b) => a.rank - b.rank).map((s) => ({ code: String(s.code), name: s.name, grade: s.grade })), inputs: { pip: (pip as any).meta?.uploadedAt || null, warehouse: (wh as any).meta?.uploadedAt || null } };
 }

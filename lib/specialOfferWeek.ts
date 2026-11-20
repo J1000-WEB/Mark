@@ -11,7 +11,7 @@ function text(v: any) {
   return String(v ?? "").trim();
 }
 
-function parseDate(v: any) {
+export function parseDate(v: any) {
   // 구글시트 일련번호(숫자)로 오는 게 정상 케이스입니다 — 셀 표시형식과 무관하게 항상 정확합니다.
   if (typeof v === "number" && Number.isFinite(v)) {
     return sheetSerialToDateKey(v);

@@ -7,7 +7,7 @@
 // 이번주 칸은 이번 주·다음 주 스오크 일정만 자동, 나머지는 손으로. 이번달 칸(과업·진척)은 지난 회의에서 이어받음.
 // 저장: MARK_DB "회의_주간리더"(A 회의주 월요일, B 저장시각, C JSON).
 import { readSalesSummaryRowsForReports, normalizeStoreKey } from "@/lib/dataBuilder";
-import { readSpecialOfferSheet } from "@/lib/specialOfferWeek";
+import { readSpecialOfferSheet, parseDate as parseOfferDate } from "@/lib/specialOfferWeek";
 import { readWeatherHistory } from "@/lib/openWeather";
 import { buildPromoReport } from "@/lib/promoReport";
 import { getDbSheetId, getSheetValuesById, ensureSheetExistsById, safeReplaceSheetValuesById } from "@/lib/googleSheets";
@@ -83,7 +83,7 @@ export async function buildMeetingAuto(meetingMonday: string) {
   const daysWithData = new Set(rows.filter((r) => inWeek(r.date, rs) && r.amount).map((r) => r.date)).size;
   const stores = [...cur.by.entries()]
     .map(([name, a]) => ({ name, a, ly: ly.by.get(name) || 0, lw: lw.by.get(name) || 0 }))
-    .filter((s) => s.a > 0 && s.ly > 0)
+    .filter((s) => s.a > 0 && s.ly > 0 && !/^오프라인_/.test(s.name)) // 위탁·무신사 등 인샵은 신장/부진 목록에서 뺌
     .map((s) => ({ ...s, yoy: s.a / s.ly - 1 }));
   const likeCur = stores.reduce((x, s) => x + s.a, 0), likeLy = stores.reduce((x, s) => x + s.ly, 0);
   const good = [...stores].sort((a, b) => b.yoy - a.yoy).filter((s) => s.yoy > 0).slice(0, 3);
@@ -108,11 +108,7 @@ export async function buildMeetingAuto(meetingMonday: string) {
     const { rows: or, headerRowIdx, storeCol, startCol, endCol } = offerSheet;
     offerHeader = (or[headerRowIdx] || []).map((v: any) => String(v ?? "").trim());
     const tCol = offerHeader.findIndex((h) => /목표/.test(h.replace(/\s/g, "")));
-    const pd = (v: any) => {
-      const s = String(v ?? "").trim();
-      const m = s.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
-      return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
-    };
+    const pd = (v: any) => parseOfferDate(v) || "";
     for (let i = headerRowIdx + 1; i < or.length; i++) {
       const r = or[i] || [];
       const store = String(r[storeCol] ?? "").trim();
@@ -157,16 +153,18 @@ export async function buildMeetingAuto(meetingMonday: string) {
   L.push("- 이슈: ");
 
   let n = 2;
+  // 그룹 제목 "아르노 윈터위크 (10/23~11/12) → 블랙…" → "아르노 윈터위크"
+  const shortTitle = (t: string) => t.replace(/^[①-⑳\d.\s]+/, "").split(/\s*[(→/★]|\s\d{1,3},\d{3}원|\s\d+개소/)[0].trim() || t;
   const pg = Array.isArray(promo?.groups) ? promo.groups.filter((g: any) => g.cur.qty > 0 || g.prev.qty > 0) : [];
   if (pg.length) {
     const tq = pg.reduce((a: number, g: any) => a + g.cur.qty, 0), ta = pg.reduce((a: number, g: any) => a + g.cur.amount, 0);
     const pq = pg.reduce((a: number, g: any) => a + g.prev.qty, 0), pa = pg.reduce((a: number, g: any) => a + g.prev.amount, 0);
     L.push("");
-    L.push(`[${n++}] 프로모션: **${pg.map((g: any) => g.title.replace(/^[①-⑳\d.\s]+/, "")).slice(0, 3).join(" + ")}**`);
+    L.push(`[${n++}] 프로모션: **${[...pg].sort((a: any, b: any) => b.cur.amount - a.cur.amount).slice(0, 3).map((g: any) => shortTitle(g.title)).join(" + ")}**`);
     L.push(`- 실적: 판매 ${tq.toLocaleString("ko-KR")}장, ${eok(ta)}, 비중 ${cur.amt ? Math.round((ta / cur.amt) * 1000) / 10 : "-"}% / 전주 ${pq.toLocaleString("ko-KR")}장, ${eok(pa)}${pa ? `, ${pct(ta / pa - 1, 0)}` : ""}`);
     L.push("- 카테고리별 판매분석 :");
     for (const g of pg) {
-      const t = g.title.replace(/^[①-⑳\d.\s]+/, "");
+      const t = shortTitle(g.title);
       L.push(`  · ${t} ${g.cur.qty.toLocaleString("ko-KR")}장, ${baek(g.cur.amount)} / 전주 ${g.prev.qty.toLocaleString("ko-KR")}장, ${baek(g.prev.amount)} (${signN(g.cur.qty - g.prev.qty, "장")}, ${signBaek(g.cur.amount - g.prev.amount)})`);
     }
   }

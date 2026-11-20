@@ -89,6 +89,14 @@ export default function CategoryMixPanel() {
     const g = new Map<string, Set<string>>();
     const key = (r: Row) => String(r.main || r.style || "").toUpperCase();
     for (const r of rows) if (r.year) (g.get(key(r)) || g.set(key(r), new Set()).get(key(r))!).add(String(r.year));
+    // 묶인 품번이 2개 이상(러닝)이면 가장 이른 년도~가장 늦은 년도 사이 모든 해에 잡음(예: WBD3L04503 2024 + GF7LKC503 2026 → 2024·2025·2026)
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(key(r), (counts.get(key(r)) || 0) + 1);
+    for (const [k, set] of g) {
+      if ((counts.get(k) || 0) < 2) continue;
+      const ys = [...set].map(Number).filter((y) => y > 2000);
+      if (ys.length) for (let y = Math.min(...ys); y <= Math.max(...ys); y++) set.add(String(y));
+    }
     return (r: Row) => g.get(key(r)) || new Set([String(r.year || "")]);
   }, [rows]);
   const opts = useMemo(() => {

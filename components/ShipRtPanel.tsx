@@ -302,14 +302,14 @@ export default function ShipRtPanel() {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(mode === "ship"
               ? [
-                  ["품절임박", res.statusCounts["품절임박"], "text-rose-600"], ["보충", res.statusCounts["보충"], "text-amber-600"],
+                  ["품절임박(전체 매장)", res.statusCounts["품절임박"], "text-rose-600"], ["보충(전체 매장)", res.statusCounts["보충"], "text-amber-600"],
                   ["출고", `${filtered("chulgoUpload").length}건 ${fmt(sumQty(filtered("chulgoUpload")))}장`, ""],
                   ["보충 출고", `${fmt(sumQty(filtered("bonusShipUpload")))}장`, ""],
                   ["재런칭 출고", `${fmt(sumQty(filtered("relaunchFallbackShipUpload")))}장`, ""],
                   ["매장요청 출고", `${fmt(sumQty(filtered("requestShipUpload")))}장`, ""],
                 ]
               : [
-                  ["과잉", res.statusCounts["과잉"], "text-slate-600"],
+                  ["과잉(전체 매장)", res.statusCounts["과잉"], "text-slate-600"],
                   ["RT", `${filtered("rtUpload").length}건 ${fmt(sumQty(filtered("rtUpload")))}장`, ""],
                   ["RT 매칭없음", filtered("idongDetail").filter((r) => r.exportStoreName === "매칭없음").length, "text-amber-600"],
                   ["보충 RT", `${fmt(sumQty(filtered("bonusRtUpload")))}장`, ""],

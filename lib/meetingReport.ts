@@ -71,11 +71,15 @@ export async function buildMeetingAuto(weekMonday: string) {
   ]);
 
   // ---- 매출
+  // 진행 중인 주(어제까지만 있음)는 전주·전년도 같은 요일까지만 비교
+  const yday = addDays(kstToday(), -1);
+  const nDays = Math.max(1, Math.min(7, Math.round((Date.parse(`${(yday < re ? yday : re)}T00:00:00Z`) - Date.parse(`${rs}T00:00:00Z`)) / 864e5) + 1));
+  const partial = nDays < 7;
   const sum = (s: string) => {
     const by = new Map<string, number>();
     let amt = 0, tgt = 0;
     for (const r of rows) {
-      if (!inWeek(r.date, s)) continue;
+      if (!inWeek(r.date, s) || r.date > addDays(s, nDays - 1)) continue;
       amt += r.amount;
       tgt += r.target;
       by.set(r.storeName, (by.get(r.storeName) || 0) + r.amount);
@@ -144,7 +148,7 @@ export async function buildMeetingAuto(weekMonday: string) {
   L.push("1. [운영] 주간 리뷰");
   const wowR = lw.amt ? cur.amt / lw.amt - 1 : null;
   const yoyR = ly.amt ? cur.amt / ly.amt - 1 : null;
-  L.push(`[1] 매출실적: **매출 ${eok(cur.amt)}, 전주 ${eok(lw.amt)}, ${pct(wowR)}**`);
+  L.push(`[1] 매출실적: **매출 ${eok(cur.amt)}, 전주 ${eok(lw.amt)}, ${pct(wowR)}**${partial ? ` (${md(addDays(rs, nDays - 1))}까지 ${nDays}일, 전주·전년도 같은 요일까지)` : ""}`);
   const tail: string[] = [];
   if (ly.amt) tail.push(`전년 ${eok(ly.amt)} ${pct(yoyR)}`);
   if (likeLy) tail.push(`동일매장 ${pct(likeCur / likeLy - 1)}`);

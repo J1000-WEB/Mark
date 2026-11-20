@@ -172,8 +172,25 @@ export default function WeeklyProductPanel() {
 
   // 랭킹 3칸(각 44px)을 맨 왼쪽에 고정하고 품번은 그 오른쪽에 고정
   const PL = show.랭킹 ? "left-[132px]" : "left-0";
+  // MARK 2026-11-20 소천님: 품명까지 틀고정 — 품번 110px · 컬러 72px(컬러구분) · 품명 170px 고정폭
+  const BASE = show.랭킹 ? 132 : 0;
+  const W_STYLE = 110, W_COLOR = 72, W_NAME = 170;
+  const leftColor = BASE + W_STYLE;
+  const leftName = BASE + W_STYLE + (mode === "color" ? W_COLOR : 0);
   const shownStores = stores.map((s, i) => ({ ...s, i })).filter((s) => grades[s.grade]);
   const weekStart = data?.weekStart || "";
+  // MARK 2026-11-20: 그 주 서울 평균기온 vs 전년 같은 주(−364일) — 날씨 기록(실측, 전년은 Open-Meteo 과거자료)
+  const [wx, setWx] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/weather", { cache: "no-store" }).then((r) => r.json()).then((j) => setWx((j.records || []).filter((w: any) => w.source === "actual" && (!w.region || w.region === "서울")))).catch(() => {});
+  }, []);
+  const wxAvg = (s: string) => {
+    if (!s) return null;
+    const e = addDays(s, 6);
+    const xs = wx.filter((w) => w.date >= s && w.date <= e && (w.maxTemp || w.minTemp));
+    return xs.length ? xs.reduce((a, w) => a + (Number(w.maxTemp) + Number(w.minTemp)) / 2, 0) / xs.length : null;
+  };
+  const tNow = wxAvg(weekStart), tLy = weekStart ? wxAvg(addDays(weekStart, -364)) : null;
   const sel = "rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold";
 
   return (
@@ -188,6 +205,19 @@ export default function WeeklyProductPanel() {
             오프라인 실판매(매장주문/반품·온라인 제외) · 랭킹=전사 주간 판매금액, 매장 RANK=매장 주간 판매수량 · 상품/가격/재고=PIP
             {data?.stockDate ? `(재고 기준일 ${data.stockDate})` : ""}
           </p>
+          {tNow != null && (
+            <p className="mt-1 text-xs font-bold text-slate-600">
+              🌡 주간 평균기온(서울) {tNow.toFixed(1)}°C
+              {tLy != null && (
+                <>
+                  {" "}· 전년 같은 주 {tLy.toFixed(1)}°C ·{" "}
+                  <span className={tNow - tLy >= 0 ? "text-rose-600" : "text-blue-600"}>
+                    전년比 {tNow - tLy >= 0 ? "+" : ""}{(tNow - tLy).toFixed(1)}°C
+                  </span>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-xl border border-slate-200 bg-white p-0.5">
@@ -310,9 +340,9 @@ export default function WeeklyProductPanel() {
                       {h}
                     </th>
                   ))}
-                <th className={`sticky ${PL} z-20 bg-slate-50 px-2 py-1 text-left font-black`}>품번</th>
-                {mode === "color" && <th className="bg-slate-50 px-1 text-left font-black">컬러</th>}
-                <th className="bg-slate-50 px-1 text-left font-black">품명</th>
+                <th className={`sticky ${PL} z-20 bg-slate-50 px-2 py-1 text-left font-black`} style={{ width: W_STYLE, minWidth: W_STYLE, maxWidth: W_STYLE }}>품번</th>
+                {mode === "color" && <th className="sticky z-20 bg-slate-50 px-1 text-left font-black" style={{ left: leftColor, width: W_COLOR, minWidth: W_COLOR, maxWidth: W_COLOR }}>컬러</th>}
+                <th className="sticky z-20 border-r border-slate-200 bg-slate-50 px-1 text-left font-black" style={{ left: leftName, width: W_NAME, minWidth: W_NAME, maxWidth: W_NAME }}>품명</th>
                 {show.카테고리 && ["년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업"].map((h, i) => <th key={h} className={`${TH} text-left ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.가격 && ["원가", "TAG가", "판매가", "OFF가", "프로모션가", "할인율"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.라이프사이클 && ["기획", "입고%", "입고", "판매", "재고", "판매%"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
@@ -385,7 +415,7 @@ export default function WeeklyProductPanel() {
                         <td className={`${TD} sticky left-[88px] z-[1] w-[44px] min-w-[44px] max-w-[44px] bg-white ${rankUp > 0 ? "text-blue-600" : rankUp < 0 ? "text-rose-600" : "text-slate-400"}`}>{r.amt[0] && r.amt[1] ? (rankUp > 0 ? `▲${rankUp}` : rankUp < 0 ? `▼${-rankUp}` : "-") : ""}</td>
                       </>
                     )}
-                    <td className={`sticky ${PL} z-[1] whitespace-nowrap bg-white px-2 py-1 font-black`}>
+                    <td className={`sticky ${PL} z-[1] whitespace-nowrap bg-white px-2 py-1 font-black`} style={{ width: W_STYLE, minWidth: W_STYLE, maxWidth: W_STYLE }}>
                       {r.style}
                       {r.merged?.length ? (
                         <button
@@ -400,11 +430,11 @@ export default function WeeklyProductPanel() {
                       {r.merged?.length && openMerged[r.k] ? <div className="text-[10px] font-bold text-violet-500">{r.merged.join(", ")}</div> : null}
                     </td>
                     {mode === "color" && (
-                      <td className="whitespace-nowrap px-1 py-1 font-bold">
+                      <td className="sticky z-[1] truncate whitespace-nowrap bg-white px-1 py-1 font-bold" style={{ left: leftColor, width: W_COLOR, minWidth: W_COLOR, maxWidth: W_COLOR }} title={`${r.color} ${r.colorName || ""}`}>
                         {r.color} <span className="font-normal text-slate-400">{r.colorName}</span>
                       </td>
                     )}
-                    <td className="max-w-[180px] truncate px-1 py-1 text-slate-600" title={r.name}>
+                    <td className="sticky z-[1] truncate border-r border-slate-200 bg-white px-1 py-1 text-slate-600" style={{ left: leftName, width: W_NAME, minWidth: W_NAME, maxWidth: W_NAME }} title={r.name}>
                       {r.name}
                     </td>
                     {show.카테고리 && (

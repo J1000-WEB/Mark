@@ -89,16 +89,19 @@ async function aggregateWeek(start: string, styles: Set<string>, master: Map<str
 // 소비자가: PIP(스타일별 채널별, 금액) 마스터 열 20(판매가) — 팀 파일의 "소비자가"(ERP 현판가 메뉴 소비자가)와 같은 값.
 // PIP 19열은 최초 TAG가라 안 씀. ERP "현판가"(할인 적용가)는 PIP에 없어서, 그 주 판매 줄의 개당 판매가 중 가장 많이 팔린 값으로 추정.
 async function readStylePrices(styles: Set<string>) {
-  const out = new Map<string, { consumer: number; current: number }>();
+  const out = new Map<string, { consumer: number; current: number; colors: number }>();
   try {
     const id = getDailySourceSheetId();
     const title = pickDailySheetTitle(await getSpreadsheetTitlesById(id));
     if (!title) return out;
     const raw = await getSheetValuesById(id, title, "N4:U");
     const votes = new Map<string, Map<string, number>>();
+    const colors = new Map<string, Set<string>>(); // MARK 2026-11-20: 품번별 컬러 수(PIP P열 칼라)
     for (const r of raw) {
       const st = t(r?.[0]).toUpperCase();
       if (!styles.has(st)) continue;
+      const c = t(r?.[2]).toUpperCase();
+      if (c) (colors.get(st) || colors.set(st, new Set()).get(st)!).add(c);
       const key = `${n(r?.[6])}|${n(r?.[7])}`;
       const m = votes.get(st) || new Map<string, number>();
       m.set(key, (m.get(key) || 0) + 1);
@@ -106,7 +109,7 @@ async function readStylePrices(styles: Set<string>) {
     }
     for (const [st, m] of votes) {
       const best = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0].split("|").map(Number);
-      out.set(st, { consumer: best[1], current: 0 });
+      out.set(st, { consumer: best[1], current: 0, colors: colors.get(st)?.size || 0 });
     }
   } catch (e) {
     console.error("promo prices read failed", e);
@@ -131,6 +134,7 @@ export type PromoStyleRow = {
   prev: Agg;
   prevYear?: Agg;
   runningGap?: Agg | null; // 같은 품명(재런칭 코드 포함) 금주 합 − 전년
+  colors: number; // 컬러 수(PIP 기준, 출고여부가 "BE만"처럼 한 컬러면 1)
 };
 
 export type PromoGroupReport = {
@@ -177,6 +181,7 @@ export async function buildPromoReport(weekStartInput?: string) {
         style: i.style,
         name: i.name,
         shipped: i.shipped,
+        colors: /^[A-Z0-9]{2,3}\s*만$/i.test(String(i.shipped || "").trim()) ? 1 : p?.colors || 0,
         consumerPrice: consumer,
         currentPrice: current,
         discountRate: consumer > 0 && current > 0 ? 1 - current / consumer : null,

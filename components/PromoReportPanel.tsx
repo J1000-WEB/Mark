@@ -31,6 +31,12 @@ function growthOf(cur: Agg, prev: Agg): { v: number | null; label: string } {
   return { v: g, label: `${g >= 0 ? "+" : ""}${(g * 100).toFixed(1)}%` };
 }
 
+// MARK 2026-11-20: 프로모션 구성 "N품번 M컬러"(컬러 = PIP 기준 품번별 컬러 수 합)
+function mixOf(g: any) {
+  const colors = (g.rows || []).reduce((a: number, r: any) => a + (r.colors || 0), 0);
+  return `${(g.rows || []).length}품번${colors ? ` ${colors}컬러` : ""}`;
+}
+
 export default function PromoReportPanel() {
   const [week, setWeek] = useState(""); // 월요일 YYYY-MM-DD, 비우면 지난주
   const [data, setData] = useState<any>(null);
@@ -89,10 +95,20 @@ export default function PromoReportPanel() {
     () =>
       groups.map((g) => {
         const gr = growthOf(g.cur, g.prev);
-        return { group: g.group, cur: g.cur, prev: g.prev, gr };
+        return { group: g.group, cur: g.cur, prev: g.prev, gr, mix: mixOf(g) };
       }),
     [groups]
   );
+  // MARK 2026-11-20: 요약 맨 아래 합계(체크된 프로모션 전체)
+  const sumAll = useMemo(() => {
+    const cur = { qty: 0, amount: 0 }, prev = { qty: 0, amount: 0 };
+    let styles = 0, colors = 0;
+    for (const g of groups) {
+      cur.qty += g.cur.qty; cur.amount += g.cur.amount; prev.qty += g.prev.qty; prev.amount += g.prev.amount;
+      styles += g.rows.length; colors += g.rows.reduce((a: number, r: any) => a + (r.colors || 0), 0);
+    }
+    return { cur, prev, gr: growthOf(cur, prev), mix: `${styles}품번 ${colors}컬러` };
+  }, [groups]);
 
   // MARK 2026-11-19: 엑셀 다운로드(소천님 요청) — 지금 화면에 체크된 프로모션만, 요약 시트 + 상세 시트(팀 "프로모션총요약"처럼 블록으로)
   const [downloading, setDownloading] = useState(false);
@@ -118,17 +134,22 @@ export default function PromoReportPanel() {
       ws.addRow([]);
       ws.addRow(["", "금주 전체매출(오프)", total.cur.amount, "전주 전체매출(오프)", total.prev.amount, "전주비", g2(total.cur, total.prev)]).eachCell((c: any) => { if (typeof c.value === "number") c.numFmt = Math.abs(c.value) < 1 ? "0.0%" : "#,##0"; });
       ws.addRow([]);
-      styleHead(ws.addRow(["프로모션", "금주 수량", "금주 금액", "전체매출비중", "전주 수량", "전주 금액", "GAP 수량", "GAP 금액", "신장률"]));
+      styleHead(ws.addRow(["프로모션", "구성", "금주 수량", "금주 금액", "전체매출비중", "전주 수량", "전주 금액", "GAP 수량", "GAP 금액", "신장률"]));
       for (const s of summary) {
-        styleBody(ws.addRow([s.group, s.cur.qty, s.cur.amount, share(s.cur.amount, total.cur.amount) ?? "", s.prev.qty, s.prev.amount, s.cur.qty - s.prev.qty, s.cur.amount - s.prev.amount, g2(s.cur, s.prev)]));
+        styleBody(ws.addRow([s.group, s.mix, s.cur.qty, s.cur.amount, share(s.cur.amount, total.cur.amount) ?? "", s.prev.qty, s.prev.amount, s.cur.qty - s.prev.qty, s.cur.amount - s.prev.amount, g2(s.cur, s.prev)]));
       }
-      ws.columns = [{ width: 22 }, { width: 12 }, { width: 16 }, { width: 13 }, { width: 12 }, { width: 16 }, { width: 11 }, { width: 14 }, { width: 10 }];
+      if (summary.length > 1) {
+        const tr = ws.addRow(["합계", sumAll.mix, sumAll.cur.qty, sumAll.cur.amount, share(sumAll.cur.amount, total.cur.amount) ?? "", sumAll.prev.qty, sumAll.prev.amount, sumAll.cur.qty - sumAll.prev.qty, sumAll.cur.amount - sumAll.prev.amount, g2(sumAll.cur, sumAll.prev)]);
+        styleBody(tr, 3);
+        tr.eachCell((c: any) => { c.fill = SUM; c.font = { bold: true }; });
+      }
+      ws.columns = [{ width: 22 }, { width: 16 }, { width: 12 }, { width: 16 }, { width: 13 }, { width: 12 }, { width: 16 }, { width: 11 }, { width: 14 }, { width: 10 }];
 
       // 상세(프로모션별 블록)
       const wd = wb.addWorksheet("프로모션별 상세");
       wd.columns = [{ width: 6 }, { width: 13 }, { width: 30 }, { width: 11 }, { width: 11 }, { width: 8 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 9 }, { width: 13 }, { width: 10 }, { width: 13 }];
       for (const g of groups) {
-        const title = wd.addRow([g.title]);
+        const title = wd.addRow([`${g.title}  (${mixOf(g)})`]);
         title.font = { bold: true, size: 12 };
         title.getCell(1).fill = TITLE;
         if (g.note) wd.addRow([String(g.note).replace(/\n/g, " / ")]).font = { italic: true, color: { argb: "FF64748B" } };
@@ -250,6 +271,7 @@ export default function PromoReportPanel() {
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-2 py-1.5 text-left font-black">프로모션</th>
+                    <th className="px-2 py-1.5 text-left font-black">구성</th>
                     <th className={TH}>금주 수량</th>
                     <th className={TH}>금주 금액</th>
                     <th className={TH}>전체매출비중</th>
@@ -263,6 +285,7 @@ export default function PromoReportPanel() {
                   {summary.map((s) => (
                     <tr key={s.group} className="border-t border-slate-100">
                       <td className="px-2 py-1.5 font-black">{s.group}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-500">{s.mix}</td>
                       <td className={TD}>{num(s.cur.qty)}</td>
                       <td className={`${TD} font-black`}>{won(s.cur.amount)}</td>
                       <td className={TD}>{pct1(share(s.cur.amount, total.cur.amount))}</td>
@@ -272,6 +295,19 @@ export default function PromoReportPanel() {
                       <td className={`${TD} font-black ${gColor(s.gr.v)}`}>{s.gr.label}</td>
                     </tr>
                   ))}
+                  {summary.length > 1 && (
+                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-black">
+                      <td className="px-2 py-1.5">합계</td>
+                      <td className="px-2 py-1.5 text-slate-500">{sumAll.mix}</td>
+                      <td className={TD}>{num(sumAll.cur.qty)}</td>
+                      <td className={TD}>{won(sumAll.cur.amount)}</td>
+                      <td className={TD}>{pct1(share(sumAll.cur.amount, total.cur.amount))}</td>
+                      <td className={`${TD} text-slate-500`}>{won(sumAll.prev.amount)}</td>
+                      <td className={`${TD} ${gColor(sumAll.cur.qty - sumAll.prev.qty)}`}>{signed(sumAll.cur.qty - sumAll.prev.qty)}</td>
+                      <td className={`${TD} ${gColor(sumAll.cur.amount - sumAll.prev.amount)}`}>{signed(sumAll.cur.amount - sumAll.prev.amount)}</td>
+                      <td className={`${TD} ${gColor(sumAll.gr.v)}`}>{sumAll.gr.label}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -291,6 +327,7 @@ export default function PromoReportPanel() {
                     <div className="text-base font-black">
                       <span className="mr-1 text-slate-400">{opened ? "−" : "+"}</span>
                       {g.title}
+                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 align-middle text-[11px] font-bold text-slate-600">{mixOf(g)}</span>
                     </div>
                     {g.note && <div className="mt-0.5 whitespace-pre-line text-xs text-slate-500">{g.note}</div>}
                   </div>

@@ -301,3 +301,65 @@ export async function saveAllRegionsWeatherSnapshot(regions: string[]) {
 export async function saveSeoulWeatherSnapshot() {
   return saveAllRegionsWeatherSnapshot(["서울"]);
 }
+
+// ---------------------------------------------------------------------------
+// MARK 2026-11-20: 전년 날씨 수집(소천님 요청) — OpenWeather 무료는 과거 실측이 없어서 Open-Meteo 과거자료(archive, 키 없음)로
+// 지역별 일 최고·최저·강수를 받아 Weather_History에 source "actual"로 넣음(저장시간 칸에 "open-meteo"). 이미 있는 날짜·지역은 안 건드림.
+const REGION_LATLON: Record<string, [number, number]> = {
+  "서울": [37.5665, 126.978], "경기": [37.2636, 127.0286], "인천": [37.4563, 126.7052], "부산": [35.1796, 129.0756],
+  "대구": [35.8714, 128.6014], "대전": [36.3504, 127.3845], "광주": [35.1595, 126.8526], "울산": [35.5384, 129.3114],
+  "충북": [36.6424, 127.489], "충남": [36.8151, 127.1139], "전남": [34.7604, 127.6622], "경남": [35.228, 128.6811],
+  "경북": [36.019, 129.3435], "강원": [37.8813, 127.7298], "전북": [35.8242, 127.148], "세종": [36.48, 127.289], "제주": [33.4996, 126.5312],
+};
+function wmoText(code: number) {
+  if (code >= 95) return "⛈️ 뇌우";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "❄️ 눈";
+  if (code >= 80 && code <= 82) return "⛈ 소나기";
+  if (code >= 51 && code <= 67) return "🌧 비";
+  if (code === 45 || code === 48) return "🌫 안개";
+  if (code === 0) return "☀️ 맑음";
+  if (code === 1) return "🌤 구름조금";
+  if (code === 2) return "⛅ 구름많음";
+  return "☁️ 흐림";
+}
+export async function backfillWeatherArchive(opts: { from: string; to: string; regions?: string[]; dryRun?: boolean }) {
+  const regions = (opts.regions && opts.regions.length ? opts.regions : ["서울"]).filter((r) => REGION_LATLON[r]);
+  await ensureSheetExistsById(WEATHER_SPREADSHEET_ID, SHEET_NAME, WEATHER_HEADER);
+  const existing = await readWeatherHistory();
+  const actualRows = existing.filter((r) => r.source === "actual");
+  const forecastRows = existing.filter((r) => r.source === "forecast");
+  const have = new Set(actualRows.map((r) => `${r.date}|${r.region}`));
+  const added: WeatherRecord[] = [];
+  const perRegion: Record<string, number> = {};
+  for (const region of regions) {
+    const [lat, lon] = REGION_LATLON[region];
+    const u = new URL("https://archive-api.open-meteo.com/v1/archive");
+    u.searchParams.set("latitude", String(lat));
+    u.searchParams.set("longitude", String(lon));
+    u.searchParams.set("start_date", opts.from);
+    u.searchParams.set("end_date", opts.to);
+    u.searchParams.set("daily", "temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code");
+    u.searchParams.set("timezone", "Asia/Seoul");
+    const res = await fetch(u.toString(), { cache: "no-store" });
+    if (!res.ok) throw new Error(`Open-Meteo ${region} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const j: any = await res.json();
+    const d = j.daily || {};
+    let n = 0;
+    (d.time || []).forEach((date: string, i: number) => {
+      const mx = d.temperature_2m_max?.[i], mn = d.temperature_2m_min?.[i];
+      if (mx == null || mn == null || have.has(`${date}|${region}`)) return;
+      added.push({
+        date, source: "actual", region, maxTemp: round1(mx), minTemp: round1(mn), weather: wmoText(Number(d.weather_code?.[i] ?? 3)),
+        rainChance: 0, rainMm: round1(Number(d.precipitation_sum?.[i] || 0)), humidity: 0, windSpeed: 0, savedAt: "open-meteo",
+      });
+      n++;
+    });
+    perRegion[region] = n;
+  }
+  if (!opts.dryRun && added.length) {
+    const all = [...actualRows, ...added].sort((a, b) => a.date.localeCompare(b.date) || a.region.localeCompare(b.region));
+    const rows = [WEATHER_HEADER, ...all.map(toRow), ...forecastRows.map(toRow)];
+    await updateValuesById(WEATHER_SPREADSHEET_ID, `'${SHEET_NAME}'!A1:K${rows.length}`, rows);
+  }
+  return { added: added.length, perRegion, sample: added.slice(0, 3), dryRun: !!opts.dryRun };
+}

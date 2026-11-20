@@ -9,7 +9,12 @@ type MonthItem = { pri: string; cat: string; text: string; progress: number; don
 type Doc = {
   week: string; team: string; teamBadge: string; teamDesc: string; presenter: string;
   lastWeek: string; thisWeek: string; monthItems: MonthItem[]; coop: string; savedAt?: string;
+  fontPt?: { last?: number; this?: number; month?: number }; // 칸별 글자 크기(pt), 기본 7pt
 };
+type ColKey = "last" | "this" | "month";
+// 슬라이드 1280px = 팀 PPT 10인치(720pt) → 1pt = 1.778px
+const PT = 1280 / 720;
+const DEFAULT_PT = 7;
 
 const addDays = (d: string, n: number) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -39,19 +44,15 @@ function Inline({ s }: { s: string }) {
   );
 }
 
-// 칸에 넘치면 글자를 조금씩 줄여서 한 장에 맞춤(11.5px → 최소 8px)
-function Fit({ children, deps }: { children: React.ReactNode; deps: any[] }) {
+// MARK 2026-11-20 소천님: 글자 크기는 자동으로 줄이지 않고 칸별 고정(기본 7pt). 넘치면 수정 화면에 표시만.
+function Box({ pt, children, onOver }: { pt: number; children: React.ReactNode; onOver: (v: boolean) => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [fs, setFs] = useState(11.5);
-  useLayoutEffect(() => {
-    setFs(11.5);
-  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && el.scrollHeight > el.clientHeight + 1 && fs > 8) setFs((f) => Math.round((f - 0.5) * 10) / 10);
+    if (el) onOver(el.scrollHeight > el.clientHeight + 1);
   });
   return (
-    <div ref={ref} className="h-full overflow-hidden" style={{ fontSize: fs }}>
+    <div ref={ref} className="h-full overflow-hidden" style={{ fontSize: pt * PT }}>
       {children}
     </div>
   );
@@ -312,6 +313,11 @@ html, body { margin: 0; background: #6b7280; }
     setMsg("회의 내용을 복사했어요. 메신저에 붙여넣으면 돼요.");
   }
 
+  const ptOf = (k: ColKey) => doc?.fontPt?.[k] ?? DEFAULT_PT;
+  const [over, setOver] = useState<Record<string, boolean>>({});
+  const markOver = (k: ColKey, v: boolean) => setOver((o) => (o[k] === v ? o : { ...o, [k]: v }));
+  const setPt = (k: ColKey, v: number) => set({ fontPt: { ...(doc?.fontPt || {}), [k]: Math.max(4, Math.min(14, Math.round(v * 2) / 2)) } });
+
   const items = doc?.monthItems || [];
   const doneN = items.filter((m) => m.done).length;
   const btn = "h-9 rounded-full px-4 text-xs font-black";
@@ -364,6 +370,18 @@ html, body { margin: 0; background: #6b7280; }
                 <input value={(doc as any)[k]} onChange={(e) => set({ [k]: e.target.value } as any)} className="mt-1 h-8 w-full rounded-lg border border-slate-300 px-2 text-sm text-slate-900" />
               </label>
             ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl bg-slate-50 p-2 lg:col-span-3">
+            <span className="font-black text-slate-600">글자 크기</span>
+            {([["last", "지난주"], ["this", "이번주"], ["month", "이번달"]] as const).map(([k, l]) => (
+              <label key={k} className="flex items-center gap-2 font-bold text-slate-500">
+                {l}
+                <input type="range" min={4} max={14} step={0.5} value={ptOf(k)} onChange={(e) => setPt(k, Number(e.target.value))} className="w-36 accent-emerald-600" />
+                <input type="number" min={4} max={14} step={0.5} value={ptOf(k)} onChange={(e) => setPt(k, Number(e.target.value))} className="h-7 w-14 rounded border border-slate-300 px-1 text-slate-900" />pt
+                {over[k] && <span className="text-rose-600">⚠ 칸 넘침</span>}
+              </label>
+            ))}
+            <button type="button" className="rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-600" onClick={() => set({ fontPt: {} })}>모두 7pt로</button>
           </div>
           <label className="font-bold text-slate-500">지난주
             <textarea value={doc.lastWeek} onChange={(e) => set({ lastWeek: e.target.value })} rows={24} className="mt-1 w-full rounded-xl border border-slate-300 p-2 font-mono text-[12px] leading-5 text-slate-900" />
@@ -422,31 +440,31 @@ html, body { margin: 0; background: #6b7280; }
 
               <div className="mt-4 grid min-h-0 flex-1 grid-cols-3 gap-5">
                 {[
-                  ["Last Week", "지난주", <Fit key="l" deps={[doc.lastWeek, scale]}><Rich text={doc.lastWeek} /></Fit>],
-                  ["Week", "이번주", <Fit key="t" deps={[doc.thisWeek, scale]}><Rich text={doc.thisWeek} /></Fit>],
+                  ["Last Week", "지난주", <Box key="l" pt={ptOf("last")} onOver={(v) => markOver("last", v)}><Rich text={doc.lastWeek} /></Box>],
+                  ["Week", "이번주", <Box key="t" pt={ptOf("this")} onOver={(v) => markOver("this", v)}><Rich text={doc.thisWeek} /></Box>],
                   [
                     "Month",
                     "이번달",
-                    <div key="m" className="space-y-[7px]">
+                    <Box key="m" pt={ptOf("month")} onOver={(v) => markOver("month", v)}><div className="space-y-[0.55em]">
                       {items.map((m, i) => {
                         const filled = Math.round(m.progress / 20);
                         return (
-                          <div key={i} className="flex items-center gap-1.5 text-[11.5px]">
-                            <span className={`inline-flex h-[16px] items-center rounded-full px-1.5 text-[9.5px] font-black ${m.pri === "P1" ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-700"}`}>{m.pri}</span>
+                          <div key={i} className="flex items-center gap-[0.5em]">
+                            <span className={`inline-flex h-[1.4em] items-center rounded-full px-[0.5em] text-[0.8em] font-black ${m.pri === "P1" ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-700"}`}>{m.pri}</span>
                             <span className={`min-w-0 flex-1 truncate ${m.done ? "text-slate-400 line-through" : "text-slate-800"}`}>
                               <span style={{ color: m.done ? undefined : catColor(m.cat) }} className="font-bold">{m.cat}</span> {m.text}
                             </span>
                             <span className="flex gap-[2px]">
                               {[0, 1, 2, 3, 4].map((k) => (
-                                <span key={k} className="inline-block h-[10px] w-[10px] rounded-[2px] border" style={k < filled ? { background: m.done ? GREEN : "#d9534f", borderColor: m.done ? GREEN : "#d9534f" } : { borderColor: "#cbd5e1" }} />
+                                <span key={k} className="inline-block h-[0.85em] w-[0.85em] rounded-[2px] border" style={k < filled ? { background: m.done ? GREEN : "#d9534f", borderColor: m.done ? GREEN : "#d9534f" } : { borderColor: "#cbd5e1" }} />
                               ))}
                             </span>
-                            <span className={`inline-flex h-[13px] w-[13px] items-center justify-center rounded-[3px] border text-[9px] ${m.done ? "border-transparent text-white" : "border-slate-400"}`} style={m.done ? { background: GREEN } : undefined}>{m.done ? "✓" : ""}</span>
-                            <span className="w-9 text-right text-[11px] font-black" style={{ color: m.done || m.progress >= 100 ? GREEN : "#d9534f" }}>{m.progress}%</span>
+                            <span className={`inline-flex h-[1.1em] w-[1.1em] items-center justify-center rounded-[3px] border text-[0.75em] ${m.done ? "border-transparent text-white" : "border-slate-400"}`} style={m.done ? { background: GREEN } : undefined}>{m.done ? "✓" : ""}</span>
+                            <span className="w-[3.2em] text-right font-black" style={{ color: m.done || m.progress >= 100 ? GREEN : "#d9534f" }}>{m.progress}%</span>
                           </div>
                         );
                       })}
-                    </div>,
+                    </div></Box>,
                   ],
                 ].map(([en, ko, body], ci) => (
                   <div key={ci} className="flex min-h-0 flex-col overflow-hidden rounded-[22px] bg-white px-6 pb-4 pt-5">

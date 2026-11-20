@@ -133,16 +133,19 @@ function DailyView() {
       {error && <p className="text-sm font-bold text-rose-600">{error}</p>}
       {!loading && days.length > 0 && (
         <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-2xl border border-slate-200 bg-white">
-          <table className={`w-full border-collapse text-xs ${showDiff ? "min-w-[1700px]" : "min-w-[1450px]"}`}>
+          <table className={`w-full border-collapse text-xs ${showDiff ? "min-w-[2000px]" : "min-w-[1750px]"}`}>
             <thead className="sticky top-0 z-20 bg-slate-900 text-white">
               <tr>
                 <th className="whitespace-nowrap px-2 py-2 text-left font-black">일자</th>
                 <th className={TH}>기온</th>
+                <th className={TH}>전년기온</th>
+                <th className={TH}>기온차</th>
                 <th className={TH}>목표</th>
                 <th className={TH}>실적</th>
                 <th className={TH}>달성</th>
                 <th className={TH}>전년</th>
                 <th className={TH}>전년비</th>
+                <th className={TH} title="그날·전년 같은 요일 둘 다 매출이 있는 점포끼리만">전년비(동매장)</th>
                 {showDiff && <th className={`${TH} text-amber-200`}>전년차이</th>}
                 <th className={TH}>전주비</th>
                 {showDiff && <th className={`${TH} text-amber-200`}>전주차이</th>}
@@ -150,6 +153,7 @@ function DailyView() {
                 <th className={TH}>누적달성</th>
                 <th className={TH}>누적전년</th>
                 <th className={TH}>누적전년비</th>
+                <th className={TH}>누적(동매장)</th>
                 {showDiff && <th className={`${TH} text-amber-200`}>누적전년차이</th>}
                 <th className="whitespace-nowrap border-l border-slate-700 px-2 py-2 text-center font-black">스오크</th>
                 <th className="whitespace-nowrap px-2 py-2 text-center font-black">특이매출</th>
@@ -167,11 +171,14 @@ function DailyView() {
                       {Number(d.date.slice(5, 7))}/{Number(d.date.slice(8))} ({d.dow}){d.holiday ? " 휴" : ""}
                     </td>
                     <td className={`${TD} text-slate-500`}>{d.maxTemp !== null ? `${Math.round(d.maxTemp)}°/${Math.round(d.minTemp)}°` : "-"}</td>
+                    <td className={`${TD} text-slate-400`}>{d.prevMaxTemp != null ? `${Math.round(d.prevMaxTemp)}°/${Math.round(d.prevMinTemp)}°` : "-"}</td>
+                    <td className={`${TD} font-bold ${d.tempDiff == null ? "text-slate-300" : d.tempDiff >= 0 ? "text-rose-500" : "text-blue-500"}`}>{d.tempDiff == null ? "-" : `${d.tempDiff > 0 ? "+" : ""}${d.tempDiff.toFixed(1)}°`}</td>
                     <td className={TD}>{won(d.target)}</td>
                     <td className={`${TD} font-black`}>{won(d.actual)}</td>
                     <td className={`${TD} font-bold ${achColor(d.achievement)}`}>{pct0(d.achievement)}</td>
                     <td className={`${TD} text-slate-500`}>{won(d.prevYear)}</td>
                     <td className={`${TD} font-bold ${gColor(d.yoy)}`}>{growth(d.yoy)}</td>
+                    <td className={`${TD} ${gColor(d.likeYoy)}`} title={d.likeStores ? `동매장 ${d.likeStores}곳` : ""}>{growth(d.likeYoy)}</td>
                     {showDiff && <DiffCell a={d.actual} b={d.prevYear} />}
                     <td className={`${TD} ${gColor(d.wow)}`}>{growth(d.wow)}</td>
                     {showDiff && <DiffCell a={d.actual} b={d.lastWeek} />}
@@ -179,6 +186,7 @@ function DailyView() {
                     <td className={`${TD} font-bold ${achColor(d.cumAchievement)}`}>{pct0(d.cumAchievement)}</td>
                     <td className={`${TD} text-slate-500`}>{won(d.cumPrevYear)}</td>
                     <td className={`${TD} font-bold ${gColor(d.cumYoy)}`}>{growth(d.cumYoy)}</td>
+                    <td className={`${TD} ${gColor(d.cumLikeYoy)}`}>{growth(d.cumLikeYoy)}</td>
                     {showDiff && <DiffCell a={d.cumActual} b={d.cumPrevYear} />}
                     <td className="whitespace-nowrap border-l border-slate-100 px-2 py-1 text-center">
                       <SokCell list={d.specialOffers} date={d.date} label="스오크" />

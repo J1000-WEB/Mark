@@ -109,6 +109,23 @@ export async function buildDailyAchievement(month: string) {
   }
 
   let cumActual = 0, cumTarget = 0, cumTargetToDate = 0, cumPrevYear = 0;
+  let cumLikeCur = 0, cumLikePrev = 0;
+  // MARK 2026-11-20: 동매장 전년비 — 그날·전년 같은 요일 둘 다 매출>0인 점포끼리만
+  const likeFor = (date: string, prevDate: string) => {
+    let cur = 0, prev = 0, n = 0;
+    for (const m of byStoreDate.values()) {
+      const a = m.get(date)?.amount || 0, b = m.get(prevDate)?.amount || 0;
+      if (a > 0 && b > 0) { cur += a; prev += b; n++; }
+    }
+    return { cur, prev, n };
+  };
+  // 서울 기준 기온(실측 우선) — 전년 날짜도 같은 방식(전년 날씨는 Open-Meteo 과거자료로 채움)
+  const wxOf = (date: string) => {
+    const wxList = (weather as any[]).filter((w) => w.date === date && (!w.region || w.region === "서울"));
+    const wx = wxList.find((w) => w.source === "actual") || wxList[wxList.length - 1] || null;
+    if (!wx || wx.maxTemp === "" || wx.maxTemp == null) return null;
+    return { max: num(wx.maxTemp), min: num(wx.minTemp), rain: num(wx.rainMm), text: String(wx.weather || "") };
+  };
   const out = days.map((date) => {
     const tot = totalByDate.get(date) || { amount: 0, target: 0 };
     const hasActual = date <= asOf;
@@ -129,15 +146,22 @@ export async function buildDailyAchievement(month: string) {
     const prevYearSpecialOffers = sokFor(prevYearDate, true);
     const prevYearSpikes = spikesFor(prevYearDate);
 
-    // 서울 기준, 실측(actual) 우선·없으면 예보
-    const wxList = (weather as any[]).filter((w) => w.date === date && (!w.region || w.region === "서울"));
-    const wx = wxList.find((w) => w.source === "actual") || wxList[wxList.length - 1] || null;
+    const wxNow = wxOf(date);
+    const wxPrev = wxOf(prevYearDate);
+    const like = hasActual ? likeFor(date, prevYearDate) : { cur: 0, prev: 0, n: 0 };
+    if (hasActual) { cumLikeCur += like.cur; cumLikePrev += like.prev; }
     return {
       date,
       dow: DOW[dowOf(date)],
       holiday: isKoreanHoliday(date),
-      maxTemp: wx && wx.maxTemp !== "" ? num(wx.maxTemp) : null,
-      minTemp: wx && wx.minTemp !== "" ? num(wx.minTemp) : null,
+      maxTemp: wxNow ? wxNow.max : null,
+      minTemp: wxNow ? wxNow.min : null,
+      prevMaxTemp: wxPrev ? wxPrev.max : null,
+      prevMinTemp: wxPrev ? wxPrev.min : null,
+      tempDiff: wxNow && wxPrev ? Math.round(((wxNow.max + wxNow.min) / 2 - (wxPrev.max + wxPrev.min) / 2) * 10) / 10 : null,
+      likeYoy: hasActual && like.prev ? like.cur / like.prev - 1 : null,
+      likeStores: like.n,
+      cumLikeYoy: hasActual && cumLikePrev ? cumLikeCur / cumLikePrev - 1 : null,
       target: Math.round(tot.target),
       actual: hasActual ? Math.round(actual) : null,
       achievement: hasActual && tot.target ? actual / tot.target : null,

@@ -522,6 +522,16 @@
 - **화면 주차(오른쪽 위 기간) = 지난주 칸 매출 기간**(2026-11-20 소천님, 팀 PPT와 같음) — 저장 키·`?week=`도 그 리뷰 주 월요일, 이번주 칸은 그다음 주, 기본은 다 끝난 지난주.
   주차 이름 = 그 주 목요일이 속한 달 기준(10/26~11/1 = 10월 5주차). 팀장님 앱(OBT SALES MAP, 앱스스크립트) 회의록 "전주 리뷰"와는 별개 — 나중에 연결 검토.
 
+## 2026-11-20 묶음 변경(소천님 요청 7가지)
+
+- **전년 날씨**: OpenWeather 무료는 과거 실측이 없어 **Open-Meteo 과거자료**(archive-api.open-meteo.com, 키 없음)로 채움 — `backfillWeatherArchive`(lib/openWeather.ts),
+  POST `/api/weather?from=YYYY-MM-DD&to=YYYY-MM-DD&regions=서울[,부산…][&dryRun=1]`. Weather_History에 source "actual"·저장시간 "open-meteo"로, 이미 있는 날짜·지역은 안 건드림.
+  (주의: 그 시트의 기존 "actual"은 사실 마지막 예보를 실측으로 옮긴 값.)
+- 매출탭 **일별**: 전년비(동매장)·누적(동매장)(그날·전년 같은 요일 둘 다 매출>0 점포끼리), 전년기온(−364일)·기온차(평균기온 차).
+- 회의: 글자 자동축소 없앰, 칸별 고정 크기(기본 **7pt**, 1pt = 1280/720 px — 팀 PPT 10인치 기준), 수정 화면 슬라이더로 칸별 조절(doc.fontPt), 넘치면 "⚠ 칸 넘침".
+- IMC: 프로모션마다 "N품번 M컬러"(컬러 = PIP 칼라 수, 출고여부 "BE만"이면 1), 요약 표 구성 칸 + 맨 아래 **합계** 줄(엑셀도).
+- 주간데이터: 품번·컬러·품명 틀고정(고정폭 110/72/170px), 머리에 주간 평균기온 vs 전년 같은 주.
+
 ## 스페셜오퍼위크 세부일정 자동 기록 (대시보드 크론, erp-agent 아님)
 
 - Vercel 크론 `/api/auto-special-offer-actuals`(매일 05:00 KST, 수동은 POST) → `lib/specialOfferWeek.ts` `updateSpecialOfferActuals`.

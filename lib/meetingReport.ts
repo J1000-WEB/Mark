@@ -189,15 +189,15 @@ export async function buildMeetingAuto(weekMonday: string) {
 
   // ---- 이번주 글(스오크 일정만 자동)
   const T: string[] = [];
-  T.push("1. [운영] 핵심 추진 업무");
+  T.push(`1. [운영] 핵심 추진 업무 (${md(meetingMonday)}~${md(addDays(meetingMonday, 6))})`);
   T.push("[1] 프로모션: ");
   T.push("- ");
   const w1 = upcoming(meetingMonday), w2 = upcoming(addDays(meetingMonday, 7));
   if (w1.length || w2.length) {
     T.push("");
     T.push(`[2] 스오크: **금주 행사 ${w1.length}개소 + 차주 행사 준비(${w2.length}개소)**`);
-    if (w1.length) T.push(`- 금주: ${w1.map((o) => `${short(o.store)}(${md(o.start)}~${md(o.end)})`).join(", ")}`);
-    if (w2.length) T.push(`- 차주: ${w2.map((o) => `${short(o.store)}(${md(o.start)})`).join(", ")}`);
+    if (w1.length) T.push(`- 금주(${md(meetingMonday)}~${md(addDays(meetingMonday, 6))}): ${w1.map((o) => `${short(o.store)}(${md(o.start)}~${md(o.end)})`).join(", ")}`);
+    if (w2.length) T.push(`- 차주(${md(addDays(meetingMonday, 7))}~${md(addDays(meetingMonday, 13))}): ${w2.map((o) => `${short(o.store)}(${md(o.start)})`).join(", ")}`);
   }
   T.push("");
   T.push(`[${w1.length || w2.length ? 3 : 2}] 기타 업무`);

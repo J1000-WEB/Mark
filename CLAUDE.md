@@ -70,6 +70,13 @@
   업로드 변환(소천님 결정): **ref_no = 바코드 그대로**(GF7LKC501 + CH 칼라 + M 사이즈), 금액 USD → **1달러 1,350원**(`SHILLA_USD_KRW`),
   롯데처럼 1장씩 ±1 줄·개당 단가, 수량 0 줄 제외. 스케줄 `schedule-shilla.js`(1·2시, 캐시 cache/shilla_YYYYMMDD.json) → merge-inshop CHANNELS에 추가 → 2:20 ERP 업로드에 같이 들어감.
   수동: `node fetch-shilla.js YYYYMMDD [--cache]`(원본 cache/shilla-raw_*.json). run-now 허용.
+- **팩토리아울렛 용인점(42005) 자동화(2026-11-20)**: 매장은 비즈패션(BizFashion, ebizway) 프로그램 → Fiddler로 확인한 서버 요청을 `erp-agent/fetch-yongin.js`가 직접 보냄.
+  POST https://svcbfnet71.ebizway.co.kr/Account/GetPublicKey(RSA 키·쿠키) → /Account/UserLogin(comcd=10336, usrid·passwd를 RSA PKCS1로 암호화 base64, 응답 "True")
+  → /api/Data/Stream(헤더 comcd·usrid, mapinfo `SelectShop/MapSelectShop160.GetDataVertical_260930` "판매 현황", 매입처코드=아이디, ndjson 한 줄=전표·스타일).
+  STYLECODE는 정산서 엑셀 "스타일"과 같은 값(칼라 풀네임·구품번 순서) → 대시보드 **POST `/api/consignment-convert`**(시트 안 씀)가 수동 업로드와 같은 `parseFactoryYongin`
+  (라이브 COLORCODE·바코드 목록)으로 바꿔 돌려줌(11/18 캡처 17줄 시험: 15건 칼라·순서 자동수정, 수동과 동일). 계정 `.env` YONGIN_BF_USER / YONGIN_BF_PASSWORD.
+  스케줄 `schedule-yongin.js`(1·2시, cache/yongin_YYYYMMDD.json) → merge-inshop → 2:20 ERP. 수동 `node fetch-yongin.js YYYYMMDD [--cache]`. **자동 돌기 시작하면 아침 수동 용인 업로드는 중복이라 그만.**
+- ⚠️ PC 파일 commit 후엔 반드시 다시 stage해서 cmp — 2026-11-20 schedule-style-channel-upload.js가 **예전 버전(6,990바이트)으로 덮어써진 채** 15분 있었음(바로 복구).
 - ⚠️ **무신사는 2026-08-30부로 완전자동화 중단**. 자동화 접근을 비정상 접근으로 감지해서
   능동적으로 비밀번호+OTP를 초기화시킴(파트너 어드민 보안경고 메일까지 옴). **다시 시도하지
   말 것** — 계정 보안 문제로 번질 위험. 필요하면 대시보드의 수동 업로드 페이지 이용.
@@ -211,7 +218,7 @@
   - 응답 값 타입 13(이미지 img_thn, u16 길이+바이트)을 erp-mi.js에 추가. `client.call(..., {dumpPath})`로 풀린 응답을 파일로 남길 수 있음(`--dump`).
   - **화면 정의 찾는 법**: ERP 프로그램 캐시 `C:\Users\User\AppData\LocalLow\TOBESOFT\MiPlatform320U\Cache\GENERAL_ERP_*\<모듈>\win32\<화면ID>.xml`
     (0x46바이트 뒤부터 LZSS(Okumura, 4096/18, 공백 채움)로 압축 — 풀면 화면 XML: Title·gfn_Transaction의 서비스 경로·조회 조건·그리드 열). 그 PC에서 한 번 열어본 화면만 있음.
-- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js, pip-archive.js, fetch-onoff-stock.js, fetch-rt-orders.js).
+- 원격 1회 실행: erp-agent에 `run-now.json`({"jobs":[{"script","args"}]})을 넣으면 PIP 스케줄러가 1분 안에 실행 후 삭제(허용: fetch-sales-direct.js, fetch-pip-direct.js, test-lotte.js, check-consign-dupes.js, pip-archive.js, fetch-onoff-stock.js, fetch-rt-orders.js, fetch-shilla.js, fetch-yongin.js).
 
 ## PIP 과거 보관 (MARK_PIP_ARCHIVE, 2026-11-17)
 

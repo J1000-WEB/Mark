@@ -66,8 +66,10 @@
 - **신라면세(위탁, 채널 91003, 2026-11-20 입점)**: 신라 SRM(www.shillasrm.com) 직접 조회 `erp-agent/fetch-shilla.js`(Fiddler 캡처로 확인, 브라우저 없음).
   로그인 = GET /login.do(_csrf·_passwordSalt) → POST /loginProcess.do(pro_cls=2·company=Y1D0·type=2, 비번 = base64(SHA512(salt + base64(SHA512(pw)))))
   → /afterLoginOK.do(새 _csrf) → /mbpf.do(x-mbpf-token). 판매 = POST /ui/sp/external/sales/findListSaleResultDate.do(menucode SDEK00010, i_kukla 01 서울점, 일자별).
-  계정 `.env` SHILLA_SRM_USER / SHILLA_SRM_PASSWORD(소천님 입력). ⚠ 금액이 **USD**, 상품이 품번+칼라(ref_no)까지만(**사이즈 없음**), 수량 0 줄 있음 →
-  업로드 변환 규칙은 소천님 확인 대기. 지금은 원본만 cache/shilla-raw_YYYYMMDD.json에 저장(스케줄 미등록). run-now 허용 목록에 추가(run-all 재시작 후 적용).
+  계정 `.env` SHILLA_SRM_USER / SHILLA_SRM_PASSWORD(소천님 입력). 매장은 01 서울점 하나.
+  업로드 변환(소천님 결정): **ref_no = 바코드 그대로**(GF7LKC501 + CH 칼라 + M 사이즈), 금액 USD → **1달러 1,350원**(`SHILLA_USD_KRW`),
+  롯데처럼 1장씩 ±1 줄·개당 단가, 수량 0 줄 제외. 스케줄 `schedule-shilla.js`(1·2시, 캐시 cache/shilla_YYYYMMDD.json) → merge-inshop CHANNELS에 추가 → 2:20 ERP 업로드에 같이 들어감.
+  수동: `node fetch-shilla.js YYYYMMDD [--cache]`(원본 cache/shilla-raw_*.json). run-now 허용.
 - ⚠️ **무신사는 2026-08-30부로 완전자동화 중단**. 자동화 접근을 비정상 접근으로 감지해서
   능동적으로 비밀번호+OTP를 초기화시킴(파트너 어드민 보안경고 메일까지 옴). **다시 시도하지
   말 것** — 계정 보안 문제로 번질 위험. 필요하면 대시보드의 수동 업로드 페이지 이용.

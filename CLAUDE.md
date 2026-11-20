@@ -79,7 +79,7 @@
 - **인샵 업로드 검증(2026-11-20)**: `erp-agent/verify-inshop-upload.js`(스케줄 `schedule-inshop-verify.js` 2:45·9:40, 어제 매출) — 채널·매출일별
   ① 원본(신라 USD×환율 합·용인 실판매금액 합, cache/*-raw_*.json — 자동 조회도 원본을 남김) ② 업로드 파일(cache/<채널>_*.json Σ 단가×|수량|)
   ③ ERP(웹 ERP `/GI/SL/SL1010/getMainDetailList.do` 매장·일자 SALES_TAMT·SALES_QTY) 비교 → 일치/변환 불일치/ERP 미반영/ERP 불일치.
-  결과는 logs/inshop-verify.log + 대시보드 POST `/api/inshop-verify`(`lib/inshopVerify.ts`, MARK_DB `인샵업로드_검증`, 안 맞으면 Resend 메일). GET = 최근 7일.
+  결과는 logs/inshop-verify.log + 대시보드 POST `/api/inshop-verify`(`lib/inshopVerify.ts`, MARK_DB `인샵업로드_검증`, 안 맞으면 Resend 메일 → sjc@generalidea.co.kr만, env INSHOP_VERIFY_EMAIL_TO). GET = 최근 7일.
   한컬렉션·롯데는 원본 합계가 없어 ②③만. 수동: `node verify-inshop-upload.js YYYYMMDD [--no-post]`(run-now 허용).
 - ⚠️ device_commit_files는 같은 stagedPath(outputs 파일명)로 두 번째 커밋하면 **예전 내용을 쓰는 경우가 있음** → 고친 파일은 새 이름(예: sscu-v3.js)으로 복사해서 커밋.
 - ⚠️ PC 파일 commit 후엔 반드시 다시 stage해서 cmp — 2026-11-20 schedule-style-channel-upload.js가 **예전 버전(6,990바이트)으로 덮어써진 채** 15분 있었음(바로 복구).

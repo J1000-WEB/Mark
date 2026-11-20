@@ -13,6 +13,8 @@ export type VerifyItem = {
   erpAmount?: number | null; erpQty?: number | null; status: string; note?: string;
 };
 
+// 2026-11-20 소천님: 인샵 검증 메일은 회사 메일로만(env INSHOP_VERIFY_EMAIL_TO로 바꿀 수 있음)
+const VERIFY_MAIL_TO = process.env.INSHOP_VERIFY_EMAIL_TO || "sjc@generalidea.co.kr";
 const won = (n: any) => (n == null || n === "" ? "-" : Number(n).toLocaleString("ko-KR"));
 
 export async function saveVerify(items: VerifyItem[], opts: { alert?: boolean } = {}) {
@@ -27,7 +29,8 @@ export async function saveVerify(items: VerifyItem[], opts: { alert?: boolean } 
     const tr = items.map((r) => `<tr style="background:${r.status === "일치" ? "#fff" : "#fff1f2"}"><td>${r.date}</td><td>${r.name}(${r.channel})</td><td align=right>${won(r.sourceAmount)}</td><td align=right>${won(r.uploadAmount)} / ${r.uploadQty}장</td><td align=right>${won(r.erpAmount)} / ${r.erpQty ?? "-"}장</td><td><b>${r.status}</b> ${r.note || ""}</td></tr>`).join("");
     mail = await sendEmailAlert(
       `[MARK] 인샵 매출 업로드 확인필요 — ${bad.map((b) => b.name).join(", ")}`,
-      `<p>원본 · 업로드 파일 · ERP 금액이 안 맞는 채널이 있어요.</p><table border=1 cellpadding=4 style="border-collapse:collapse;font-size:13px"><tr><th>매출일</th><th>채널</th><th>원본</th><th>업로드 파일</th><th>ERP</th><th>결과</th></tr>${tr}</table>`
+      `<p>원본 · 업로드 파일 · ERP 금액이 안 맞는 채널이 있어요.</p><table border=1 cellpadding=4 style="border-collapse:collapse;font-size:13px"><tr><th>매출일</th><th>채널</th><th>원본</th><th>업로드 파일</th><th>ERP</th><th>결과</th></tr>${tr}</table>`,
+      VERIFY_MAIL_TO
     ).catch((e: any) => ({ ok: false, error: e?.message }));
   }
   return { saved: rows.length, bad: bad.length, mail };

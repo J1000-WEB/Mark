@@ -13,6 +13,24 @@ export async function GET(req: Request) {
     if (sp.get("debugStyle")) return NextResponse.json({ ok: true, channels: await debugStyleChannelStock(sp.get("debugStyle")!) });
     const w = sp.get("week");
     const week = w && /^\d{4}-\d{2}-\d{2}$/.test(w) ? mondayOf(w) : lastCompletedWeek();
+    if (sp.get("ly") === "1") {
+      // MARK 2026-11-20: 구성비 전년비 — 전년 같은 주(−364일) 품번별 오프라인 판매(PIP 보관 시트, 오프라인팀·매장주문/반품 제외)
+      const { readArchivedSales } = await import("@/lib/pipArchive");
+      const { isPromoExcludedStore } = await import("@/lib/promoReport");
+      const add = (d: string, n: number) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+      const lyStart = add(week, -364);
+      const dates = Array.from({ length: 7 }, (_, i) => add(lyStart, i));
+      const { rows, foundDates } = await readArchivedSales(dates);
+      const map: Record<string, [number, number]> = {};
+      for (const r of rows) {
+        if (r.team !== "오프라인팀" || isPromoExcludedStore(r.storeName)) continue;
+        const k = String(r.styleCode || "").toUpperCase();
+        const a = (map[k] = map[k] || [0, 0]);
+        a[0] += r.qty || 0;
+        a[1] += r.amount || 0;
+      }
+      return NextResponse.json({ ok: true, week, lyStart, lyEnd: add(lyStart, 6), foundDates, map }, { headers: { "Cache-Control": "no-store" } });
+    }
     const mode = sp.get("mode") === "color" ? "color" : "style";
     let data: any = sp.get("refresh") === "1" ? null : await readWeeklyCache(week).catch(() => null);
     let cache = "hit";

@@ -10,12 +10,12 @@ import { parseStyleCode } from "@/lib/productCode";
 type Row = any;
 type Agg = {
   key: string; label: string; level: number; n: number;
-  amt0: number; amt1: number; q: number[]; stock: number; wh: number; store: number;
+  amt0: number; amt1: number; ly: number; q: number[]; stock: number; wh: number; store: number;
   inQty: number; sold: number; stockCost: number; costSum: number; priceSum: number;
   children: Map<string, Agg>;
 };
 const newAgg = (key: string, label: string, level: number): Agg => ({
-  key, label, level, n: 0, amt0: 0, amt1: 0, q: [0, 0, 0, 0], stock: 0, wh: 0, store: 0, inQty: 0, sold: 0, stockCost: 0, costSum: 0, priceSum: 0, children: new Map(),
+  key, label, level, n: 0, amt0: 0, amt1: 0, ly: 0, q: [0, 0, 0, 0], stock: 0, wh: 0, store: 0, inQty: 0, sold: 0, stockCost: 0, costSum: 0, priceSum: 0, children: new Map(),
 });
 const num = (v: number) => (Number.isFinite(v) && v ? Math.round(v).toLocaleString("ko-KR") : "");
 const man = (v: number) => (Number.isFinite(v) && v ? `${Math.round(v / 10000).toLocaleString("ko-KR")}만` : "");
@@ -52,7 +52,8 @@ export default function CategoryMixPanel() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [f, setF] = useState({ year: "", season: "", sex: "", activeOnly: true, bySex: false });
+  const [f, setF] = useState({ years: [] as string[], season: "", sex: "", activeOnly: true, bySex: false });
+  const [ly, setLy] = useState<any>(null);
   const [sexMap, setSexMap] = useState<Record<string, string>>({});
   useEffect(() => {
     fetch("/api/style-sex").then((r) => r.json()).then((j) => j.ok && setSexMap(j.map || {})).catch(() => {});
@@ -73,27 +74,39 @@ export default function CategoryMixPanel() {
       .then((j) => alive && (j.ok ? setData(j) : setError(j.error || "불러오지 못했어요.")))
       .catch(() => alive && setError("불러오지 못했어요."))
       .finally(() => alive && setLoading(false));
+    setLy(null);
+    const lq = new URLSearchParams({ ly: "1" });
+    if (week) lq.set("week", week);
+    fetch(`/api/weekly-product?${lq}`, { cache: "no-store" }).then((r) => r.json()).then((j) => alive && j.ok && setLy(j)).catch(() => {});
     return () => {
       alive = false;
     };
   }, [week]);
 
   const rows: Row[] = data?.rows || [];
+  // MARK 2026-11-20 소천님: 러닝(재런칭) 품번은 묶인 품번들의 년도 전부로 집계 — 예) 예전 WBD3L04503도 새 품번 년도(2026)로도, 자기 년도(2025)로도 잡힘
+  const yearsOf = useMemo(() => {
+    const g = new Map<string, Set<string>>();
+    const key = (r: Row) => String(r.main || r.style || "").toUpperCase();
+    for (const r of rows) if (r.year) (g.get(key(r)) || g.set(key(r), new Set()).get(key(r))!).add(String(r.year));
+    return (r: Row) => g.get(key(r)) || new Set([String(r.year || "")]);
+  }, [rows]);
   const opts = useMemo(() => {
     const u = (k: string) => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort();
-    return { year: u("year"), season: u("season"), sex: [...new Set(rows.map((r) => sexOf(r)))].sort() };
+    return { year: u("year").reverse(), season: u("season"), sex: [...new Set(rows.map((r) => sexOf(r)))].sort() };
   }, [rows, sexMap]);
+  const toggleYear = (y: string) => setF({ ...f, years: f.years.includes(y) ? f.years.filter((x) => x !== y) : [...f.years, y] });
 
   const filtered = useMemo(
     () =>
       rows.filter(
         (r) =>
-          (!f.year || r.year === f.year) &&
+          (!f.years.length || f.years.some((y) => yearsOf(r).has(y))) &&
           (!f.season || r.season === f.season) &&
           (!f.sex || sexOf(r) === f.sex) &&
           (!f.activeOnly || r.qty?.some((x: number) => x > 0) || r.totalStock > 0)
       ),
-    [rows, f, sexMap]
+    [rows, f, sexMap, yearsOf]
   );
   const depth = f.bySex ? 4 : 3;
   const tree = useMemo(() => {
@@ -113,6 +126,7 @@ export default function CategoryMixPanel() {
         a.n++;
         a.amt0 += r.amt?.[0] || 0;
         a.amt1 += r.amt?.[1] || 0;
+        a.ly += ly?.map?.[String(r.style || "").toUpperCase()]?.[1] || 0;
         (r.qty || []).forEach((x: number, i: number) => (a.q[i] += x || 0));
         a.stock += r.totalStock || 0;
         a.wh += r.wh || 0;
@@ -127,7 +141,7 @@ export default function CategoryMixPanel() {
       }
     }
     return root;
-  }, [filtered, f.bySex, sexMap]);
+  }, [filtered, f.bySex, sexMap, ly]);
 
   const flat: Agg[] = [];
   const walk = (a: Agg) => {
@@ -152,13 +166,20 @@ export default function CategoryMixPanel() {
           <h2 className="text-2xl font-black tracking-tight">복종·아이템 구성비 {data ? `(${md(data.weekStart)}~${md(data.weekEnd)})` : ""}</h2>
           <p className="mt-1 text-xs text-slate-500">
             품목 → 복종 → 아이템 · 판매=오프라인 실판매(매장주문·온라인 제외) · 재고·입고·누적판매·원가=PIP{data?.stockDate ? `(재고 기준일 ${data.stockDate})` : ""}
+            {ly && ` · 전년 = ${md(ly.lyStart)}~${md(ly.lyEnd)} 같은 품번 판매(PIP 보관${ly.foundDates?.length < 7 ? `, ${ly.foundDates?.length || 0}/7일만 있음` : ""})`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select className={sel} value={f.year} onChange={(e) => setF({ ...f, year: e.target.value })}>
-            <option value="">년도 전체</option>
-            {opts.year.map((v) => <option key={v}>{v}</option>)}
-          </select>
+          <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold" title="여러 개 체크 가능. 러닝(재런칭) 품번은 묶인 품번 년도 모두에 잡혀요.">
+            <span className="text-slate-400">년도</span>
+            {opts.year.map((v) => (
+              <label key={v} className="flex items-center gap-0.5">
+                <input type="checkbox" checked={f.years.includes(v)} onChange={() => toggleYear(v)} />
+                {v}
+              </label>
+            ))}
+            {f.years.length > 0 && <button type="button" className="ml-1 text-slate-400 underline" onClick={() => setF({ ...f, years: [] })}>전체</button>}
+          </div>
           <select className={sel} value={f.season} onChange={(e) => setF({ ...f, season: e.target.value })}>
             <option value="">시즌 전체</option>
             {opts.season.map((v) => <option key={v}>{v}</option>)}
@@ -204,7 +225,7 @@ export default function CategoryMixPanel() {
                     {allOpen ? "− 접기" : f.bySex ? "+ 성별 펼치기" : "+ 품목 펼치기"}
                   </button>
                 </th>
-                <th colSpan={5} className="border-l border-slate-200 px-1 font-black">판매금액</th>
+                <th colSpan={7} className="border-l border-slate-200 px-1 font-black">판매금액</th>
                 <th colSpan={3} className="border-l border-slate-200 px-1 font-black">판매수량</th>
                 <th colSpan={6} className="border-l border-slate-200 px-1 font-black">재고</th>
                 <th colSpan={3} className="border-l border-slate-200 px-1 font-black">라이프사이클·원가</th>
@@ -217,6 +238,8 @@ export default function CategoryMixPanel() {
                 <th className={TH} />
                 <th className={TH}>2주전</th>
                 <th className={TH}>증감</th>
+                <th className={TH} title={ly ? `전년 같은 주 ${ly.lyStart}~${ly.lyEnd} (보관 ${ly.foundDates?.length || 0}/7일)` : "전년 판매 불러오는 중"}>전년</th>
+                <th className={TH}>전년비</th>
                 <th className={`${TH} border-l`}>주간</th>
                 <th className={TH}>비중</th>
                 <th className={TH} title="주간~4주전 합">4주합</th>
@@ -238,6 +261,8 @@ export default function CategoryMixPanel() {
                 <td />
                 <td className={TD}>{man(T.amt1)}</td>
                 <td className={TD}>{T.amt1 ? pct(T.amt0 / T.amt1 - 1) : ""}</td>
+                <td className={TD}>{ly ? man(T.ly) : "…"}</td>
+                <td className={TD}>{T.ly ? pct(T.amt0 / T.ly - 1) : ""}</td>
                 <td className={`${TD} border-l border-slate-200 font-black`}>{num(T.q[0])}</td>
                 <td className={TD}>100%</td>
                 <td className={TD}>{num(q4(T))}</td>
@@ -277,6 +302,8 @@ export default function CategoryMixPanel() {
                     <td className="px-1"><Bar v={sAmt} color="bg-blue-500" /></td>
                     <td className={TD}>{man(a.amt1)}</td>
                     <td className={`${TD} ${diff === null ? "" : diff >= 0 ? "text-blue-600" : "text-rose-600"}`}>{diff === null ? "" : `${diff >= 0 ? "+" : ""}${pct(diff, 0)}`}</td>
+                    <td className={`${TD} text-slate-500`}>{man(a.ly)}</td>
+                    <td className={`${TD} ${a.ly ? (a.amt0 >= a.ly ? "text-blue-600" : "text-rose-600") : ""}`}>{a.ly ? `${a.amt0 >= a.ly ? "+" : ""}${pct(a.amt0 / a.ly - 1, 0)}` : ly && a.amt0 ? "신규" : ""}</td>
                     <td className={`${TD} border-l border-slate-100`}>{num(a.q[0])}</td>
                     <td className={TD}>{T.q[0] ? pct(a.q[0] / T.q[0]) : ""}</td>
                     <td className={TD}>{num(q4(a))}</td>

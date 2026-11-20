@@ -20,7 +20,49 @@ type Status = {
 
 const won = (v: number) => `${Math.round(v / 1000).toLocaleString("ko-KR")}천원`;
 
-export default function SalesRefreshBanner({ refreshKey, onReimport, importing }: { refreshKey?: any; onReimport?: () => void; importing?: boolean }) {
+type VerifyItem = { at: string; date: string; channel: string; name: string; uploadAmount: any; uploadQty: any; erpAmount: any; erpQty: any; sourceAmount: any; status: string; note: string };
+
+// MARK 2026-11-20: 인샵(신라·용인·롯데·한컬렉션) 업로드 검증 결과(PC verify-inshop-upload.js 2:45·9:40) — 가장 최근 매출일
+function InshopVerifyNotice({ refreshKey }: { refreshKey?: any }) {
+  const [items, setItems] = useState<VerifyItem[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/inshop-verify", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (alive && j.ok) setItems(j.items || []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [refreshKey]);
+  if (!items || !items.length) return null;
+  const date = items[0].date;
+  const day = items.filter((x) => x.date === date);
+  const bad = day.filter((x) => x.status !== "일치");
+  const d = `${date.slice(4, 6)}/${date.slice(6, 8)}`;
+  const n = (v: any) => (v === "" || v == null ? "-" : Number(v).toLocaleString("ko-KR"));
+  const at = day.map((x) => String(x.at)).sort().pop() || "";
+  if (!bad.length) {
+    return <p className="mt-1 text-[11px] font-bold text-emerald-600">✓ 인샵 업로드 확인 {d} {day.map((x) => x.name).join("·")} — 원본·업로드·ERP 금액 일치 ({at.slice(5, 16)} 확인)</p>;
+  }
+  return (
+    <div className="mt-2 rounded-2xl border-2 border-rose-400 bg-rose-50 px-4 py-2.5 shadow-sm">
+      <p className="text-sm font-black text-rose-700">인샵 업로드 확인필요!!! ({d} {bad.map((x) => x.name).join("·")})</p>
+      {bad.map((x) => (
+        <p key={x.channel} className="mt-0.5 text-[11px] font-semibold text-rose-600">
+          {x.name}({x.channel}) {x.status} · 원본 {n(x.sourceAmount)} · 업로드 {n(x.uploadAmount)}원/{n(x.uploadQty)}장 · ERP {n(x.erpAmount)}원/{n(x.erpQty)}장{x.note ? ` · ${x.note}` : ""}
+        </p>
+      ))}
+      <p className="mt-0.5 text-[10px] font-semibold text-rose-500">{at.slice(5, 16)} 확인 · ERP에 다시 올린 뒤 9:40 검증에서 다시 확인돼요</p>
+    </div>
+  );
+}
+
+export default function SalesRefreshBanner(props: { refreshKey?: any; onReimport?: () => void; importing?: boolean }) {
+  return (
+    <>
+      <RefreshStatusBanner {...props} />
+      <InshopVerifyNotice refreshKey={props.refreshKey} />
+    </>
+  );
+}
+
+function RefreshStatusBanner({ refreshKey, onReimport, importing }: { refreshKey?: any; onReimport?: () => void; importing?: boolean }) {
   const [st, setSt] = useState<Status | null>(null);
 
   async function load() {

@@ -56,9 +56,12 @@ export type MeetingDoc = {
 };
 
 // ---------------------------------------------------------------- 자동 초안
-export async function buildMeetingAuto(meetingMonday: string) {
-  const rs = addDays(meetingMonday, -7); // 리뷰 주(지난주) 월~일
-  const re = addDays(meetingMonday, -1);
+// MARK 2026-11-20 소천님: 오른쪽 위 주차(예: 11월 3주차 11/16~11/22) = "지난주" 칸 매출 기간(팀 PPT도 그렇게 씀).
+// 그래서 weekMonday = 리뷰하는 주, "이번주" 칸 = 그다음 주(회의는 그다음 월요일).
+export async function buildMeetingAuto(weekMonday: string) {
+  const rs = weekMonday; // 리뷰 주 월~일 = 화면 오른쪽 위 기간
+  const re = addDays(weekMonday, 6);
+  const meetingMonday = addDays(weekMonday, 7);
   const inWeek = (d: string, s: string) => d >= s && d <= addDays(s, 6);
   const [rows, weather, offerSheet, promo] = await Promise.all([
     readSalesSummaryRowsForReports(),
@@ -248,5 +251,5 @@ export async function saveMeeting(doc: MeetingDoc) {
 }
 
 export function defaultMeetingWeek() {
-  return mondayOf(kstToday());
+  return addDays(mondayOf(kstToday()), -7); // 기본 = 다 끝난 지난주(월요일 회의 때 바로 그 주)
 }

@@ -39,18 +39,36 @@ function Inline({ s }: { s: string }) {
   );
 }
 
+// 칸에 넘치면 글자를 조금씩 줄여서 한 장에 맞춤(11.5px → 최소 8px)
+function Fit({ children, deps }: { children: React.ReactNode; deps: any[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fs, setFs] = useState(11.5);
+  useLayoutEffect(() => {
+    setFs(11.5);
+  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && el.scrollHeight > el.clientHeight + 1 && fs > 8) setFs((f) => Math.round((f - 0.5) * 10) / 10);
+  });
+  return (
+    <div ref={ref} className="h-full overflow-hidden" style={{ fontSize: fs }}>
+      {children}
+    </div>
+  );
+}
+
 function Rich({ text }: { text: string }) {
   return (
-    <div className="space-y-[3px] text-[11.5px] leading-[1.5] text-slate-800">
+    <div className="space-y-[0.25em] leading-[1.5] text-slate-800">
       {text.split("\n").map((raw, i) => {
-        if (!raw.trim()) return <div key={i} className="h-2" />;
+        if (!raw.trim()) return <div key={i} className="h-[0.6em]" />;
         const h = raw.match(/^(\d+)\.\s+(.*)$/);
         if (h) return <div key={i} className="pt-0.5 font-black text-slate-900"><Inline s={`${h[1]}. ${h[2]}`} /></div>;
         const b = raw.match(/^\[(\d+)\]\s*(.*)$/);
         if (b)
           return (
             <div key={i} className="flex gap-1.5 pl-2">
-              <span className="mt-[2px] inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-[3px] bg-[#3b6fd8] text-[9px] font-black text-white">{b[1]}</span>
+              <span className="mt-[0.2em] inline-flex h-[1.2em] w-[1.2em] shrink-0 items-center justify-center rounded-[3px] bg-[#3b6fd8] text-[0.78em] font-black text-white">{b[1]}</span>
               <span><Inline s={b[2]} /></span>
             </div>
           );
@@ -264,8 +282,8 @@ export default function MeetingBoard() {
 
               <div className="mt-4 grid min-h-0 flex-1 grid-cols-3 gap-5">
                 {[
-                  ["Last Week", "지난주", <Rich key="l" text={doc.lastWeek} />],
-                  ["Week", "이번주", <Rich key="t" text={doc.thisWeek} />],
+                  ["Last Week", "지난주", <Fit key="l" deps={[doc.lastWeek, scale]}><Rich text={doc.lastWeek} /></Fit>],
+                  ["Week", "이번주", <Fit key="t" deps={[doc.thisWeek, scale]}><Rich text={doc.thisWeek} /></Fit>],
                   [
                     "Month",
                     "이번달",

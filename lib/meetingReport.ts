@@ -165,7 +165,7 @@ export async function buildMeetingAuto(meetingMonday: string) {
     L.push("- 카테고리별 판매분석 :");
     for (const g of pg) {
       const t = shortTitle(g.title);
-      L.push(`  · ${t} ${g.cur.qty.toLocaleString("ko-KR")}장, ${baek(g.cur.amount)} / 전주 ${g.prev.qty.toLocaleString("ko-KR")}장, ${baek(g.prev.amount)} (${signN(g.cur.qty - g.prev.qty, "장")}, ${signBaek(g.cur.amount - g.prev.amount)})`);
+      L.push(`  · ${t} ${g.cur.qty.toLocaleString("ko-KR")}장·${baek(g.cur.amount)} (전주 ${signN(g.cur.qty - g.prev.qty, "장")}, ${signBaek(g.cur.amount - g.prev.amount)})`);
     }
   }
   if (reviewOffers.length) {

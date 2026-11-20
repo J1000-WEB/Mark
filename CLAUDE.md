@@ -63,6 +63,11 @@
   → `fetchLotte`가 첫 화면 3분·아이디 칸 3분·조회 결과 3분까지 기다리고, 실패하면 브라우저 닫고 30초 뒤 처음부터 최대 3번 재시도.
   실패 시 `logs/lotte-fail-*.png/.txt`(화면 캡처), 채널 스케줄러 로그는 `logs/channel-scheduler.log`. 수동 1회 조회: `node test-lotte.js YYYYMMDD ...`(cache에 저장, run-now 허용).
   면세 비번 바꾸면 `.env`의 `LOTTE_DFS_PASSWORD` 수정 후 run-all 재시작(.env는 시작할 때만 읽음).
+- **신라면세(위탁, 채널 91003, 2026-11-20 입점)**: 신라 SRM(www.shillasrm.com) 직접 조회 `erp-agent/fetch-shilla.js`(Fiddler 캡처로 확인, 브라우저 없음).
+  로그인 = GET /login.do(_csrf·_passwordSalt) → POST /loginProcess.do(pro_cls=2·company=Y1D0·type=2, 비번 = base64(SHA512(salt + base64(SHA512(pw)))))
+  → /afterLoginOK.do(새 _csrf) → /mbpf.do(x-mbpf-token). 판매 = POST /ui/sp/external/sales/findListSaleResultDate.do(menucode SDEK00010, i_kukla 01 서울점, 일자별).
+  계정 `.env` SHILLA_SRM_USER / SHILLA_SRM_PASSWORD(소천님 입력). ⚠ 금액이 **USD**, 상품이 품번+칼라(ref_no)까지만(**사이즈 없음**), 수량 0 줄 있음 →
+  업로드 변환 규칙은 소천님 확인 대기. 지금은 원본만 cache/shilla-raw_YYYYMMDD.json에 저장(스케줄 미등록). run-now 허용 목록에 추가(run-all 재시작 후 적용).
 - ⚠️ **무신사는 2026-08-30부로 완전자동화 중단**. 자동화 접근을 비정상 접근으로 감지해서
   능동적으로 비밀번호+OTP를 초기화시킴(파트너 어드민 보안경고 메일까지 옴). **다시 시도하지
   말 것** — 계정 보안 문제로 번질 위험. 필요하면 대시보드의 수동 업로드 페이지 이용.

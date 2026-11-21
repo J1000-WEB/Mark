@@ -1,6 +1,5 @@
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
-import { readItemRowsWithStock } from "@/lib/salesSource";
+import { readItemRowsWithStock, readActualStoreAmountRows, lastAmountSourceDebug } from "@/lib/salesSource";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
 import { getWeatherForStoreOnDate, weatherActionTip } from "@/lib/storeRegion";
 import { loadStyleLaunchMap } from "@/lib/styleLaunchMaster";
@@ -113,7 +112,7 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
   // "매장탭 가동이 안된다" 제보의 원인). 실제로 필요한 건 (1) 날짜별 매출 총액(byDateAmount —
   // 최근 며칠~한 달 남짓이면 충분)과 (2) 딱 두 날짜(대상일/비교일)의 품목 상세(호조/부진
   // 상품)뿐이라, 각각 훨씬 가벼운 방식으로 나눠서 읽습니다.
-  const historyAmountRows = await readDailyHistoryRowsForDateRange(addDays(targetDate, -400), targetDate);
+  const historyAmountRows = await readActualStoreAmountRows(addDays(targetDate, -400), targetDate); // MARK 2026-11-21: 매출탭(ERP 실제 금액) 1순위
   const scopedAmountFromHistory = filterAmountRowsByStore(historyAmountRows, storeName);
 
   // MARK 6.40: 일간 탭과 매장 탭이 같은 병합 로직(lib/storeDailyAmount.ts)을 공유합니다.
@@ -292,7 +291,7 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   // readDailyHistoryBlock가 흩어진 블록을 순차로 읽던 것도 병목이었습니다(별도로 병렬화함).
   // 이제 (1) 총액만 필요한 곳은 A~E열 직접읽기(readDailyHistoryRowsForDateRange, JSON 펼치기
   // 없음)로, (2) 품목 상세가 진짜 필요한 곳만 좁힌 21일 창으로 나눠서 읽습니다.
-  const historyAmountRows = await readDailyHistoryRowsForDateRange(addDays(targetDate, -400), targetDate);
+  const historyAmountRows = await readActualStoreAmountRows(addDays(targetDate, -400), targetDate); // MARK 2026-11-21: 매출탭(ERP 실제 금액) 1순위
   const scopedHistoryAmountRows = filterAmountRowsByStore(historyAmountRows, storeName);
   const companyHistoryAmountRows = filterAmountRowsByStore(historyAmountRows, undefined);
 
@@ -930,7 +929,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   return {
     storeName,
     targetDate,
-    amountSource: "Daily_Sales_History(실제금액) 우선, 일간매출(26년) 보완",
+    amountSource: "매출탭(ERP 실제 금액) 우선, Daily_Sales_History·일간매출(26년) 보완",
+    amountSourceDebug: { ...lastAmountSourceDebug },
     week: {
       start: weekStart,
       end: weekEnd,

@@ -74,3 +74,53 @@ export async function readItemRowsWithStock(dates: string[], stockDate: string):
   return out;
 }
 const normKey = (s: any) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+
+/** 매장×날짜 매출 금액(실제 금액) — 1순위 매출탭 `매출_일별_스냅샷`(ERP 점포 매출, 화이트리스트 점포), 그 매장·날짜가 없을 때만 Daily_Sales_History.
+ *  (Daily_Sales_History는 2026-08 중순 전 금액이 수량×정가 추정치.) 매장 이름은 Daily_Sales_History 쪽 이름으로 맞춰서 돌려줌
+ *  (매장탭 필터·isCoreOfflineSalesStore가 그 이름 기준이라). 결과 debug: 소스별 줄 수·이름이 안 맞은 매출탭 매장. */
+export const lastAmountSourceDebug: { snapshotRows: number; historyRows: number; renamed: Record<string, string>; unmatched: string[] } = { snapshotRows: 0, historyRows: 0, renamed: {}, unmatched: [] };
+export async function readActualStoreAmountRows(from: string, to: string): Promise<{ date: string; storeName: string; amount: number }[]> {
+  const { readSalesSummaryRowsForReports, normalizeStoreKey } = await import("@/lib/dataBuilder");
+  const { readDailyHistoryRowsForDateRange } = await import("@/lib/dailySales");
+  const [snapAll, hist] = await Promise.all([
+    readSalesSummaryRowsForReports().catch(() => [] as any[]),
+    readDailyHistoryRowsForDateRange(from, to).catch(() => [] as any[]),
+  ]);
+  const histName = new Map<string, string>();
+  for (const r of hist as any[]) { const k = normalizeStoreKey(r.storeName); if (!histName.has(k)) histName.set(k, r.storeName); }
+  const histKeys = [...histName.keys()];
+  const nameMap = new Map<string, string>();
+  const renamed: Record<string, string> = {};
+  const unmatched = new Set<string>();
+  const resolve = (name: string) => {
+    if (nameMap.has(name)) return nameMap.get(name)!;
+    const k = normalizeStoreKey(name);
+    let out = histName.get(k);
+    if (!out) {
+      const cands = histKeys.filter((h) => h.length >= 2 && k.length >= 2 && (h.includes(k) || k.includes(h)));
+      if (cands.length === 1) { out = histName.get(cands[0])!; renamed[name] = out; }
+    }
+    if (!out) { out = name; unmatched.add(name); }
+    nameMap.set(name, out);
+    return out;
+  };
+  const out: { date: string; storeName: string; amount: number }[] = [];
+  const covered = new Set<string>();
+  let snapCount = 0;
+  for (const r of snapAll as any[]) {
+    if (r.date < from || r.date > to) continue;
+    const storeName = resolve(r.storeName);
+    const k = `${normalizeStoreKey(storeName)}__${r.date}`;
+    covered.add(k);
+    out.push({ date: r.date, storeName, amount: Number(r.amount) || 0 });
+    snapCount++;
+  }
+  let histCount = 0;
+  for (const r of hist as any[]) {
+    if (covered.has(`${normalizeStoreKey(r.storeName)}__${r.date}`)) continue;
+    out.push({ date: r.date, storeName: r.storeName, amount: Number(r.amount) || 0 });
+    histCount++;
+  }
+  Object.assign(lastAmountSourceDebug, { snapshotRows: snapCount, historyRows: histCount, renamed, unmatched: [...unmatched].filter((n) => (snapAll as any[]).some((r) => r.storeName === n && r.date >= to.slice(0, 4) + "-01-01" && r.amount)) });
+  return out;
+}

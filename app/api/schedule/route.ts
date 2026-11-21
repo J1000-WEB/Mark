@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSheetId, getSheetValuesById, getSpreadsheetTitlesById } from "@/lib/googleSheets";
 import { isCoreOfflineSalesStore } from "@/lib/dataBuilder";
-import { readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
+import { readActualStoreAmountRows, lastAmountSourceDebug } from "@/lib/salesSource";
 import { buildSpecialOfferEvents } from "@/lib/specialOfferWeek";
 import { loadStoreAmountRows } from "@/lib/dailyBriefing";
 import { mergeStoreDailyAmounts, flattenMergedAmounts } from "@/lib/storeDailyAmount";
@@ -125,7 +125,7 @@ export async function GET() {
     try {
       const today = todayKstKey();
       const sinceDate = addDaysKey(today, -400);
-      const primaryRows = await readDailyHistoryRowsForDateRange(sinceDate, today);
+      const primaryRows = await readActualStoreAmountRows(sinceDate, today); // MARK 2026-11-21: 매출탭(ERP 실제 금액) 1순위
       const fallbackRows = await loadStoreAmountRows().catch(() => []);
       const merged = mergeStoreDailyAmounts(primaryRows, fallbackRows);
       dailyFlatRows = flattenMergedAmounts(merged);
@@ -140,7 +140,7 @@ export async function GET() {
     const allEvents = [...events, ...specialOfferEvents];
 
     return NextResponse.json(
-      { ok: true, sheetName, events: allEvents, dailyRevenue, specialOfferDebug: specialOfferResult.debug },
+      { ok: true, sheetName, events: allEvents, dailyRevenue, specialOfferDebug: specialOfferResult.debug, amountSourceDebug: lastAmountSourceDebug },
       { headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   } catch (error: any) {

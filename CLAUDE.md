@@ -248,6 +248,10 @@
 - 읽는 쪽: `lib/pipArchive.ts` `readArchivedSales(dates)`(날짜 열 A 10분 캐시 → 그 줄만 읽어 gunzip, 팀명 포함). 프로모션 결과(`lib/promoReport.ts`)는
   2026-09-01 전 날짜를 여기서 읽음(ERP 오프라인팀만 — 무신사 위탁 매장 포함) → 에센셜 전년 칸·러닝합산 채워짐, 작년 주차도 조회 가능.
 
+- **판매 읽기 전환(2026-11-21, 진행 중)**: `lib/salesSource.ts` `readOfflineSalesRows(dates)` = PIP 보관 1순위(오프라인팀), 보관에 없는 날짜만 Daily_Sales_History.
+  ① IMC 현황(promoReport) 전환 완료 — 11/9주 전체 12,475→12,846장(+용인·무신사), 아르노 647→652장(팀 엑셀과 −5장 차이였던 게 일치).
+  다음: 주간데이터 → 구성비 → 재고도 쓰는 화면(재고 = 9/1 이후 재고_일별 파일).
+
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 
 - `C:\Users\User\Documents\PIP업데이트YYYYMMDD.xlsx`, 파워오토메이트가 매일 새벽 다운로드.

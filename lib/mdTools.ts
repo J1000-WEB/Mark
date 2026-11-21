@@ -5,7 +5,8 @@
 // 데이터: 매장 재고·누계 = PIP 매장별 재고 스냅샷, 판매 = Daily_Sales_History(어제까지), 물류 가용 = ERP ONOFF 자동 조회 스냅샷,
 //         스타일 정보(년도·시즌·품목·이름) = PIP 시트 앞 19열.
 import { getDailySourceSheetId, getSheetValuesById, getSpreadsheetTitlesById } from "./googleSheets";
-import { readStoreStockSnapshot, readWarehouseStockSnapshot, readDailyHistoryFlatRange, readOnlineTransferStockSnapshot } from "./dataBuilder";
+import { readStoreStockSnapshot, readWarehouseStockSnapshot, readOnlineTransferStockSnapshot } from "./dataBuilder";
+import { readOfflineSalesRange } from "./salesSource";
 import { pickDailySheetTitle } from "./dailySales";
 import { loadChannelMaster } from "./channelMaster";
 import { isPromoExcludedStore } from "./promoReport";
@@ -28,23 +29,8 @@ const r1 = (x: number) => Math.round(x * 10) / 10;
 /** Daily_Sales_History를 7일씩 나눠 읽고 판매가 있는 줄만 남김(하루치에 전 SKU 재고 줄이 있어 통째로 모으면 너무 큼 —
  *  라운딩 탭에서 문자열 한도, 여기선 배열 spread로 콜스택 초과를 겪음) */
 async function readFlatChunks(from: string, to: string) {
-  const out: any[] = [];
-  for (let s = from; s <= to; s = addDays(s, 7)) {
-    const e = addDays(s, 6) < to ? addDays(s, 6) : to;
-    // 구간 찾기·읽기가 가끔 순간 실패(구글 쿼터) → 3번까지 다시
-    let part: any[] = [];
-    for (let attempt = 1; ; attempt++) {
-      try {
-        part = await readDailyHistoryFlatRange(s, e, { strict: true });
-        break;
-      } catch (err) {
-        if (attempt >= 3) throw err;
-        await new Promise((r) => setTimeout(r, 3000 * attempt));
-      }
-    }
-    for (const r of part) if (Number(r.qty || 0) !== 0) out.push({ date: r.date, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty });
-  }
-  return out;
+  // MARK 2026-11-21: PIP 보관 1순위(ERP 실제 금액·용인/무신사 포함), 보관에 없는 날짜만 Daily_Sales_History
+  return (await readOfflineSalesRange(from, to)).filter((r) => Number(r.qty || 0) !== 0).map((r) => ({ date: r.date, storeName: r.storeName, channelCode: r.channelCode, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: r.qty }));
 }
 
 /** PIP 시트 스타일 정보 */

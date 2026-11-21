@@ -14,7 +14,8 @@
 // 저장하고, 매장을 열 때는 저장분에서 그 매장 행만 읽습니다(첫 조회 때 오늘 저장분이 없으면 자동 계산).
 
 import { getDbSheetId, getSheetValuesById, safeReplaceSheetValuesById, ensureSheetExistsById } from "./googleSheets";
-import { readStoreStockSnapshot, readWarehouseStockSnapshot, readDailyHistoryFlatRange } from "./dataBuilder";
+import { readStoreStockSnapshot, readWarehouseStockSnapshot } from "./dataBuilder";
+import { readOfflineSalesRange } from "./salesSource";
 import { RT_SKU_STORES, RT_SKU_RELAUNCH, normalizeStoreKey } from "./rtSkuEngine";
 import { loadStyleLaunchMap } from "./styleLaunchMaster";
 import { readStoreStockDailyTotals, recordStoreStockDailyTotals } from "./storeStockDailyTotals";
@@ -151,7 +152,7 @@ async function doCompute() {
   // 판매이력: 어제 기준 3주를 7일씩 나눠 읽음(Daily_Sales_History는 하루치에 전 SKU 재고까지 담겨 있어
   // 6주를 한 번에 읽으면 문자열 한도를 넘음 — 2026-10-28 실측). 가장 최근 7일을 먼저 읽어 기준일(anchor)을 정함.
   const yesterday = addDays(now.date, -1);
-  const chunk1: any[] = await readDailyHistoryFlatRange(addDays(yesterday, -6), yesterday, { strict: true });
+  const chunk1: any[] = await readOfflineSalesRange(addDays(yesterday, -6), yesterday); // MARK 2026-11-21: PIP 보관 1순위
   let anchor = "";
   for (const r of chunk1) if (r.date > anchor && r.date <= yesterday) anchor = r.date;
   if (!anchor) anchor = yesterday;
@@ -220,7 +221,7 @@ async function doCompute() {
   chunk1.length = 0;
   for (const [from, to] of [[addDays(yesterday, -13), addDays(yesterday, -7)], [addDays(yesterday, -20), addDays(yesterday, -14)], [addDays(yesterday, -21), addDays(yesterday, -21)]]) {
     if (to < newSince) continue;
-    const rows: any[] = await readDailyHistoryFlatRange(from, to, { strict: true }).catch((e) => {
+    const rows: any[] = await readOfflineSalesRange(from, to).catch((e) => {
       // 3주차 이전 구간이 비어 있으면(데이터 없음) 그냥 넘어감 — 최근 2주는 필수
       if (to >= w2s) throw e;
       return [];

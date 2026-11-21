@@ -4,7 +4,7 @@
 import { readArchivedSales } from "@/lib/pipArchive";
 import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 
-export type SaleRow = { date: string; storeName: string; channelCode?: string; styleCode: string; colorCode: string; size: string; qty: number; amount: number };
+export type SaleRow = { date: string; storeName: string; channelCode?: string; styleCode: string; colorCode: string; size: string; qty: number; amount: number; stock?: number; productName?: string; colorName?: string };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
@@ -23,9 +23,21 @@ export async function readOfflineSalesRows(dates: string[], opts: { maxGap?: num
     const seen = new Set<string>();
     for (const r of hist as any[]) {
       seen.add(r.date);
-      rows.push({ date: r.date, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: Number(r.qty) || 0, amount: Number(r.amount) || 0 });
+      rows.push({ date: r.date, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.colorCode, size: r.size, qty: Number(r.qty) || 0, amount: Number(r.amount) || 0, stock: r.stock, productName: r.productName, colorName: r.colorName });
     }
     historyDates.push(...[...seen].sort());
   }
   return { rows, archiveDates: [...found].sort(), historyDates };
+}
+
+/** from~to(포함) 날짜 범위 판매 줄(판매 수량·금액 있는 줄만). 한 주씩 읽음. */
+export async function readOfflineSalesRange(from: string, to: string): Promise<SaleRow[]> {
+  const dates: string[] = [];
+  for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) dates.push(d.toISOString().slice(0, 10));
+  const out: SaleRow[] = [];
+  for (let i = 0; i < dates.length; i += 14) {
+    const { rows } = await readOfflineSalesRows(dates.slice(i, i + 14));
+    for (const r of rows) if (r.qty || r.amount) out.push(r);
+  }
+  return out;
 }

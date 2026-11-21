@@ -37,7 +37,9 @@ export async function GET(req: Request) {
     if (!data) {
       data = await computeWeeklyProductReport(week);
       cache = "computed";
-      try {
+      // nosave=1: 계산만(비교·점검용, 캐시 안 덮음)
+      if (sp.get("nosave") === "1") cache = "computed(nosave)";
+      else try {
         const info = await writeWeeklyCache(week, data);
         cache = `computed+saved(${info.chunks}조각 ${info.kb}KB)`;
       } catch (e: any) {

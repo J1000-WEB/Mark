@@ -1,7 +1,7 @@
 // MARK 2026-11-18: 상품탭 "주간데이터" — 팀이 매주 월요일 만들던 "주간판매데이터" 엑셀의 `품번구분`·`컬러구분` 시트를 자동으로.
 //
 // 기준(소천님 결정 2026-11-18)
-//   - 판매: Daily_Sales_History 실판매(오프라인, **매장주문/매장반품 제외**, 온라인 제외 — IMC 현황과 같은 isPromoExcludedStore)
+//   - 판매: PIP 보관 1순위·없는 날짜만 Daily_Sales_History(2026-11-21~) 실판매(오프라인, **매장주문/매장반품 제외**, 온라인 제외 — IMC 현황과 같은 isPromoExcludedStore)
 //   - 주간 = 월~일. 수량은 주간·2주전·3주전·4주전, 금액은 주간·2주전·누계(누계는 lib 주석 cumNote 참고)·비중(주간 금액 / 오프라인 전체)
 //   - 랭킹 = 주간 판매금액 순위(전사 오프라인, 같은 값은 같은 순위), 2주전 랭킹, 등락(2주전 − 주간)
 //   - 상품·가격·라이프사이클·재고 = 대시보드 PIP 시트(최신 1일치, 재고 기준일 = PIP 기준일자)
@@ -14,7 +14,8 @@
 //   - 재런칭·라인업 표시 = MARK_DB "상품_기준표"(lib/productRefs.ts)
 // 계산이 1분 넘게 걸려서 결과를 MARK_DB "주간데이터_캐시"에 주차별로 저장(base64 gzip 조각) — 화면은 캐시를 읽고, "다시 계산"으로 갱신.
 import { gzipSync, gunzipSync } from "zlib";
-import { readDailyHistoryRowsForExactDates, pickDailySheetTitle } from "@/lib/dailySales";
+import { pickDailySheetTitle } from "@/lib/dailySales";
+import { readOfflineSalesRows, type SaleRow } from "@/lib/salesSource";
 import {
   getDailySourceSheetId,
   getSpreadsheetTitlesById,
@@ -89,6 +90,7 @@ export async function computeWeeklyProductReport(weekStart: string) {
   for (const r of snap) if (t(r.channelCode) && r.storeName && !codeName.has(t(r.channelCode))) codeName.set(t(r.channelCode), String(r.storeName));
   const storeKeys = WEEKLY_STORES.map((s) => normalizeStoreKey(codeName.get(s.code) || s.short));
   const storeIdxByKey = new Map(storeKeys.map((k, i) => [k, i]));
+  const storeIdxByCode = new Map(WEEKLY_STORES.map((st, i) => [st.code, i]));
 
   const master = await loadChannelMaster().catch(() => new Map());
   const exCache = new Map<string, boolean>();
@@ -107,14 +109,15 @@ export async function computeWeeklyProductReport(weekStart: string) {
   const seen = new Set<string>();
   for (let i = 0; i < dates.length; i += 7) {
     const chunk = dates.slice(i, i + 7);
-    let rows = await readDailyHistoryRowsForExactDates(chunk);
+    // MARK 2026-11-21: PIP 보관(ERP 실제 금액·용인/무신사 포함) 1순위, 보관에 없는 날짜만 Daily_Sales_History(lib/salesSource.ts)
+    let rows: SaleRow[] = (await readOfflineSalesRows(chunk)).rows;
     // 시트 읽기가 가끔 빈 결과를 줌 → 빠진 날짜만 최대 3번 더 읽음(11/19 실제로 주간 판매가 전부 0으로 저장된 적 있음)
     for (let attempt = 0; attempt < 3; attempt++) {
       const got = new Set(rows.map((r) => r.date));
       const miss = chunk.filter((d) => !got.has(d) && d < kstToday());
       if (!miss.length) break;
       await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
-      rows = rows.concat(await readDailyHistoryRowsForExactDates(miss));
+      rows = rows.concat((await readOfflineSalesRows(miss)).rows);
     }
     for (const r of rows) {
       const wi = weekIdx.get(r.date);
@@ -129,7 +132,7 @@ export async function computeWeeklyProductReport(weekStart: string) {
       const ck = `${style}|${color}`;
       const c = byColor.get(ck) || newAcc(); c.qty[wi] += q; c.amt[wi] += a; byColor.set(ck, c);
       if (wi === 0) {
-        const si = storeIdxByKey.get(normalizeStoreKey(r.storeName));
+        const si = (r.channelCode ? storeIdxByCode.get(r.channelCode) : undefined) ?? storeIdxByKey.get(normalizeStoreKey(r.storeName));
         if (si !== undefined) {
           const k1 = `${si}|${style}`; const v1 = storeStyleW0.get(k1) || { qty: 0, amt: 0 }; v1.qty += q; v1.amt += a; storeStyleW0.set(k1, v1);
           const k2 = `${si}|${ck}`; const v2 = storeColorW0.get(k2) || { qty: 0, amt: 0 }; v2.qty += q; v2.amt += a; storeColorW0.set(k2, v2);

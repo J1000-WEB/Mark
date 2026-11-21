@@ -88,7 +88,6 @@ export async function readActualStoreAmountRows(from: string, to: string): Promi
   ]);
   const histName = new Map<string, string>();
   for (const r of hist as any[]) { const k = normalizeStoreKey(r.storeName); if (!histName.has(k)) histName.set(k, r.storeName); }
-  const histKeys = [...histName.keys()];
   const nameMap = new Map<string, string>();
   const renamed: Record<string, string> = {};
   const unmatched = new Set<string>();
@@ -96,10 +95,7 @@ export async function readActualStoreAmountRows(from: string, to: string): Promi
     if (nameMap.has(name)) return nameMap.get(name)!;
     const k = normalizeStoreKey(name);
     let out = histName.get(k);
-    if (!out) {
-      const cands = histKeys.filter((h) => h.length >= 2 && k.length >= 2 && (h.includes(k) || k.includes(h)));
-      if (cands.length === 1) { out = histName.get(cands[0])!; renamed[name] = out; }
-    }
+    // 이름이 정확히(normalizeStoreKey) 안 맞으면 그대로 둠 — 부분 일치로 맞추면 '무신사(송도)'→'무신사'처럼 틀리게 묶였음
     if (!out) { out = name; unmatched.add(name); }
     nameMap.set(name, out);
     return out;

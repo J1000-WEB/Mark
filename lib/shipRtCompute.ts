@@ -5,7 +5,8 @@
 //   금일 지시현황                          → MARK_DB RT_지시이력의 오늘 지시분(ERP 이동 지시 현황, 7:05에 받음)
 //   설정(등급·매장·예외 등)                → MARK_DB "출고RT_설정"(화면에서 고침, 재고MD님과 같이 씀)
 import { ensureSheetExistsById, getDbSheetId, getSheetValuesById, safeReplaceSheetValuesById } from "./googleSheets";
-import { readStoreStockSnapshot, readWarehouseStockSnapshot, readDailyHistoryFlatRange } from "./dataBuilder";
+import { readStoreStockSnapshot, readWarehouseStockSnapshot } from "./dataBuilder";
+import { readOfflineSalesRows } from "./salesSource";
 import { buildRefMaps, readProductRefs } from "./productRefs";
 import { readRtOrders } from "./rtOrders";
 import { DEFAULT_SHIP_RT_CONFIG, runShipRtEngine, type ShipRtConfig, type StoreRequest } from "./shipRtEngine";
@@ -44,6 +45,12 @@ export async function saveShipRtConfig(config: ShipRtConfig, by = "") {
   return { savedAt };
 }
 
+function dateList(from: string, to: string) {
+  const out: string[] = [];
+  for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
+}
+
 export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: Partial<ShipRtConfig> } = {}) {
   const t0 = Date.now();
   const saved = await readShipRtConfig();
@@ -54,12 +61,14 @@ export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: 
   const [pip, wh, flat, refs, orders] = await Promise.all([
     readStoreStockSnapshot({ strict: true }),
     readWarehouseStockSnapshot(),
-    readDailyHistoryFlatRange(periodFrom, yesterday, { strict: true }),
+    // MARK 2026-11-21: Daily_Sales_History 구간 찾기가 가끔 실패("구간을 찾지 못했어요") → PIP 보관 1순위(없는 날짜만 DSH)
+    readOfflineSalesRows(dateList(periodFrom, yesterday)).then((x) => x.rows),
     readProductRefs().catch(() => [] as any[]),
     readRtOrders(today, today).catch(() => ({ rows: [] as any[], coverFrom: "", coverTo: "" })),
   ]);
 
   const storeByKey = new Map(cfg.stores.map((s) => [normStoreKey(s.name), s]));
+  const storeByCode = new Map(cfg.stores.map((s) => [String(s.code), s]));
   const unmatched = new Map<string, number>();
   const codeOf = (name: string) => {
     const s = storeByKey.get(normStoreKey(name));
@@ -83,7 +92,7 @@ export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: 
   }
   for (const r of flat as any[]) {
     if (!r.colorCode || !r.size || !r.styleCode) continue;
-    const s = storeByKey.get(normStoreKey(r.storeName));
+    const s = (r.channelCode && storeByCode.get(String(r.channelCode))) || storeByKey.get(normStoreKey(r.storeName));
     if (!s) continue;
     const st = up(r.styleCode), c = up(r.colorCode), z = normSize(r.size);
     const k = keyOf(s.code, st, c, z);

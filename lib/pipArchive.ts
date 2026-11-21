@@ -93,3 +93,78 @@ export async function readArchivedSales(dates: string[], opts: { maxGap?: number
   }
   return { rows, foundDates: [...found].sort() };
 }
+
+// ── 재고(2026-11-21) ──
+// 9/1 이후 = MARK_STOCK_ARCHIVE_STOCK(2026) "재고_일별"(매일), 그 전 = 이 보관 시트 "재고_주별"(일요일) — 그 날짜 직전 일요일 값으로 대신(소천님 결정).
+// 한 줄 JSON = {v,d,sh:[[채널코드,채널명,팀명]](맨 끝 "9001 물류창고"),sk:["스타일|칼라|사이즈"],s:[[채널i,품목i,재고]]}
+export const STOCK_ARCHIVE_SHEET_ID = process.env.GOOGLE_SHEET_ID_STOCK_ARCHIVE || "1aURwa577GjSwDG1J-70BsmyeQS95KEtIU633Ha2rDOg";
+const DAILY_STOCK_FROM = "2026-09-01";
+export type ArchivedStockRow = { date: string; channelCode: string; storeName: string; team: string; styleCode: string; colorCode: string; size: string; stock: number };
+
+const stockIdxCache = new Map<string, { at: number; map: Map<string, number> }>();
+async function readTabDateIndex(sheetId: string, tab: string) {
+  const key = `${sheetId}|${tab}`;
+  const c = stockIdxCache.get(key);
+  if (c && Date.now() - c.at < 10 * 60 * 1000) return c.map;
+  const col = await getSheetValuesById(sheetId, tab, "A:A").catch(() => [] as any[][]);
+  const map = new Map<string, number>();
+  col.forEach((r, i) => {
+    const d = String(r?.[0] ?? "").slice(0, 10);
+    if (i > 0 && /^\d{4}-\d{2}-\d{2}$/.test(d)) map.set(d, i + 1);
+  });
+  stockIdxCache.set(key, { at: Date.now(), map });
+  return map;
+}
+
+function prevSunday(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return d.toISOString().slice(0, 10);
+}
+
+/** 날짜별 재고. 9/1 이후는 그날, 그 전은 직전 일요일(없으면 빈 값). 결과 키는 요청한 날짜, usedDate에 실제로 쓴 날짜. */
+export async function readArchivedStock(dates: string[]): Promise<Map<string, { usedDate: string; rows: ArchivedStockRow[] }>> {
+  const want = new Map<string, { sheet: string; tab: string; src: string }>(); // 요청 날짜 → 원본 위치
+  for (const d of dates) {
+    if (d >= DAILY_STOCK_FROM) want.set(d, { sheet: STOCK_ARCHIVE_SHEET_ID, tab: "재고_일별", src: d });
+    else want.set(d, { sheet: PIP_ARCHIVE_SHEET_ID, tab: "재고_주별", src: prevSunday(d) });
+  }
+  const bySrc = new Map<string, ArchivedStockRow[]>();
+  const groups = new Map<string, Set<string>>(); // sheet|tab → src dates
+  for (const w of want.values()) (groups.get(`${w.sheet}|${w.tab}`) || groups.set(`${w.sheet}|${w.tab}`, new Set()).get(`${w.sheet}|${w.tab}`)!).add(w.src);
+  for (const [gk, srcs] of groups) {
+    const [sheet, tab] = gk.split("|");
+    const idx = await readTabDateIndex(sheet, tab);
+    for (const src of srcs) {
+      const rowNo = idx.get(src);
+      if (!rowNo) continue;
+      let vals: any[][] = [];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          vals = await getSheetValuesById(sheet, tab, `A${rowNo}:BH${rowNo}`);
+          break;
+        } catch (e: any) {
+          if (attempt >= 3 || !/quota|429|rate/i.test(String(e?.message || e))) throw e;
+          await new Promise((res) => setTimeout(res, 15000 * (attempt + 1)));
+        }
+      }
+      const row = vals[0] || [];
+      const n = Number(row[7]) || 0;
+      if (!n) continue;
+      const rec = JSON.parse(gunzipSync(Buffer.from(row.slice(8, 8 + n).map((c: any) => String(c ?? "")).join(""), "base64")).toString("utf8"));
+      const out: ArchivedStockRow[] = [];
+      for (const [si, ki, q] of rec.s as number[][]) {
+        const sh = rec.sh[si] || [];
+        const [style, color, size] = String(rec.sk[ki] || "").split("|");
+        out.push({ date: src, channelCode: String(sh[0] ?? ""), storeName: String(sh[1] ?? ""), team: String(sh[2] ?? ""), styleCode: style || "", colorCode: color || "", size: size || "", stock: Number(q) || 0 });
+      }
+      bySrc.set(src, out);
+    }
+  }
+  const res = new Map<string, { usedDate: string; rows: ArchivedStockRow[] }>();
+  for (const [d, w] of want) {
+    const rows = bySrc.get(w.src);
+    if (rows) res.set(d, { usedDate: w.src, rows });
+  }
+  return res;
+}

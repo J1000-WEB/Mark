@@ -258,7 +258,11 @@
   ④ RT 성과(rtRecovery) 판매+재고 전환 — 10월: 판매 동일(7,655장), **S0(받은 매장 전날 재고)가 DSH 2,843 → 보관 4,545장**(DSH는 그날 팔린 SKU만 재고가 있어
      안 팔린 날 재고를 0으로 봤음) → 예상 기회로스 1.10억→9,609만, RT 생성 7,812만→6,279만, 회수율 71%→65%. 소천님께 보고(기준 데이터가 더 정확해진 것).
   ⑤ 저소진·온라인 이관(mdTools readFlatChunks)·라운딩 재고점검 판매 전환(`readOfflineSalesRange`). 라운딩의 DSH 재고 대체값(dhStockByStoreDate)은 이제 비어 있음(일별합계 로그 사용).
-  남은 것: 매장탭(dailyBriefing·dataBuilder), 실시간재고조회(store-stock-lookup), VMD 교차검증, daily-history-period-sales, schedule, 예전 RT 화면.
+  ⑥ 2026-11-21 마무리: 매장탭 품목(dailyBriefing — `salesSource.readItemRowsWithStock`(판매 보관 1순위 + 기준일에 PIP 매장 재고 스냅샷 전 SKU를 붙임)),
+     실시간재고조회(store-stock-lookup — PIP 매장 재고 스냅샷 1순위, 안 팔린 SKU도 나옴, DSH는 대체), VMD 교차검증 재고(스냅샷 1순위), daily-history-period-sales,
+     공용 `dataBuilder.readDailyHistoryFlatRange`(보관 1순위, 실패 시 `readDailyHistoryFlatRangeLegacy`) → 전사지시/VMD·예전 RT 경로까지.
+     예전 RT 화면(RtControlSection)은 재고CTRL에서 뺌(소천님: 이제 안 씀, 코드는 남음).
+  남은 DSH: dailyBriefing 400일 매장 금액 합계(readDailyHistoryRowsForDateRange, 일간매출과 합침), `app/api/schedule` 금액, 안 쓰는 sales-data-upload.
 
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 

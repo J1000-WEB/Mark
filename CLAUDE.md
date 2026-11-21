@@ -239,6 +239,7 @@
 - 실행: 매일 22:00 `--backfill --until 01:50`(schedule-style-channel-upload.js), 빈 날짜만 **오래된 날짜(2025-11-01)→최근** 순(소천님 요청, `--newest-first`로 반대). 잠금 `logs/pip-archive.lock`(pid, 그 pid가 죽었거나 8시간 지나면 무시,
   `--takeover`면 돌던 작업이 지금 날짜 저장할 때까지 기다렸다가 끄고 이어받음), 로그 `logs/pip-archive.log`. ⚠ PC 스크립트(.js)를 고치면 run-all 재시작으로 돌던 보관 작업이 끊길 수 있음(그날짜만 다음에 다시 받음).
   **주말(토·일) 낮에도**(2026-11-20 소천님): 7:00~9:20, 9:50~21:50(`WEEKEND_ARCHIVE`, 9:30 PIP 다시 받기·9:36 어제 보관이 잠금에 안 막히게 사이를 비움).
+  **2026-11-22 소천님: 과거 받기는 2025-01-01까지만**(24년은 필요 없음) — 밤 22:00·주말 낮 모두 `--from 20250101 --newest-first`(최근→과거, 빈 날짜만). 재고_일별은 9/1~어제 다 찼음.
   run-now로 돌릴 땐 인자에 ':'가 안 돼서 `--until 0150`. 1회: `--date YYYYMMDD`. 첫 실행 2026-11-17 18:58 시작.
 - **2026-11-19 확장(소천님 결정)**: 과거 받기 끝을 8/31 → **어제까지**(DEFAULT_TO), 다 차면 판매는 보관 시트 하나에서 읽도록 옮길 예정.
   **매일 재고**는 별도 파일 `MARK_STOCK_ARCHIVE_STOCK(2026)`(`1aURwa577GjSwDG1J-70BsmyeQS95KEtIU633Ha2rDOg`, env `GOOGLE_SHEET_ID_STOCK_ARCHIVE`) "재고_일별" 탭,

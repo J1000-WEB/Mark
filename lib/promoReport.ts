@@ -1,15 +1,14 @@
 // MARK 2026-11-17: 주간 IMC 프로모션 결과 리포트 — 팀이 매주 월요일 엑셀로 만들던 "N월 N주차 판매실적"의 "프로모션총요약"을
 // 대시보드 데이터(Daily_Sales_History)로 계산. 품번 목록은 MARK_DB "프로모션_품번"(lib/promoGroups.ts).
 // 범위: 오프라인 채널(위탁·면세 포함) — 온라인·글로벌·기타·매장주문·매장반품은 뺌(팀 파일 판매DB와 같은 범위).
-import { readDailyHistoryRowsForExactDates, isOnlineChannel } from "@/lib/dailySales";
+import { isOnlineChannel } from "@/lib/dailySales";
 import { loadChannelMaster } from "@/lib/channelMaster";
 import { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById } from "@/lib/googleSheets";
 import { pickDailySheetTitle } from "@/lib/dailySales";
 import { readPromoItems, type PromoItem } from "@/lib/promoGroups";
-import { readArchivedSales } from "@/lib/pipArchive";
+import { readOfflineSalesRows } from "@/lib/salesSource";
 
-// 2026-09-01 전 날짜는 PIP 과거 보관 시트(MARK_PIP_ARCHIVE)에서 읽음 — Daily_Sales_History는 2026-06-09부터 있지만 8월까지 금액이 추정치.
-const ARCHIVE_BEFORE = "2026-09-01";
+// 판매 = PIP 과거 보관 시트(MARK_PIP_ARCHIVE) 1순위(2026-11-21부터 전 기간), 보관에 없는 날짜만 Daily_Sales_History — lib/salesSource.ts
 
 const t = (v: any) => String(v ?? "").trim();
 const n = (v: any) => {
@@ -44,16 +43,8 @@ type WeekAgg = { byStyle: Map<string, Agg>; unitPrices: Map<string, Map<number, 
 
 async function aggregateWeek(start: string, styles: Set<string>, master: Map<string, any>): Promise<WeekAgg> {
   const dates = range7(start);
-  const histDates = dates.filter((d) => d >= ARCHIVE_BEFORE);
-  const archDates = dates.filter((d) => d < ARCHIVE_BEFORE);
-  const rows: { date: string; storeName: string; styleCode: string; qty: number; amount: number }[] = histDates.length
-    ? await readDailyHistoryRowsForExactDates(histDates)
-    : [];
-  if (archDates.length) {
-    const arch = await readArchivedSales(archDates).catch(() => ({ rows: [] as any[] }));
-    // 보관 시트엔 ERP 팀명이 있어서 오프라인팀만(무신사 위탁 매장도 오프라인팀), 매장주문/반품은 아래 isPromoExcludedStore가 뺌
-    for (const r of arch.rows) if (r.team === "오프라인팀") rows.push(r);
-  }
+  // MARK 2026-11-21: 전 기간 PIP 보관(ERP 실제 금액·용인/무신사 포함) 1순위, 보관에 아직 없는 날짜만 Daily_Sales_History
+  const { rows } = await readOfflineSalesRows(dates);
   const byStyle = new Map<string, Agg>();
   const unitPrices = new Map<string, Map<number, number>>(); // 스타일 → (개당 판매가 → 수량) — 현판가 추정용
   const total: Agg = { qty: 0, amount: 0 };

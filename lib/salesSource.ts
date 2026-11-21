@@ -41,3 +41,36 @@ export async function readOfflineSalesRange(from: string, to: string): Promise<S
   }
   return out;
 }
+
+/** 매장탭 등 "품목 상세 + 재고"가 같이 필요한 곳용: dates 판매(보관 1순위) + stockDate에 PIP 매장별 재고 스냅샷(전 SKU)을 붙인 줄.
+ *  Daily_Sales_History 줄과 같은 모양(date, storeName, styleCode, colorCode, size, qty, amount, stock, productName, colorName). */
+export async function readItemRowsWithStock(dates: string[], stockDate: string): Promise<any[]> {
+  const { readStoreStockSnapshot } = await import("@/lib/dataBuilder");
+  const [{ rows }, snap] = await Promise.all([readOfflineSalesRows(dates), readStoreStockSnapshot().catch(() => ({ rows: [] as any[], meta: null }))]);
+  const up = (v: any) => String(v ?? "").trim().toUpperCase();
+  const pName = new Map<string, string>(), cName = new Map<string, string>();
+  for (const r of snap.rows as any[]) {
+    if (r.productName && !pName.has(up(r.styleCode))) pName.set(up(r.styleCode), r.productName);
+    if (r.colorName && !cName.has(`${up(r.styleCode)}|${up(r.color)}`)) cName.set(`${up(r.styleCode)}|${up(r.color)}`, r.colorName);
+  }
+  const out: any[] = [];
+  const byKey = new Map<string, any>();
+  for (const r of rows) {
+    const o: any = { ...r, productName: r.productName || pName.get(up(r.styleCode)) || "", colorName: r.colorName || cName.get(`${up(r.styleCode)}|${up(r.colorCode)}`) || "" };
+    if (snap.rows.length && r.date === stockDate) o.stock = 0; // 그날 재고는 스냅샷으로
+    out.push(o);
+    if (r.date === stockDate) byKey.set(`${normKey(r.storeName)}|${up(r.styleCode)}|${up(r.colorCode)}|${up(r.size)}`, o);
+  }
+  for (const s of snap.rows as any[]) {
+    const k = `${normKey(s.storeName)}|${up(s.styleCode)}|${up(s.color)}|${up(s.size)}`;
+    const hit = byKey.get(k);
+    if (hit) hit.stock = (hit.stock || 0) + (Number(s.stock) || 0);
+    else {
+      const o = { date: stockDate, storeName: s.storeName, styleCode: s.styleCode, colorCode: s.color, size: s.size, qty: 0, amount: 0, stock: Number(s.stock) || 0, productName: s.productName || "", colorName: s.colorName || "" };
+      byKey.set(k, o);
+      out.push(o);
+    }
+  }
+  return out;
+}
+const normKey = (s: any) => String(s ?? "").replace(/\s+/g, "").toLowerCase();

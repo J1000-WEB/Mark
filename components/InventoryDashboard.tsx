@@ -3274,13 +3274,8 @@ export default function InventoryDashboard() {
         <SideSubTabs items={INV_TABS} active={invTab} onPick={pickInvTab} />
 
         {invTab === "rt" && (
-          <>
-            <ShipRtPanel />
-            <details className="rounded-3xl border border-slate-200 bg-white p-4">
-              <summary className="cursor-pointer text-sm font-black text-slate-600">예전 RT 화면(품번 방식 RT · SKU 방식 비교 · 점포요청 RT) 보기</summary>
-              <div className="mt-4"><RtControlSection /></div>
-            </details>
-          </>
+          // MARK 2026-11-21 소천님: 예전 RT 화면(RtControlSection)은 안 씀 → 표시 안 함(코드는 남김)
+          <ShipRtPanel />
         )}
 
         {invTab === "outlet" && <OutletPanel />}

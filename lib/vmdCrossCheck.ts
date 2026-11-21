@@ -22,7 +22,15 @@ function recentKstDateKeys(days: number): string[] {
 }
 
 export async function buildMarkStockMap(): Promise<Map<string, number>> {
-  const flatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(RECENT_DAYS_WINDOW));
+  // MARK 2026-11-21: PIP 매장별 재고 스냅샷(전 SKU) 1순위, 비면 Daily_Sales_History
+  let flatRows: any[] = [];
+  try {
+    const { readStoreStockSnapshot } = await import("./dataBuilder");
+    const snap = await readStoreStockSnapshot();
+    const asOf = String(snap.meta?.uploadedAt || "").slice(0, 10) || "9999-12-31";
+    flatRows = snap.rows.map((r) => ({ date: asOf, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.color, stock: r.stock }));
+  } catch {}
+  if (!flatRows.length) flatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(RECENT_DAYS_WINDOW));
 
   const latestDateByKey = new Map<string, string>();
   const stockByKey = new Map<string, number>();

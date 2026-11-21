@@ -1,5 +1,6 @@
 import { getHistorySheetId, getSheetValuesById } from "@/lib/googleSheets";
-import { readDailyHistoryRowsForExactDates, readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
+import { readDailyHistoryRowsForDateRange } from "@/lib/dailySales";
+import { readItemRowsWithStock } from "@/lib/salesSource";
 import { isCoreOfflineSalesStore, normalizeStoreKey, loadDailyStoreSalesFromMarkDb } from "@/lib/dataBuilder";
 import { getWeatherForStoreOnDate, weatherActionTip } from "@/lib/storeRegion";
 import { loadStyleLaunchMap } from "@/lib/styleLaunchMaster";
@@ -136,7 +137,7 @@ export async function buildDailyStoreBriefing(storeName?: string, dateOverride?:
     ? ((targetAmount - sameWeekdayLastWeekAmount) / sameWeekdayLastWeekAmount) * 100
     : targetAmount ? 100 : 0;
 
-  const itemRows = await readDailyHistoryRowsForExactDates([targetDate, compareDate]);
+  const itemRows: any[] = await readItemRowsWithStock([targetDate, compareDate], targetDate); // MARK 2026-11-21: PIP 보관 1순위
   const scopedItemRows = filterByStore(itemRows, storeName);
   const { best, worst } = topProductMovers(scopedItemRows, targetDate, compareDate);
 
@@ -298,7 +299,8 @@ export async function buildStoreCards(storeName: string, dateOverride?: string) 
   const historyWindowStart = addDays(targetDate, -22); // "최근 21일 이내 입고" 신상품 반응 계산이 가장 넓게 필요로 하는 범위 + 여유 1일
   const historyWindowDates: string[] = [];
   for (let d = historyWindowStart; d <= targetDate; d = addDays(d, 1)) historyWindowDates.push(d);
-  const allRows = await readDailyHistoryRowsForExactDates(historyWindowDates);
+  // MARK 2026-11-21: 판매 = PIP 보관 1순위, 재고 = PIP 매장별 재고 스냅샷(대상일 기준, 전 SKU)
+  const allRows = await readItemRowsWithStock(historyWindowDates, targetDate);
   const storeRows = filterByStore(allRows, storeName);
   const companyRows = filterByStore(allRows, undefined);
 

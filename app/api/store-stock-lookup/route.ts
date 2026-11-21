@@ -1,3 +1,4 @@
+import { readStoreStockSnapshot } from "@/lib/dataBuilder";
 import { NextResponse } from "next/server";
 import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
 import { normalizeStoreKey } from "@/lib/dataBuilder";
@@ -66,7 +67,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "매장과 품번(또는 바코드)을 입력해주세요." }, { status: 400 });
     }
 
-    const flatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(RECENT_DAYS_WINDOW));
+    // MARK 2026-11-21: 재고는 PIP 매장별 재고 스냅샷(새벽 3:00·9:30, 전 SKU·안 팔린 것도 포함)을 1순위로 — Daily_Sales_History는
+    // 그날 팔린 SKU만 재고가 남아 안 팔린 SKU가 빠졌음. 스냅샷이 비면 예전처럼 Daily_Sales_History.
+    let flatRows: any[] = [];
+    try {
+      const snap = await readStoreStockSnapshot();
+      const asOf = String(snap.meta?.uploadedAt || "").slice(0, 10) || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      flatRows = snap.rows.map((r) => ({ date: asOf, storeName: r.storeName, styleCode: r.styleCode, colorCode: r.color, colorName: r.colorName, size: r.size, stock: r.stock, stockUpdatedAt: snap.meta?.uploadedAt || "" }));
+    } catch {}
+    if (!flatRows.length) flatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(RECENT_DAYS_WINDOW));
 
     const storeKey = normalizeStoreKey(store);
     const storeRows = flatRows.filter((r) => normalizeStoreKey(r.storeName) === storeKey);

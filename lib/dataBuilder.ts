@@ -3161,7 +3161,25 @@ function addDaysKST(dateKey: string, days: number) {
 // MARK 2026-10-19: Daily_Sales_History의 [since, until] 구간만 읽어서 펼친 행을 돌려줍니다.
 // RT 전용 경로에서 "최근 7+7일(판매·재고)"과 "지난주+전전주(전사 TOP20)"를 각각 따로 읽던 걸
 // 합집합 구간 한 번 읽기로 합치는 데 씁니다.
+// MARK 2026-11-21: 판매 = PIP 보관 1순위(ERP 실제 금액·용인/무신사 포함, 없는 날짜만 Daily_Sales_History),
+// 재고 = PIP 매장별 재고 스냅샷(전 SKU)을 until(어제까지) 날짜 줄로 붙임. 예전 함수는 readDailyHistoryFlatRangeLegacy.
+// ("Daily_Sales_History에서 구간을 찾지 못했어요" 간헐 오류의 원인이던 행 범위 찾기를 안 거침)
 export async function readDailyHistoryFlatRange(since: string, until: string, opts: { strict?: boolean } = {}) {
+  const yest = addDaysKST(todayKST(), -1);
+  const last = until < yest ? until : yest;
+  const dates: string[] = [];
+  for (let d = since; d <= until; d = addDaysKST(d, 1)) dates.push(d);
+  try {
+    const { readItemRowsWithStock } = await import("./salesSource");
+    const rows = await readItemRowsWithStock(dates, last);
+    if (rows.length || !opts.strict) return rows;
+  } catch (e) {
+    console.error("readDailyHistoryFlatRange(보관) 실패 → Daily_Sales_History", e);
+  }
+  return readDailyHistoryFlatRangeLegacy(since, until, opts);
+}
+
+export async function readDailyHistoryFlatRangeLegacy(since: string, until: string, opts: { strict?: boolean } = {}) {
   const historyId = getHistorySheetId();
   const range = await findDailyHistoryRowRangeIn(historyId, "Daily_Sales_History", since, until);
   if (!range) {

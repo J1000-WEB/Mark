@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
+import { readOfflineSalesRows } from "@/lib/salesSource";
 import { getStylePriceMap } from "@/lib/stylePriceHistory";
 import { buildPeriodSalesFromDailyHistory } from "@/lib/salesDataUpload";
 
@@ -26,7 +26,8 @@ function recentKstDateKeys(days: number, fromKey: string): string[] {
 export async function GET() {
   try {
     const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
-    const dailyFlatRows = await readDailyHistoryRowsForExactDates(recentKstDateKeys(28, todayKey));
+    // MARK 2026-11-21: PIP 보관 1순위(없는 날짜만 Daily_Sales_History)
+    const dailyFlatRows = (await readOfflineSalesRows(recentKstDateKeys(28, todayKey))).rows;
 
     const mondayOf = (dateKey: string) => {
       const d = new Date(`${dateKey}T00:00:00`);

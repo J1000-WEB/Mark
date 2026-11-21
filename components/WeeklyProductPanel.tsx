@@ -105,6 +105,8 @@ export default function WeeklyProductPanel() {
         sold: sum((r) => r.sold),
         stock: sum((r) => r.stock),
         amt: [sum((r) => r.amt[0]), sum((r) => r.amt[1])],
+        cumAmt: sum((r) => r.cumAmt),
+        cumQty: sum((r) => r.cumQty),
         share: sum((r) => r.share),
         qty: [0, 1, 2, 3].map((i) => sum((r) => r.qty[i])),
         totalStock: sum((r) => r.totalStock),
@@ -162,6 +164,7 @@ export default function WeeklyProductPanel() {
       stock: s((r) => r.stock),
       amt0: s((r) => r.amt[0]),
       amt1: s((r) => r.amt[1]),
+      cumAmt: s((r) => r.cumAmt),
       qty: [0, 1, 2, 3].map((i) => s((r) => r.qty[i])),
       totalStock: s((r) => r.totalStock),
       wh: s((r) => r.wh),
@@ -324,7 +327,7 @@ export default function WeeklyProductPanel() {
                 {show.카테고리 && <th colSpan={7} className="border-l border-slate-200 px-1 font-black">카테고리</th>}
                 {show.가격 && <th colSpan={6} className="border-l border-slate-200 px-1 font-black">상품가격</th>}
                 {show.라이프사이클 && <th colSpan={6} className="border-l border-slate-200 px-1 font-black">제품라이프사이클</th>}
-                {show.금액판매 && <th colSpan={3} className="border-l border-slate-200 px-1 font-black">금액판매</th>}
+                {show.금액판매 && <th colSpan={4} className="border-l border-slate-200 px-1 font-black">금액판매</th>}
                 {show.수량판매 && <th colSpan={4} className="border-l border-slate-200 px-1 font-black">수량판매</th>}
                 {show.재고 && <th colSpan={4} className="border-l border-slate-200 px-1 font-black">재고</th>}
                 {shownStores.map((s) => (
@@ -346,7 +349,7 @@ export default function WeeklyProductPanel() {
                 {show.카테고리 && ["년도", "시즌", "품목", "복종", "아이템", "재런칭", "라인업"].map((h, i) => <th key={h} className={`${TH} text-left ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.가격 && ["원가", "TAG가", "판매가", "OFF가", "프로모션가", "할인율"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.라이프사이클 && ["기획", "입고%", "입고", "판매", "재고", "판매%"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
-                {show.금액판매 && ["주간", "2주전", "비중"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
+                {show.금액판매 && ["주간", "2주전", "누계", "비중"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`} title={h === "누계" ? `오프라인 실판매 금액 누계 ${data?.cum?.from ? `${data.cum.from}~${data.cum.to}` : ""} (PIP 보관, 매장주문 제외)` : ""}>{h}</th>)}
                 {show.수량판매 && ["주간", "2주전", "3주전", "4주전"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`}>{h}</th>)}
                 {show.재고 && ["총재고", "물류", "점포", "주수"].map((h, i) => <th key={h} className={`${TH} ${i === 0 ? "border-l" : ""}`} title={h === "주수" ? "물류재고 ÷ 주간 판매수량" : ""}>{h}</th>)}
                 {shownStores.map((s) => (
@@ -381,6 +384,7 @@ export default function WeeklyProductPanel() {
                   <>
                     <td className={`${TD} border-l border-slate-200 font-black`}>{num(totals.amt0)}</td>
                     <td className={`${TD} font-black`}>{num(totals.amt1)}</td>
+                    <td className={`${TD} font-black`}>{num(totals.cumAmt)}</td>
                     <td className={TD}>{pct(data.total?.amt?.[0] ? totals.amt0 / data.total.amt[0] : null, 1)}</td>
                   </>
                 )}
@@ -472,6 +476,7 @@ export default function WeeklyProductPanel() {
                       <>
                         <td className={`${TD} border-l border-slate-100 font-black`}>{num(r.amt[0])}</td>
                         <td className={TD}>{num(r.amt[1])}</td>
+                        <td className={TD} title={r.cumQty ? `누계 ${num(r.cumQty)}장` : ""}>{num(r.cumAmt)}</td>
                         <td className={TD}>{r.share ? pct(r.share, 1) : ""}</td>
                       </>
                     )}
@@ -514,7 +519,7 @@ export default function WeeklyProductPanel() {
       {data && (
         <p className="text-[11px] text-slate-400">
           저장 {data.generatedAt}(재고 {data.stockDate}) · 주간 {md(data.weeks?.[0]?.start)}~{md(data.weeks?.[0]?.end)}, 2주전 {md(data.weeks?.[1]?.start)}~ · 3주전 {md(data.weeks?.[2]?.start)}~ · 4주전 {md(data.weeks?.[3]?.start)}~ ·
-          OFF가=판매가×0.9, 프로모션가=판매가×0.8 · 금액 누계는 작년 PIP를 다 쌓은 뒤 붙일 예정
+          OFF가=판매가×0.9, 프로모션가=판매가×0.8 · 금액 누계 = {data.cum?.from ? `${data.cum.from}~${data.cum.to} 오프라인 실판매(PIP 보관, 매장주문 제외)` : "계산 실패"}
         </p>
       )}
     </div>

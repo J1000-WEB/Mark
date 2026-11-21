@@ -45,7 +45,22 @@ export async function GET(req: Request) {
       }
     }
     const { styles, colors, ...meta } = data;
-    return NextResponse.json({ ok: true, ...meta, mode, cache, rows: mode === "color" ? colors : styles }, { headers: { "Cache-Control": "no-store" } });
+    let rows = mode === "color" ? colors : styles;
+    // MARK 2026-11-21: 금액·수량 누계(PIP 보관 시트 전체, 그 주 일요일까지) — 캐시와 상관없이 응답할 때 붙임
+    let cum: any = null;
+    try {
+      const { readSalesCumulative } = await import("@/lib/salesCumulative");
+      const c = await readSalesCumulative(meta.weekEnd);
+      const map = mode === "color" ? c.color : c.style;
+      rows = rows.map((r: any) => {
+        const v = map[r.k];
+        return v ? { ...r, cumQty: v[0], cumAmt: Math.round(v[1]) } : { ...r, cumQty: 0, cumAmt: 0 };
+      });
+      cum = { from: c.from, to: c.to, days: c.days, computedMonths: c.computedMonths };
+    } catch (e: any) {
+      cum = { error: e?.message || String(e) };
+    }
+    return NextResponse.json({ ok: true, ...meta, mode, cache, cum, rows }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     console.error("weekly-product failed", e);
     return NextResponse.json({ ok: false, error: e?.message || "주간데이터 계산 실패" }, { status: 500 });

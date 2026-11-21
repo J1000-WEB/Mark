@@ -53,7 +53,8 @@ function decodeRow(row: any[]): ArchivedSaleRow[] {
 }
 
 /** 지정한 날짜들의 판매 줄(채널×품목). 보관 안 된 날짜는 빠짐. */
-export async function readArchivedSales(dates: string[]): Promise<{ rows: ArchivedSaleRow[]; foundDates: string[] }> {
+// maxGap: 줄 번호가 이만큼 떨어져 있어도 한 번에 읽음(읽기 횟수 줄이기 — 구글 1분당 읽기 한도). 누계처럼 많이 읽을 땐 크게.
+export async function readArchivedSales(dates: string[], opts: { maxGap?: number } = {}): Promise<{ rows: ArchivedSaleRow[]; foundDates: string[] }> {
   const idx = await readDateIndex();
   const rowsNo = dates.map((d) => idx.get(d)).filter((x): x is number => !!x).sort((a, b) => a - b);
   if (!rowsNo.length) return { rows: [], foundDates: [] };
@@ -61,14 +62,24 @@ export async function readArchivedSales(dates: string[]): Promise<{ rows: Archiv
   const groups: [number, number][] = [];
   for (const r of rowsNo) {
     const last = groups[groups.length - 1];
-    if (last && r <= last[1] + 3) last[1] = r;
+    if (last && r <= last[1] + (opts.maxGap ?? 3)) last[1] = r;
     else groups.push([r, r]);
   }
   const want = new Set(dates);
   const rows: ArchivedSaleRow[] = [];
   const found = new Set<string>();
   for (const [a, b] of groups) {
-    const vals = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, SALES_TAB, `A${a}:BH${b}`);
+    let vals: any[][] = [];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        vals = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, SALES_TAB, `A${a}:BH${b}`);
+        break;
+      } catch (e: any) {
+        // 1분당 읽기 한도(429) — 잠깐 기다렸다 다시(밤 보관 작업과 같은 계정을 써서 겹칠 수 있음)
+        if (attempt >= 3 || !/quota|429|rate/i.test(String(e?.message || e))) throw e;
+        await new Promise((res) => setTimeout(res, 15000 * (attempt + 1)));
+      }
+    }
     for (const v of vals) {
       const d = String(v?.[0] ?? "").slice(0, 10);
       if (!want.has(d)) continue;

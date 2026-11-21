@@ -25,8 +25,9 @@ function addInto(dst: Record<string, QA>, k: string, q: number, a: number) {
 
 async function aggregateDates(dates: string[]): Promise<MonthAgg> {
   const out: MonthAgg = { s: {}, c: {} };
-  for (let i = 0; i < dates.length; i += 8) {
-    const { rows } = await readArchivedSales(dates.slice(i, i + 8));
+  // 한 달치를 한 번에 읽음(줄이 떨어져 있어도 maxGap 안이면 한 번) — 1분당 읽기 한도
+  {
+    const { rows } = await readArchivedSales(dates, { maxGap: 400 });
     for (const r of rows) {
       if (r.team !== "오프라인팀" || isPromoExcludedStore(r.storeName)) continue;
       const q = Number(r.qty) || 0, a = Number(r.amount) || 0;

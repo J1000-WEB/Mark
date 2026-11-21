@@ -135,30 +135,39 @@ export async function readArchivedStock(dates: string[]): Promise<Map<string, { 
   for (const [gk, srcs] of groups) {
     const [sheet, tab] = gk.split("|");
     const idx = await readTabDateIndex(sheet, tab);
-    for (const src of srcs) {
-      const rowNo = idx.get(src);
-      if (!rowNo) continue;
+    const rowNos = [...srcs].map((d) => idx.get(d)).filter((x): x is number => !!x).sort((a, b) => a - b);
+    // 붙어 있는 줄은 최대 8줄씩 한 번에 읽음(1분당 읽기 한도 — 하루 재고 ≈ 480KB라 너무 크게 묶지는 않음)
+    const ranges: [number, number][] = [];
+    for (const r of rowNos) {
+      const last = ranges[ranges.length - 1];
+      if (last && r <= last[1] + 2 && r - last[0] < 8) last[1] = r;
+      else ranges.push([r, r]);
+    }
+    for (const [a, b] of ranges) {
       let vals: any[][] = [];
       for (let attempt = 0; ; attempt++) {
         try {
-          vals = await getSheetValuesById(sheet, tab, `A${rowNo}:BH${rowNo}`);
+          vals = await getSheetValuesById(sheet, tab, `A${a}:BH${b}`);
           break;
         } catch (e: any) {
           if (attempt >= 3 || !/quota|429|rate/i.test(String(e?.message || e))) throw e;
           await new Promise((res) => setTimeout(res, 15000 * (attempt + 1)));
         }
       }
-      const row = vals[0] || [];
-      const n = Number(row[7]) || 0;
-      if (!n) continue;
-      const rec = JSON.parse(gunzipSync(Buffer.from(row.slice(8, 8 + n).map((c: any) => String(c ?? "")).join(""), "base64")).toString("utf8"));
-      const out: ArchivedStockRow[] = [];
-      for (const [si, ki, q] of rec.s as number[][]) {
-        const sh = rec.sh[si] || [];
-        const [style, color, size] = String(rec.sk[ki] || "").split("|");
-        out.push({ date: src, channelCode: String(sh[0] ?? ""), storeName: String(sh[1] ?? ""), team: String(sh[2] ?? ""), styleCode: style || "", colorCode: color || "", size: size || "", stock: Number(q) || 0 });
+      for (const row of vals) {
+        const src = String(row?.[0] ?? "").slice(0, 10);
+        if (!srcs.has(src)) continue;
+        const n = Number(row[7]) || 0;
+        if (!n) continue;
+        const rec = JSON.parse(gunzipSync(Buffer.from(row.slice(8, 8 + n).map((c: any) => String(c ?? "")).join(""), "base64")).toString("utf8"));
+        const out: ArchivedStockRow[] = [];
+        for (const [si, ki, q] of rec.s as number[][]) {
+          const sh = rec.sh[si] || [];
+          const [style, color, size] = String(rec.sk[ki] || "").split("|");
+          out.push({ date: src, channelCode: String(sh[0] ?? ""), storeName: String(sh[1] ?? ""), team: String(sh[2] ?? ""), styleCode: style || "", colorCode: color || "", size: size || "", stock: Number(q) || 0 });
+        }
+        bySrc.set(src, out);
       }
-      bySrc.set(src, out);
     }
   }
   const res = new Map<string, { usedDate: string; rows: ArchivedStockRow[] }>();

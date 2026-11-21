@@ -36,7 +36,8 @@
 // 데이터: Daily_Sales_History(매장×SKU×일 판매수량·금액·재고, 2026-09부터 실제 금액), RT_Result(MARK 메인 시트),
 //         채널코드→매장명 = getStoreCodeNameMap(객_전주 시트 + 기본 매핑). 오프라인 범위 = 프로모션 결과와 같은 isPromoExcludedStore.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readDailyHistoryRowsForExactDates } from "@/lib/dailySales";
+import { readOfflineSalesRows } from "@/lib/salesSource";
+import { readArchivedStock } from "@/lib/pipArchive";
 import { getSheetId, getSpreadsheetTitlesById, readRecentTailRowsById } from "@/lib/googleSheets";
 import { getStoreCodeNameMap, normalizeStoreKey, readSalesSummarySnapshot } from "@/lib/dataBuilder";
 import { loadChannelMaster } from "@/lib/channelMaster";
@@ -182,20 +183,25 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
 
   // 시트 읽기가 일시적으로 실패하면(동시 요청 많을 때 등) 빈 결과가 와서 "판매 0"으로 잘못 계산될 수 있음 →
   // 그 날짜만 2번까지 다시 읽고, 그래도 없으면 missingDates로 알려줌(화면에 경고).
+  // MARK 2026-11-21: 판매 = PIP 보관 1순위(없는 날짜만 Daily_Sales_History, 그 줄은 재고도 같이), 재고 = 보관 재고
+  // (9/1 이후 매일, 그 전은 직전 일요일 값 — 소천님 결정). 보관/DSH 둘 다 못 읽은 날짜는 missingDates로 화면 경고.
   const readChunk = async (dates: string[]) => {
-    let rows = await readDailyHistoryRowsForExactDates(dates);
+    let src = await readOfflineSalesRows(dates);
+    let rows: any[] = src.rows;
     for (let attempt = 0; attempt < 2; attempt++) {
       const got = new Set(rows.map((r) => r.date));
       const miss = dates.filter((d) => !got.has(d));
       if (!miss.length) break;
       await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
-      rows = rows.concat(await readDailyHistoryRowsForExactDates(miss));
+      const more = await readOfflineSalesRows(miss);
+      rows = rows.concat(more.rows);
+      src = { ...src, archiveDates: [...src.archiveDates, ...more.archiveDates], historyDates: [...src.historyDates, ...more.historyDates] };
     }
-    return rows;
+    return { rows, archiveDates: new Set(src.archiveDates) };
   };
   for (let i = 0; i < allDates.length; i += 7) {
     const chunk = allDates.slice(i, i + 7);
-    const rows = await readChunk(chunk);
+    const { rows, archiveDates } = await readChunk(chunk);
     for (const r of rows) {
       if (!chunk.includes(r.date) || !isOff(r.storeName)) continue;
       datesWithData.add(r.date);
@@ -211,8 +217,24 @@ export async function buildRtRecovery(opts: { from?: string; to?: string } = {})
       if (neededStyle.has(style) && qty) bump(coStyleDay, style, r.date, (v) => (v || 0) + qty);
       if (neededStoreStyle.has(`${st}|${style}`) && qty) bump(storeStyleDay, `${st}|${style}`, r.date, (v) => (v || 0) + qty);
       const ssk = `${st}|${sk}`;
-      if (neededStoreSku.has(ssk))
-        bump(storeSkuDay, ssk, r.date, (v) => ({ qty: (v?.qty || 0) + qty, amount: (v?.amount || 0) + amt, stock: Number.isFinite(Number(r.stock)) ? (v?.stock || 0) + Number(r.stock) : v?.stock ?? null }));
+      if (neededStoreSku.has(ssk)) {
+        const fromHist = !archiveDates.has(r.date); // DSH 줄만 재고가 붙어 있음
+        bump(storeSkuDay, ssk, r.date, (v) => ({ qty: (v?.qty || 0) + qty, amount: (v?.amount || 0) + amt, stock: fromHist && Number.isFinite(Number(r.stock)) ? (v?.stock || 0) + Number(r.stock) : v?.stock ?? null }));
+      }
+    }
+    // 보관 재고(보관 판매를 쓴 날짜만)
+    const stockDates = chunk.filter((d) => archiveDates.has(d));
+    if (stockDates.length) {
+      const stock = await readArchivedStock(stockDates).catch(() => new Map());
+      for (const [d, v] of stock) {
+        for (const r of v.rows) {
+          if (r.team !== "오프라인팀" || !isOff(r.storeName)) continue;
+          const st = storeKeyOf(r.storeName);
+          const ssk = `${st}|${skuKey(t(r.styleCode).toUpperCase(), r.colorCode, r.size)}`;
+          if (!neededStoreSku.has(ssk)) continue;
+          bump(storeSkuDay, ssk, d, (c) => ({ qty: c?.qty || 0, amount: c?.amount || 0, stock: (c?.stock || 0) + r.stock }));
+        }
+      }
     }
   }
 

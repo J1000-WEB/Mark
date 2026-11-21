@@ -262,7 +262,10 @@
      실시간재고조회(store-stock-lookup — PIP 매장 재고 스냅샷 1순위, 안 팔린 SKU도 나옴, DSH는 대체), VMD 교차검증 재고(스냅샷 1순위), daily-history-period-sales,
      공용 `dataBuilder.readDailyHistoryFlatRange`(보관 1순위, 실패 시 `readDailyHistoryFlatRangeLegacy`) → 전사지시/VMD·예전 RT 경로까지.
      예전 RT 화면(RtControlSection)은 재고CTRL에서 뺌(소천님: 이제 안 씀, 코드는 남음).
-  남은 DSH: dailyBriefing 400일 매장 금액 합계(readDailyHistoryRowsForDateRange, 일간매출과 합침), `app/api/schedule` 금액, 안 쓰는 sales-data-upload.
+  ⑦ 2026-11-21 금액: 매장탭(dailyBriefing 400일 매장 금액 — 주간·월간 누계/예상, 추이, 이벤트)·`app/api/schedule` 일별 매출 = `salesSource.readActualStoreAmountRows`
+     (매출탭 `매출_일별_스냅샷` 화이트리스트 1순위, 그 매장·날짜 없을 때만 DSH, 그다음 일간매출). 매장 이름은 normalizeStoreKey가 **정확히** 같을 때만 DSH 이름으로 맞춤
+     (부분 일치는 '무신사(송도)'→'무신사' 오매칭이라 뺌). 응답 amountSourceDebug(unmatched = 무신사 2곳뿐, 위탁이라 매장 필터에선 빠짐).
+  남은 DSH: 안 쓰는 sales-data-upload 정도.
 
 ## PIP 파일 (스타일별 채널별 입고/판매/재고현황) 구조 — ⚠️ 중요, 계속 바뀜 주의
 

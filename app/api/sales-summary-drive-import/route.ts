@@ -59,7 +59,7 @@ async function runAndLog(slot: string) {
   if (slot === "09:30" && missing.length) {
     await sendEmailAlert(
       `[MARK] ${missing.join("·")} 업데이트 확인필요 (${check!.checkDate})`,
-      `<p>9:30 매출탭 자동갱신 후에도 <b>${missing.join("·")} ${check!.checkDate} 매출</b>이 없어요.</p><p>ERP에 반영됐는지 확인한 뒤 매출탭에서 "드라이브에서 다시 가져오기"를 눌러주세요.</p>`
+      `<p>9:20 매출탭 자동갱신 후에도 <b>${missing.join("·")} ${check!.checkDate} 매출</b>이 없어요.</p><p>ERP에 반영됐는지 확인한 뒤 매출탭에서 "드라이브에서 다시 가져오기"를 눌러주세요.</p>`
     ).catch(() => null);
   }
   return { ...result, check };
@@ -75,9 +75,9 @@ export async function GET(req: Request) {
         return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       }
     }
-    // 새벽 4:00 / 오전 9:30(KST) 두 번 — vercel.json crons
+    // 새벽 4:00 / 오전 9:20(KST, 2026-11-22 9:30→9:20) 두 번 — vercel.json crons
     const q = new URL(req.url).searchParams.get("slot");
-    const slot = q === "0400" ? "04:00" : q === "0930" ? "09:30" : slotOf(kstNowParts().hhmm);
+    const slot = q === "0400" ? "04:00" : q === "0920" || q === "0930" ? "09:30" : slotOf(kstNowParts().hhmm);
     const result = await runAndLog(slot);
     return NextResponse.json(result, { status: result.ok ? 200 : 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {

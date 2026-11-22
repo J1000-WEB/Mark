@@ -1,7 +1,7 @@
 "use client";
 
 // MARK 2026-10-28: 매출탭 상단 고정 배너 — 자동갱신(새벽 4:00 · 오전 9:30) 상태.
-//  9:30 전: [용인, 무신사 매출 업데이트 전 · 9:30 자동업데이트예정]
+//  9:30 전: [용인, 무신사 매출 업데이트 전 · 9:20 자동업데이트예정]
 //  9:30 후 어제 용인 매출 없음: 용인 업데이트 확인필요!!!
 //  용인 확인됨: 배너 없음(작은 완료 표시만)
 
@@ -91,7 +91,7 @@ function RefreshStatusBanner({ refreshKey, onReimport, importing }: { refreshKey
   if (st.phase === "pending") {
     return (
       <div className="sticky top-0 z-30 mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 shadow-sm">
-        <p className="text-sm font-black text-amber-800">[용인, 무신사 매출 업데이트 전 · 9:30 자동업데이트예정]</p>
+        <p className="text-sm font-black text-amber-800">[용인, 무신사 매출 업데이트 전 · 9:20 자동업데이트예정]</p>
         <p className="mt-0.5 text-[11px] font-semibold text-amber-700">
           {st.check.checkDate} 용인·무신사 매출은 아직 반영 전일 수 있어요 · {lastLine}
         </p>
@@ -106,7 +106,7 @@ function RefreshStatusBanner({ refreshKey, onReimport, importing }: { refreshKey
         <div>
           <p className="text-sm font-black text-rose-700">{miss.join("·")} 업데이트 확인필요!!!</p>
           <p className="mt-0.5 text-[11px] font-semibold text-rose-600">
-            {st.after930 ? `9:30 갱신(${st.after930.at.slice(11)}) 후에도` : "9:30 자동갱신 기록이 없고,"} {st.check.checkDate} {miss.join("·")} 매출이 없어요 · 용인 {won(st.check.yongin)} · 무신사 {won(st.check.musinsa)}
+            {st.after930 ? `9:20 갱신(${st.after930.at.slice(11)}) 후에도` : "9:20 자동갱신 기록이 없고,"} {st.check.checkDate} {miss.join("·")} 매출이 없어요 · 용인 {won(st.check.yongin)} · 무신사 {won(st.check.musinsa)}
             {lastFail && !st.after930 ? ` · 오류: ${lastFail.error.slice(0, 80)}` : ""}
           </p>
         </div>

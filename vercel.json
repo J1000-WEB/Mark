@@ -170,8 +170,8 @@
       "schedule": "0 19 * * *"
     },
     {
-      "path": "/api/sales-summary-drive-import?slot=0930",
-      "schedule": "30 0 * * *"
+      "path": "/api/sales-summary-drive-import?slot=0920",
+      "schedule": "20 0 * * *"
     }
   ]
 }

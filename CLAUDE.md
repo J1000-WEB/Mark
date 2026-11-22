@@ -526,7 +526,7 @@
 - 23개 매장·등급(S/A/B/C)은 `WEEKLY_STORES`에 고정(엑셀 순서). ERP Bust0120 shops에 grd_cd/grd_nm(등급)이 있어 나중에 자동화 가능.
 - 표시용 목록 MARK_DB `상품_기준표`(`lib/productRefs.ts`, GET/POST `/api/product-refs`): 재런칭(새 코드↔예전 코드) 36쌍, 라인업 107개(엑셀에서 옮김).
   ERP PIP의 main_sty_cd가 재런칭 예전 코드 연결이라 나중에 자동화 가능.
-- **매주 월요일 6:50 PC 스케줄러(`schedule-style-channel-upload.js` runWeeklyProduct)가 `/api/weekly-product?refresh=1`로 지난주를 계산·저장**
+- **매주 월요일 6:00·9:50(2026-11-22부터, 예전 6:50) PC 스케줄러(`schedule-style-channel-upload.js` runWeeklyProduct)가 `/api/weekly-product?refresh=1`로 지난주를 계산·저장**
   → 주마다 "월요일 아침 PIP 재고" 기준 스냅샷으로 고정(판매 숫자는 날짜별 기록이라 언제 계산해도 같지만, 재고·입고·누적판매는 계산 시점 PIP라서).
   화면 "다시 계산"은 확인창 후 지금 재고로 덮어씀.
 - 기본 정렬 = 주간 판매금액 높은 순(화면). **11/19 주간 판매가 전부 0인 결과가 캐시에 저장된 적 있음**(Daily_Sales_History 읽기가 순간 빈 결과) →
@@ -563,6 +563,10 @@
   스오크(세부일정 R열 "목표"(원) · 행사기간 매출 지난주 말까지 · 진척). 이번주 칸은 금주·차주 스오크 일정만 자동.
   11/16주 시험: 스오크 목표 200백·실적 92백·진척 46% = 팀 PPT(91백·46%), 프로모션 수량 ±1%.
 - 이번달 과업(P1/P2·분류·진척%·완료)은 직접 입력, 새 주를 열면 지난 회의에서 이어받음(달 바뀌면 완료 과업 뺌). 머리글·발표자·협조요청도 이어받음.
+- **자동 갱신(2026-11-22 소천님)**: PC `schedule-style-channel-upload.js` 월요일 **6:00·9:50**(`WEEKLY_PRODUCT_TIMES`, 9:50 = 9:30 PIP 다시 받기·어제 보관 뒤라 무신사 등 아침 위탁 매출 반영)에
+  ① 상품탭 주간데이터 `/api/weekly-product?refresh=1` 저장 ② 회의 POST `/api/meeting?autoSave=1`(지난주, `autoUpdateMeeting`). 회의는 지난주·이번주 칸이 비었거나
+  마지막 자동 초안(doc.autoLastWeek/autoThisWeek)과 같을 때만 새 초안으로 바꾸고, 손으로 고친 칸은 그대로(skipped). 화면 초안 채우기도 autoLast*를 같이 저장. 화면에 "숫자 자동 갱신 시각" 표시.
+  IMC 현황은 저장 없이 열 때마다 계산이라 따로 할 것 없음.
 - 저장 MARK_DB `회의_주간리더`(A 리뷰 주 월요일·B 저장시각·C JSON). **회의자료 다운**(2026-11-20): PNG 1920×1080(html-to-image, 1280×720 × 1.5),
   HTML 파일(페이지 CSS를 통째로 넣은 독립 파일, 열어서 '인쇄 · PDF 저장' — @page 1280×720), 텍스트 복사(메신저용, **·[n] 표시 풀어서). 글이 넘치면 칸마다 글자 크기 자동 축소(최소 8px).
 - **화면 주차(오른쪽 위 기간) = 지난주 칸 매출 기간**(2026-11-20 소천님, 팀 PPT와 같음) — 저장 키·`?week=`도 그 리뷰 주 월요일, 이번주 칸은 그다음 주, 기본은 다 끝난 지난주.

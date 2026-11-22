@@ -108,7 +108,7 @@ export default function MeetingBoard() {
       const j = await fetch(`/api/meeting?auto=1&week=${d.week}`, { cache: "no-store" }).then((r) => r.json());
       if (!j.ok) throw new Error(j.error);
       setFacts(j.facts);
-      setDoc({ ...d, lastWeek: j.lastWeek, thisWeek: j.thisWeek });
+      setDoc({ ...d, lastWeek: j.lastWeek, thisWeek: j.thisWeek, autoLastWeek: j.lastWeek, autoThisWeek: j.thisWeek } as any); // 자동 갱신이 '손 안 댄 칸'을 알아보게
       setDirty(true);
       setMsg(`지난주(${j.reviewStart.slice(5)}~${j.reviewEnd.slice(5)}) 초안을 채웠어요. 고친 뒤 저장해 주세요.`);
     } catch (e: any) {
@@ -359,7 +359,7 @@ html, body { margin: 0; background: #6b7280; }
             </div>
           )}
         </div>
-        <span className="text-[11px] font-semibold text-slate-500">{busy || msg}{!busy && doc?.savedAt ? ` · 마지막 저장 ${doc.savedAt}` : ""}</span>
+        <span className="text-[11px] font-semibold text-slate-500">{busy || msg}{!busy && doc?.savedAt ? ` · 마지막 저장 ${doc.savedAt}` : ""}{!busy && (doc as any)?.autoUpdatedAt ? ` · 숫자 자동 갱신 ${(doc as any).autoUpdatedAt}` : ""}</span>
       </div>
 
       {edit && doc && (

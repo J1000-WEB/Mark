@@ -257,3 +257,30 @@ export async function saveMeeting(doc: MeetingDoc) {
 export function defaultMeetingWeek() {
   return addDays(mondayOf(kstToday()), -7); // 기본 = 다 끝난 지난주(월요일 회의 때 바로 그 주)
 }
+
+// ---------------------------------------------------------------- 자동 갱신(PC 스케줄러, 월요일 6:00·9:50)
+// MARK 2026-11-22 소천님: 회의 전 숫자를 자동으로 채워 저장. 지난주·이번주 칸은 "마지막 자동 초안 그대로"(손으로 안 고침)이거나 비었을 때만 새 초안으로 바꿈.
+// 손으로 고친 칸은 그대로 두고 결과에 skipped로 알려줌. 저장본이 없으면 화면에서 새 주를 열 때처럼 지난 회의에서 머리글·과업을 이어받아 만듦.
+export async function autoUpdateMeeting(week: string) {
+  const { doc, prev } = await readMeeting(week);
+  const auto = await buildMeetingAuto(week);
+  let d: any;
+  if (doc) d = { ...doc };
+  else {
+    d = { week, team: "오프라인 브랜딩팀", teamBadge: "O.B", teamDesc: "코치 · 재고컨트롤 · VMD", presenter: "", lastWeek: "", thisWeek: "", monthItems: [], coop: "" };
+    if (prev) {
+      Object.assign(d, { team: prev.team, teamBadge: prev.teamBadge, teamDesc: prev.teamDesc, presenter: prev.presenter, coop: prev.coop || "" });
+      const mon = (w: string) => addDays(w, 3).slice(0, 7);
+      const sameMonth = mon(prev.week) === mon(week);
+      d.monthItems = (prev.monthItems || []).filter((m) => sameMonth || !m.done);
+      if ((prev as any).fontPt) d.fontPt = (prev as any).fontPt;
+    }
+  }
+  const untouched = (cur: string, lastAuto?: string) => !String(cur || "").trim() || (lastAuto != null && cur === lastAuto);
+  const updated: string[] = [], skipped: string[] = [];
+  if (untouched(d.lastWeek, d.autoLastWeek)) { d.lastWeek = auto.lastWeek; d.autoLastWeek = auto.lastWeek; updated.push("지난주"); } else skipped.push("지난주");
+  if (untouched(d.thisWeek, d.autoThisWeek)) { d.thisWeek = auto.thisWeek; d.autoThisWeek = auto.thisWeek; updated.push("이번주"); } else skipped.push("이번주");
+  d.autoUpdatedAt = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+  const { savedAt } = await saveMeeting(d);
+  return { week, created: !doc, updated, skipped, savedAt, facts: auto.facts };
+}

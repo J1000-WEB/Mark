@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildMeetingAuto, readMeeting, saveMeeting, defaultMeetingWeek, mondayOf, weekLabel } from "@/lib/meetingReport";
+import { buildMeetingAuto, readMeeting, saveMeeting, autoUpdateMeeting, defaultMeetingWeek, mondayOf, weekLabel } from "@/lib/meetingReport";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,6 +24,13 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const sp = new URL(req.url).searchParams;
+    if (sp.get("autoSave")) {
+      // MARK 2026-11-22: PC 스케줄러(월 6:00·9:50) — 지난주 회의 초안 자동 갱신·저장(손으로 고친 칸은 안 건드림)
+      const w = sp.get("week");
+      const week = w && /^\d{4}-\d{2}-\d{2}$/.test(w) ? mondayOf(w) : defaultMeetingWeek();
+      return NextResponse.json({ ok: true, ...(await autoUpdateMeeting(week)) });
+    }
     const body = await req.json();
     const r = await saveMeeting(body.doc);
     return NextResponse.json({ ok: true, ...r });

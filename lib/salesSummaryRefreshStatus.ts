@@ -3,6 +3,7 @@
 // 매출탭 상단 배너로 보여줍니다(안 들어왔으면 "용인 업데이트 확인필요!!!").
 //   로그 시트(MARK_DB) "매출탭_자동갱신_로그": [실행시각(KST), 구분, 성공, 오류, 확인일, 용인매출, 무신사매출, 반영행수]
 
+import { isKoreanHoliday } from "@/lib/koreanHolidays";
 import { getDbSheetId, ensureSheetExistsById, appendValuesById, getSheetValuesById } from "./googleSheets";
 import { readSalesSummarySnapshot } from "./dataBuilder";
 
@@ -28,13 +29,25 @@ export function slotOf(hhmm: string) {
   return "자동";
 }
 
-/** date(기본: 어제) 용인·무신사 매출 합계 */
+/** date(기본: 어제) 용인·무신사 매출 합계
+ *  MARK 2026-11-22 소천님: 무신사는 근무일(월~금, 공휴일 제외) 아침에만 ERP에 올라감 → 금·토·일(공휴일) 매출은 다음 근무일 아침에 한꺼번에.
+ *  그래서 오늘이 쉬는 날이면 무신사는 확인 안 함(musinsaSkipped), 근무일이면 직전 근무일~어제 모든 날짜에 무신사 매출이 있는지 확인(월요일 = 금·토·일). */
 export async function checkLateStores(date?: string) {
-  const checkDate = date || addDays(kstNowParts().date, -1);
+  const today = kstNowParts().date;
+  const checkDate = date || addDays(today, -1);
   const { rows } = await readSalesSummarySnapshot();
+  const isWork = (d: string) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return w !== 0 && w !== 6 && !isKoreanHoliday(d); };
+  const musinsaSkipped = !date && !isWork(today);
+  const musinsaDates: string[] = [];
+  if (!date && !musinsaSkipped) {
+    let d = addDays(today, -1);
+    for (let i = 0; i < 10; i++) { musinsaDates.unshift(d); if (isWork(d)) break; d = addDays(d, -1); }
+  } else musinsaDates.push(checkDate);
   let yongin = 0, musinsa = 0, yonginRow = false;
-  const musinsaUpdated = new Set<string>(); // 매출(수량 또는 금액)이 들어온 무신사 매장
+  const musinsaUpdated = new Set<string>(); // 매출(수량 또는 금액)이 들어온 무신사 매장(어제)
+  const musinsaByDate = new Map<string, number>(); // 날짜별 매출 들어온 무신사 매장 수
   for (const r of rows) {
+    if (r.storeName.includes("무신사") && musinsaDates.includes(r.date) && (n(r.amount) || n(r.qty))) musinsaByDate.set(r.date, (musinsaByDate.get(r.date) || 0) + 1);
     if (r.date !== checkDate) continue;
     if (r.storeName.includes("용인")) {
       yongin += n(r.amount);
@@ -46,7 +59,12 @@ export async function checkLateStores(date?: string) {
     }
   }
   // MARK 2026-11-02: 무신사는 매장이 작아 하루 0인 곳이 많음 → 무신사 매장 중 하나라도 들어와 있으면 "업데이트됨"으로 봄
-  return { checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0, musinsaOk: musinsaUpdated.size > 0, musinsaUpdatedStores: musinsaUpdated.size };
+  const musinsaMissingDates = musinsaSkipped ? [] : musinsaDates.filter((d) => !musinsaByDate.get(d));
+  return {
+    checkDate, yongin, musinsa, yonginRow, yonginOk: yongin !== 0,
+    musinsaOk: musinsaSkipped || musinsaMissingDates.length === 0,
+    musinsaUpdatedStores: musinsaUpdated.size, musinsaSkipped, musinsaDates, musinsaMissingDates,
+  };
 }
 
 export async function logRefreshRun(entry: { slot: string; ok: boolean; error?: string; checkDate?: string; yongin?: number; musinsa?: number; newRowCount?: number }) {

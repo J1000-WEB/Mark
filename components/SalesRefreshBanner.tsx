@@ -12,7 +12,7 @@ type Status = {
   now: string;
   phase: "pending" | "missing" | "ok";
   missing?: string[];
-  check: { checkDate: string; yongin: number; musinsa: number; yonginOk: boolean; musinsaOk?: boolean };
+  check: { checkDate: string; yongin: number; musinsa: number; yonginOk: boolean; musinsaOk?: boolean; musinsaSkipped?: boolean; musinsaMissingDates?: string[] };
   after930: { at: string; ok: boolean } | null;
   lastOk: { at: string; slot: string } | null;
   todayRuns: { at: string; slot: string; ok: boolean; error: string }[];
@@ -106,7 +106,7 @@ function RefreshStatusBanner({ refreshKey, onReimport, importing }: { refreshKey
         <div>
           <p className="text-sm font-black text-rose-700">{miss.join("·")} 업데이트 확인필요!!!</p>
           <p className="mt-0.5 text-[11px] font-semibold text-rose-600">
-            {st.after930 ? `9:20 갱신(${st.after930.at.slice(11)}) 후에도` : "9:20 자동갱신 기록이 없고,"} {st.check.checkDate} {miss.join("·")} 매출이 없어요 · 용인 {won(st.check.yongin)} · 무신사 {won(st.check.musinsa)}
+            {st.after930 ? `9:20 갱신(${st.after930.at.slice(11)}) 후에도` : "9:20 자동갱신 기록이 없고,"} {st.check.checkDate} {miss.join("·")} 매출이 없어요{st.check.musinsaMissingDates?.length ? ` (무신사 빈 날짜: ${st.check.musinsaMissingDates.map((d) => d.slice(5)).join(", ")})` : ""} · 용인 {won(st.check.yongin)} · 무신사 {won(st.check.musinsa)}
             {lastFail && !st.after930 ? ` · 오류: ${lastFail.error.slice(0, 80)}` : ""}
           </p>
         </div>
@@ -121,7 +121,7 @@ function RefreshStatusBanner({ refreshKey, onReimport, importing }: { refreshKey
 
   return (
     <p className="mt-3 text-[11px] font-bold text-emerald-600">
-      ✓ {st.check.checkDate} 용인 {won(st.check.yongin)} · 무신사 {won(st.check.musinsa)} 반영됨 · {lastLine}
+      ✓ {st.check.checkDate} 용인 {won(st.check.yongin)} · 무신사 {st.check.musinsaSkipped ? "(주말·공휴일 매출은 다음 근무일 아침에 반영)" : won(st.check.musinsa)} 반영됨 · {lastLine}
     </p>
   );
 }

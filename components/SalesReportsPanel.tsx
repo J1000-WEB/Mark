@@ -493,8 +493,8 @@ function AnnualStoresView() {
           <table className="w-full border-collapse text-xs" style={{ minWidth: 620 + months.length * 260 }}>
             <thead className="sticky top-0 z-20 bg-slate-900 text-white">
               <tr>
-                <th rowSpan={2} className="sticky left-0 z-30 bg-slate-900 px-2 py-2 font-black">NO</th>
-                <th rowSpan={2} className="sticky left-[34px] z-30 bg-slate-900 px-2 py-2 text-left font-black">점포명</th>
+                <th rowSpan={2} className="sticky left-0 z-30 w-[34px] min-w-[34px] bg-slate-900 px-2 py-2 font-black">NO</th>
+                <th rowSpan={2} className="sticky left-[34px] z-30 w-px whitespace-nowrap bg-slate-900 px-2 py-2 text-left font-black">점포명</th>
                 <th colSpan={4} className="border-l border-slate-700 px-2 py-1 font-black">년누계 (1~{elapsed}월)</th>
                 {months.map((i) => (
                   <th key={i} colSpan={3} className="border-l border-slate-700 px-2 py-1 font-black">{i + 1}월</th>
@@ -525,7 +525,7 @@ function AnnualStoresView() {
                     {allCollapsed ? "+" : "−"}
                   </button>
                 </td>
-                <td className="sticky left-[34px] z-10 bg-amber-50 px-2 py-1.5 font-black">합계 ({stores.filter((s) => sum(s.actual, months) > 0).length}개)</td>
+                <td className="sticky left-[34px] z-10 whitespace-nowrap bg-amber-50 px-2 py-1.5 font-black">합계 ({stores.filter((s) => sum(s.actual, months) > 0).length}개)</td>
                 {cells(totalRow, true)}
               </tr>
               {(() => {
@@ -551,9 +551,9 @@ function AnnualStoresView() {
                       list.map((s: any) => {
                         no += 1;
                         return (
-                          <tr key={s.storeName} className={`border-t border-slate-100 ${no % 2 ? "bg-white" : "bg-slate-50/60"}`}>
-                            <td className="sticky left-0 z-10 bg-inherit px-2 py-1.5 text-center text-slate-400">{no}</td>
-                            <td className="sticky left-[34px] z-10 whitespace-nowrap bg-inherit px-2 py-1.5 font-black text-slate-900">{shortName(s.storeName)}</td>
+                          <tr key={s.storeName} className={`border-t border-slate-100 ${no % 2 ? "bg-white" : "bg-slate-50"}`}>
+                            <td className={`sticky left-0 z-10 w-[34px] min-w-[34px] px-2 py-1.5 text-center text-slate-400 ${no % 2 ? "bg-white" : "bg-slate-50"}`}>{no}</td>
+                            <td className={`sticky left-[34px] z-10 whitespace-nowrap px-2 py-1.5 font-black text-slate-900 shadow-[1px_0_0_#e2e8f0] ${no % 2 ? "bg-white" : "bg-slate-50"}`}>{shortName(s.storeName)}</td>
                             {cells(s)}
                           </tr>
                         );

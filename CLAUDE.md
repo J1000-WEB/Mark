@@ -86,6 +86,7 @@
   매출탭 배너(`SalesRefreshBanner` 아래 `InshopVerifyNotice`)에 가장 최근 매출일 결과 — 안 맞으면 빨간 "인샵 업로드 확인필요!!!", 맞으면 초록 한 줄.
   한컬렉션·롯데는 원본 합계가 없어 ②③만. 수동: `node verify-inshop-upload.js YYYYMMDD [--no-post]`(run-now 허용).
 - ⚠️ device_commit_files는 같은 stagedPath(outputs 파일명)로 두 번째 커밋하면 **예전 내용을 쓰는 경우가 있음** → 고친 파일은 새 이름(예: sscu-v3.js)으로 복사해서 커밋.
+- ⚠️ **PC .js를 고치면 run-all이 바로 전부 재시작됨**(파일 감시) → 2026-11-23 9:37 build-inshop-upload.js 커밋으로 월요일 9:20 보관(11/20)·9:30 주간데이터 대기 작업이 끊김(run-now로 다시 돌림). **새벽 0~4시·아침 9:15~9:50엔 PC .js 커밋 금지**, 급하면 끝난 뒤에.
 - ⚠️ PC 파일 commit 후엔 반드시 다시 stage해서 cmp — 2026-11-20 schedule-style-channel-upload.js가 **예전 버전(6,990바이트)으로 덮어써진 채** 15분 있었음(바로 복구).
 - ⚠️ **무신사는 2026-08-30부로 완전자동화 중단**. 자동화 접근을 비정상 접근으로 감지해서
   능동적으로 비밀번호+OTP를 초기화시킴(파트너 어드민 보안경고 메일까지 옴). **다시 시도하지

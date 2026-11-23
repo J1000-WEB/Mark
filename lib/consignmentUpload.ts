@@ -6,6 +6,7 @@ import {
   DEFAULT_SIZE_CODES,
   needsBarcodeValidation,
   isKnownBarcode,
+  fixTruncatedColorName,
 } from "@/lib/barcodeFix";
 import barcodeMasterList from "@/data/barcodeMaster.json";
 
@@ -271,6 +272,15 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       autoFixed = true;
       orderFixedCount++;
     }
+    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(예: SBE3U08009ASH KHM → SBE3U08009MAK) — 실제 바코드 목록에서 하나로 딱 맞을 때만
+    if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+      const t = fixTruncatedColorName(barcode, BARCODE_MASTER_SET, colorCodeList, DEFAULT_SIZE_CODES);
+      if (t.changed) {
+        barcode = t.fixed;
+        autoFixed = true;
+        colorNameFixedCount++;
+      }
+    }
 
     // 3) 확인 필요 여부 판단: (a) 여전히 너무 길거나, (b) S/W 구품번인데 자동수정 후에도
     //    실제 바코드 1만8천여 개 목록에 없는 경우. G로 시작하는 신품번체계는 (b) 검증 대상이 아닙니다.
@@ -381,6 +391,15 @@ export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       barcode = orderAttempt.fixed;
       autoFixed = true;
       orderFixedCount++;
+    }
+    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(예: SBE3U08009ASH KHM → SBE3U08009MAK) — 실제 바코드 목록에서 하나로 딱 맞을 때만
+    if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+      const t = fixTruncatedColorName(barcode, BARCODE_MASTER_SET, colorCodeList, DEFAULT_SIZE_CODES);
+      if (t.changed) {
+        barcode = t.fixed;
+        autoFixed = true;
+        colorNameFixedCount++;
+      }
     }
 
     let flagged = false;

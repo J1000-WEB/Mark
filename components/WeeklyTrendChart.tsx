@@ -10,6 +10,7 @@ const PALETTE = ["#2563eb", "#f97316", "#10b981", "#a855f7", "#ef4444"];
 type Dim = 0 | 1 | 2; // info 인덱스: 품목, 복종, 아이템
 const DIMS: [Dim, string][] = [[0, "품목"], [1, "복종"], [2, "아이템"]];
 const ALL = "__ALL__";
+const ONLINE = "__ONLINE__"; // 2026-11-23 소천님: 온라인(채널명 "온라인…")은 참고용 — 전체·구성비에 안 넣음
 const man = (v: number) => `${Math.round(v / 10000).toLocaleString("ko-KR")}만`;
 const fmt = (metric: "amt" | "qty", v: number) => (metric === "amt" ? man(v) : `${Math.round(v).toLocaleString("ko-KR")}장`);
 const md = (s: string) => (s ? `${Number(s.slice(5, 7))}.${s.slice(8, 10)}` : "");
@@ -84,6 +85,13 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
           g.set(k, v);
         }
       }
+      for (const [i, q, a] of (w.on || []) as number[][]) {
+        if (!styleOk[i]) continue;
+        const v = g.get(ONLINE) || [0, 0];
+        v[0] += q;
+        v[1] += a;
+        g.set(ONLINE, v);
+      }
       m.set(w.ws, g);
     }
     return m;
@@ -101,19 +109,19 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
   // 그룹 칩: 기간 합 큰 순
   const groups = useMemo(() => {
     const tot = new Map<string, number>();
-    for (const ws of data?.weeks || []) for (const [k, v] of byWeek.get(ws) || []) if (k !== ALL) tot.set(k, (tot.get(k) || 0) + v[1]);
+    for (const ws of data?.weeks || []) for (const [k, v] of byWeek.get(ws) || []) if (k !== ALL && k !== ONLINE) tot.set(k, (tot.get(k) || 0) + v[1]);
     return [...tot.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
   }, [byWeek, data]);
   const parentOpts = (lv: 0 | 1) =>
     [...new Set(info.filter((x) => lv === 0 || !parent[0] || x[0] === parent[0]).map((x) => x[lv]).filter(Boolean))].sort();
-  const lines = sel.filter((g) => g === ALL || groups.includes(g)).slice(0, 5);
+  const lines = sel.filter((g) => g === ALL || g === ONLINE || groups.includes(g)).slice(0, 5);
   const toggle = (g: string) =>
     setSel((cur) => {
       // 2026-11-23 소천님: "전체"도 다른 칩과 같이 겹쳐 보기
       const next = cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g].slice(-5);
       return next.length ? next : [ALL];
     });
-  const label = (g: string) => (g === ALL ? "전체" : g);
+  const label = (g: string) => (g === ALL ? "전체" : g === ONLINE ? "온라인(참고)" : g);
 
   // 차트 치수
   const W = 1000, H = 260, L = 56, R = 40, T = 14, B = 28;
@@ -139,9 +147,9 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
     return topGroups.map((g) => {
       const m = new Map<number, [number, number]>();
       for (const w of ws) {
-        const rows = wInfo.get(w)?.rows || [];
+        const rows = (g === ONLINE ? wInfo.get(w)?.on : wInfo.get(w)?.rows) || [];
         for (const [i, q, a] of rows as number[][]) {
-          if (!styleOk[i] || (g !== ALL && groupOfIdx(i) !== g)) continue;
+          if (!styleOk[i] || (g !== ALL && g !== ONLINE && groupOfIdx(i) !== g)) continue;
           const v = m.get(i) || [0, 0];
           v[0] += q;
           v[1] += a;
@@ -149,13 +157,22 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
         }
       }
       const arr = [...m.entries()];
+      // 온라인은 품목 구성비도 같이(참고용)
+      let mix: [string, number][] = [];
+      if (g === ONLINE) {
+        const c = new Map<string, number>();
+        for (const [i, v] of arr) c.set(info[i]?.[0] || "(미분류)", (c.get(info[i]?.[0] || "(미분류)") || 0) + v[mi]);
+        const t = [...c.values()].reduce((x, y) => x + y, 0) || 1;
+        mix = [...c.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v / t]);
+      }
       return {
         g,
+        mix,
         amt: [...arr].sort((a, b) => b[1][1] - a[1][1]).slice(0, 5),
         qty: [...arr].sort((a, b) => b[1][0] - a[1][0]).slice(0, 5),
       };
     });
-  }, [topGroups.join("|"), topWeek, topRange, weeks.join("|"), styleOk, wInfo, dim]);
+  }, [topGroups.join("|"), topWeek, topRange, weeks.join("|"), styleOk, wInfo, dim, mi]);
 
   const btn = (on: boolean) => `rounded-lg border px-2.5 py-1 text-xs font-black ${on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600"}`;
   const pend = data?.pending?.length || 0;
@@ -170,7 +187,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
             {weeks.length > 0 && <span className="text-sm text-slate-500">({md(weeks[0])}~{md(addDays(weeks[weeks.length - 1], 6))})</span>}
           </h3>
           <p className="text-[11px] text-slate-500">
-            오프라인 실판매(매장주문·온라인 제외, PIP 보관) · 기온 = 서울 주 평균((최고+최저)/2){mode === "ly" && " · 점선 = 전년 같은 주(−364일)"}
+            오프라인 실판매(매장주문·온라인 제외, PIP 보관) · 온라인(참고) = 채널명 "온라인…", 전체·구성비 미포함 · 기온 = 서울 주 평균((최고+최저)/2){mode === "ly" && " · 점선 = 전년 같은 주(−364일)"}
             {loading && ` · 불러오는 중${pend ? `(계산 남은 주 ${pend}개)` : "…"}`}
           </p>
         </div>
@@ -227,14 +244,15 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
       </div>
 
       <div className="flex flex-wrap gap-1">
-        {[ALL, ...groups.slice(0, 24)].map((g) => {
+        {[ALL, ...groups.slice(0, 24), ONLINE].map((g) => {
           const i = lines.indexOf(g);
           return (
             <button
               key={g}
               type="button"
               onClick={() => toggle(g)}
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${i >= 0 ? "text-white" : "border-slate-200 bg-white text-slate-600"}`}
+              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${g === ONLINE ? "ml-2 border-dashed" : ""} ${i >= 0 ? "text-white" : "border-slate-200 bg-white text-slate-600"}`}
+              title={g === ONLINE ? "채널명이 '온라인'으로 시작하는 채널 — 참고용(전체·구성비에 안 들어감)" : undefined}
               style={i >= 0 ? { background: PALETTE[i], borderColor: PALETTE[i] } : undefined}
             >
               {label(g)}
@@ -297,8 +315,8 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
                 const v = series[li][hover], lv = lySeries[li]?.[hover] || 0;
                 // 2026-11-23 소천님: 구성비(그 주 전체 대비 %, 년도·상위 필터 적용된 전체 기준) + 8주는 전년비
                 const tot = val(ws, ALL), lyTot = val(lyOf(ws), ALL);
-                const share = g !== ALL && tot ? (v / tot) * 100 : null;
-                const lyShare = g !== ALL && lyTot ? (lv / lyTot) * 100 : null;
+                const share = g !== ALL && g !== ONLINE && tot ? (v / tot) * 100 : null;
+                const lyShare = g !== ALL && g !== ONLINE && lyTot ? (lv / lyTot) * 100 : null;
                 return (
                   <div key={g} style={{ color: PALETTE[li] }} className="font-bold">
                     {label(g)} {fmt(metric, v)}
@@ -371,6 +389,24 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
             {top.map((t, li) => (
               <div key={t.g} className="rounded-xl border border-slate-200 p-2">
                 <div className="mb-1 text-xs font-black" style={{ color: PALETTE[li] }}>{label(t.g)}</div>
+                {t.mix.length > 0 && (
+                  <div className="mb-2">
+                    <div className="mb-0.5 text-[10px] font-black text-slate-400">품목 구성비({metric === "amt" ? "금액" : "수량"})</div>
+                    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      {t.mix.map(([k, v], n) => (
+                        <div key={k} title={`${k} ${(v * 100).toFixed(1)}%`} style={{ width: `${v * 100}%`, background: ["#2563eb", "#f97316", "#10b981", "#a855f7", "#ef4444", "#0ea5e9", "#eab308", "#64748b"][n % 8] }} />
+                      ))}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-600">
+                      {t.mix.map(([k, v], n) => (
+                        <span key={k} className="flex items-center gap-0.5">
+                          <i className="inline-block h-2 w-2 rounded-sm" style={{ background: ["#2563eb", "#f97316", "#10b981", "#a855f7", "#ef4444", "#0ea5e9", "#eab308", "#64748b"][n % 8] }} />
+                          {k} <b>{(v * 100).toFixed(1)}%</b>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {(["amt", "qty"] as const).map((k) => (
                     <div key={k}>

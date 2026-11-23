@@ -27,22 +27,27 @@ export function mondayOf(ymd: string) {
 }
 const weekDates = (ws: string) => Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
-async function aggregateWeek(dates: string[]): Promise<{ s: Record<string, QA>; days: number }> {
+// 2026-11-23 소천님: 온라인(채널명 앞 3글자 "온라인")도 참고용으로 따로 — 오프라인 합계·구성비엔 안 넣음
+type WeekAgg = { v: 2; s: Record<string, QA>; o: Record<string, QA> };
+async function aggregateWeek(dates: string[]): Promise<{ agg: WeekAgg; days: number }> {
   const { rows, foundDates } = await readArchivedSales(dates, { maxGap: 20 });
-  const s: Record<string, QA> = {};
+  const agg: WeekAgg = { v: 2, s: {}, o: {} };
   for (const r of rows) {
-    if (r.team !== "오프라인팀" || isPromoExcludedStore(r.storeName)) continue;
+    const name = String(r.storeName || "").trim();
+    const online = name.startsWith("온라인");
+    if (!online && (r.team !== "오프라인팀" || isPromoExcludedStore(r.storeName))) continue;
     const q = Number(r.qty) || 0, a = Number(r.amount) || 0;
     if (!q && !a) continue;
     const st = String(r.styleCode || "").toUpperCase();
-    const v = s[st] || (s[st] = [0, 0]);
+    const dst = online ? agg.o : agg.s;
+    const v = dst[st] || (dst[st] = [0, 0]);
     v[0] += q;
     v[1] += a;
   }
-  return { s, days: foundDates.length };
+  return { agg, days: foundDates.length };
 }
 
-type CacheRow = { days: number; row: number; data: () => Record<string, QA> };
+type CacheRow = { days: number; row: number; data: () => any };
 async function readCache(): Promise<Map<string, CacheRow>> {
   const id = getDbSheetId();
   await ensureSheetExistsById(id, TAB, HEADER);
@@ -60,7 +65,7 @@ async function readCache(): Promise<Map<string, CacheRow>> {
   return m;
 }
 
-async function writeCache(ws: string, days: number, s: Record<string, QA>, row?: number) {
+async function writeCache(ws: string, days: number, s: WeekAgg, row?: number) {
   const id = getDbSheetId();
   await ensureGridColsById(id, TAB, MAX_COLS);
   const b64 = gzipSync(Buffer.from(JSON.stringify(s), "utf8"), { level: 9 }).toString("base64");
@@ -123,7 +128,7 @@ export async function readWeeklyTrend(opts: { endWeek?: string; weeks?: number; 
   if (!archived.length) throw new Error("PIP 보관 시트 날짜 목록을 읽지 못했어요 — 잠시 뒤 다시 시도해 주세요.");
   const archSet = new Set(archived);
   const budget = opts.budgetMs ?? 200000;
-  const data: Record<string, Record<string, QA>> = {};
+  const data: Record<string, WeekAgg> = {};
   const days: Record<string, number> = {};
   const pending: string[] = [];
   let computed = 0;
@@ -133,34 +138,37 @@ export async function readWeeklyTrend(opts: { endWeek?: string; weeks?: number; 
     const have = dates.filter((d) => archSet.has(d)).length;
     const done = addDays(ws, 6) < kstToday();
     const c = cache.get(ws);
-    if (c && c.days === have && done) {
-      data[ws] = c.data();
+    // 예전 형식(온라인 없음, v 없음) 저장본은 다시 계산
+    const cd = c ? c.data() : null;
+    const fresh = cd && cd.v === 2;
+    if (c && fresh && c.days === have && done) {
+      data[ws] = cd;
       days[ws] = c.days;
       continue;
     }
     if (!have) {
-      if (c) {
-        data[ws] = c.data();
-        days[ws] = c.days;
+      if (fresh) {
+        data[ws] = cd;
+        days[ws] = c!.days;
         continue;
       }
-      data[ws] = {};
+      data[ws] = { v: 2, s: {}, o: {} };
       days[ws] = 0;
       continue;
     }
     if (Date.now() - t0 > budget) {
       pending.push(ws);
-      if (c) {
-        data[ws] = c.data();
-        days[ws] = c.days;
+      if (cd) {
+        data[ws] = cd.v === 2 ? cd : { v: 2, s: cd, o: {} };
+        days[ws] = c!.days;
       }
       continue;
     }
-    const agg = await aggregateWeek(dates);
+    const { agg, days: nd } = await aggregateWeek(dates);
     computed++;
-    data[ws] = agg.s;
-    days[ws] = agg.days;
-    if (done) await writeCache(ws, agg.days, agg.s, c?.row).catch((e) => console.error("주간추이 저장 실패", ws, e?.message));
+    data[ws] = agg;
+    days[ws] = nd;
+    if (done) await writeCache(ws, nd, agg, c?.row).catch((e) => console.error("주간추이 저장 실패", ws, e?.message));
   }
 
   // 날씨(서울 실측, (최고+최저)/2 주 평균)
@@ -175,15 +183,16 @@ export async function readWeeklyTrend(opts: { endWeek?: string; weeks?: number; 
   // 응답 압축: 스타일 목록 + 주마다 [스타일i, 수량, 금액]
   const styles: string[] = [];
   const sIdx = new Map<string, number>();
-  const weeksOut = all.map((ws) => {
+  const pack = (m: Record<string, QA> | undefined) => {
     const rows: number[][] = [];
-    for (const [st, [q, a]] of Object.entries(data[ws] || {})) {
+    for (const [st, [q, a]] of Object.entries(m || {})) {
       let i = sIdx.get(st);
       if (i === undefined) sIdx.set(st, (i = styles.push(st) - 1));
       rows.push([i, q, Math.round(a)]);
     }
-    return { ws, days: days[ws] ?? 0, temp: temp(ws), rows };
-  });
+    return rows;
+  };
+  const weeksOut = all.map((ws) => ({ ws, days: days[ws] ?? 0, temp: temp(ws), rows: pack(data[ws]?.s), on: pack(data[ws]?.o) }));
   const infoOut = styles.map((st) => info[st] || ["", "", "", "", "", "", ""]);
   return {
     endWeek: end,

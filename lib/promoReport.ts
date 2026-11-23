@@ -79,13 +79,16 @@ async function aggregateWeek(start: string, styles: Set<string>, master: Map<str
 
 // 소비자가: PIP(스타일별 채널별, 금액) 마스터 열 20(판매가) — 팀 파일의 "소비자가"(ERP 현판가 메뉴 소비자가)와 같은 값.
 // PIP 19열은 최초 TAG가라 안 씀. ERP "현판가"(할인 적용가)는 PIP에 없어서, 그 주 판매 줄의 개당 판매가 중 가장 많이 팔린 값으로 추정.
-async function readStylePrices(styles: Set<string>) {
-  const out = new Map<string, { consumer: number; current: number; colors: number }>();
+// MARK 2026-11-23 소천님: 생산(입고)·누적판매·판매율·재고도 같이(계획 세우기용) — PIP 22열 입고, 26열 판매(누적, 전 채널), 28열 합계재고, 사이즈·컬러 줄 합.
+// 출고여부가 "BE만"처럼 한 컬러면 그 컬러 줄만 더함.
+async function readStylePrices(styles: Set<string>, onlyColor: Map<string, string> = new Map()) {
+  const out = new Map<string, { consumer: number; current: number; colors: number; inQty: number; sold: number; stock: number }>();
   try {
     const id = getDailySourceSheetId();
     const title = pickDailySheetTitle(await getSpreadsheetTitlesById(id));
     if (!title) return out;
-    const raw = await getSheetValuesById(id, title, "N4:U");
+    const raw = await getSheetValuesById(id, title, "N4:AC");
+    const life = new Map<string, { inQty: number; sold: number; stock: number }>();
     const votes = new Map<string, Map<string, number>>();
     const colors = new Map<string, Set<string>>(); // MARK 2026-11-20: 품번별 컬러 수(PIP P열 칼라)
     for (const r of raw) {
@@ -93,6 +96,11 @@ async function readStylePrices(styles: Set<string>) {
       if (!styles.has(st)) continue;
       const c = t(r?.[2]).toUpperCase();
       if (c) (colors.get(st) || colors.set(st, new Set()).get(st)!).add(c);
+      if (!onlyColor.get(st) || onlyColor.get(st) === c) {
+        const l = life.get(st) || { inQty: 0, sold: 0, stock: 0 };
+        l.inQty += n(r?.[9]); l.sold += n(r?.[13]); l.stock += n(r?.[15]);
+        life.set(st, l);
+      }
       const key = `${n(r?.[6])}|${n(r?.[7])}`;
       const m = votes.get(st) || new Map<string, number>();
       m.set(key, (m.get(key) || 0) + 1);
@@ -100,7 +108,7 @@ async function readStylePrices(styles: Set<string>) {
     }
     for (const [st, m] of votes) {
       const best = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0].split("|").map(Number);
-      out.set(st, { consumer: best[1], current: 0, colors: colors.get(st)?.size || 0 });
+      out.set(st, { consumer: best[1], current: 0, colors: colors.get(st)?.size || 0, ...(life.get(st) || { inQty: 0, sold: 0, stock: 0 }) });
     }
   } catch (e) {
     console.error("promo prices read failed", e);
@@ -126,6 +134,9 @@ export type PromoStyleRow = {
   prevYear?: Agg;
   runningGap?: Agg | null; // 같은 품명(재런칭 코드 포함) 금주 합 − 전년
   colors: number; // 컬러 수(PIP 기준, 출고여부가 "BE만"처럼 한 컬러면 1)
+  inQty: number; // 생산(입고) 수량 — PIP 최신
+  sold: number; // 누적판매(전 채널) — PIP 최신
+  stock: number; // 현재 재고(합계) — PIP 최신
 };
 
 export type PromoGroupReport = {
@@ -137,6 +148,7 @@ export type PromoGroupReport = {
   cur: Agg;
   prev: Agg;
   prevYearTotal?: Agg;
+  life: { inQty: number; sold: number; stock: number };
 };
 
 export async function buildPromoReport(weekStartInput?: string) {
@@ -154,7 +166,9 @@ export async function buildPromoReport(weekStartInput?: string) {
   const cur = await aggregateWeek(weekStart, styles, master);
   const prev = await aggregateWeek(prevStart, styles, master);
   const ly = needLy ? await aggregateWeek(lyStart, lyStyles, master) : null;
-  const prices = await readStylePrices(styles);
+  const onlyColor = new Map<string, string>();
+  for (const i of items) { const m = String(i.shipped || "").trim().match(/^([A-Z0-9]{2,3})\s*만$/i); if (m) onlyColor.set(i.style, m[1].toUpperCase()); }
+  const prices = await readStylePrices(styles, onlyColor);
 
   const groupsOrder: string[] = [];
   for (const i of items) if (!groupsOrder.includes(i.group)) groupsOrder.push(i.group);
@@ -179,6 +193,9 @@ export async function buildPromoReport(weekStartInput?: string) {
         cur: cur.byStyle.get(i.style) || zero(),
         prev: prev.byStyle.get(i.style) || zero(),
         prevYear: head.prevYear && ly ? ly.byStyle.get(i.style) || zero() : undefined,
+        inQty: p?.inQty || 0,
+        sold: p?.sold || 0,
+        stock: p?.stock || 0,
       };
     });
     if (head.prevYear) {
@@ -205,6 +222,7 @@ export async function buildPromoReport(weekStartInput?: string) {
       cur: sum("cur"),
       prev: sum("prev"),
       prevYearTotal: head.prevYear ? sum("prevYear") : undefined,
+      life: rows.reduce((s, r) => ({ inQty: s.inQty + r.inQty, sold: s.sold + r.sold, stock: s.stock + r.stock }), { inQty: 0, sold: 0, stock: 0 }),
     };
   });
 

@@ -166,7 +166,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
         <div>
           <p className="text-xs font-black text-slate-400">WEEKLY TREND</p>
           <h3 className="text-lg font-black">
-            {mode === "52" ? "52주 매출추이" : "최근 8주 전년비"}{" "}
+            {mode === "52" ? "52주 매출추이" : off ? "8주 전년비" : "최근 8주 전년비"}{" "}
             {weeks.length > 0 && <span className="text-sm text-slate-500">({md(weeks[0])}~{md(addDays(weeks[weeks.length - 1], 6))})</span>}
           </h3>
           <p className="text-[11px] text-slate-500">

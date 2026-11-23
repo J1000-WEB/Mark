@@ -23,13 +23,26 @@ let dateIndexCache: { at: number; map: Map<string, number> } | null = null;
 
 async function readDateIndex(): Promise<Map<string, number>> {
   if (dateIndexCache && Date.now() - dateIndexCache.at < 10 * 60 * 1000) return dateIndexCache.map;
-  const col = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, SALES_TAB, "A:A").catch(() => [] as any[][]);
+  // MARK 2026-11-23: 읽기 실패(429 등)를 빈 목록으로 10분 캐시해서 "보관 날짜 없음"이 됐었음 → 3번 재시도, 실패는 캐시 안 함
+  let col: any[][] = [];
+  for (let i = 0; ; i++) {
+    try {
+      col = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, SALES_TAB, "A:A");
+      break;
+    } catch (e) {
+      if (i >= 2) {
+        if (dateIndexCache) return dateIndexCache.map; // 예전 목록이라도
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, 10000 * (i + 1)));
+    }
+  }
   const map = new Map<string, number>();
   col.forEach((r, i) => {
     const d = String(r?.[0] ?? "").slice(0, 10);
     if (i > 0 && /^\d{4}-\d{2}-\d{2}$/.test(d)) map.set(d, i + 1);
   });
-  dateIndexCache = { at: Date.now(), map };
+  if (map.size) dateIndexCache = { at: Date.now(), map };
   return map;
 }
 

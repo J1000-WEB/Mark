@@ -120,6 +120,7 @@ export async function readWeeklyTrend(opts: { endWeek?: string; weeks?: number; 
     readStyleInfo().catch(() => ({} as Record<string, string[]>)),
     readWeatherHistory().catch(() => [] as any[]),
   ]);
+  if (!archived.length) throw new Error("PIP 보관 시트 날짜 목록을 읽지 못했어요 — 잠시 뒤 다시 시도해 주세요.");
   const archSet = new Set(archived);
   const budget = opts.budgetMs ?? 200000;
   const data: Record<string, Record<string, QA>> = {};
@@ -138,6 +139,11 @@ export async function readWeeklyTrend(opts: { endWeek?: string; weeks?: number; 
       continue;
     }
     if (!have) {
+      if (c) {
+        data[ws] = c.data();
+        days[ws] = c.days;
+        continue;
+      }
       data[ws] = {};
       days[ws] = 0;
       continue;

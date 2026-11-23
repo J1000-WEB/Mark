@@ -5,6 +5,7 @@
 // 2026-11-19: 성별(여성·공용·남성 — MARK_PIP_ARCHIVE 상품정보 L열, /api/style-sex) 필터·맨 앞 단계 + 점포별 100% 막대(StoreMixChart).
 import { Fragment, useEffect, useMemo, useState } from "react";
 import StoreMixChart from "@/components/StoreMixChart";
+import WeeklyTrendChart from "@/components/WeeklyTrendChart";
 import { parseStyleCode } from "@/lib/productCode";
 
 type Row = any;
@@ -331,6 +332,7 @@ export default function CategoryMixPanel() {
           </table>
         </div>
       )}
+      {data?.weekStart && <WeeklyTrendChart endWeek={data.weekStart} />}
       {!loading && data && (
         <StoreMixChart
           rows={filtered}

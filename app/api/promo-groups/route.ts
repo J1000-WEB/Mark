@@ -8,7 +8,7 @@ const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
 // MARK 2026-11-17: 프로모션 품번리스트 — GET 목록, POST { items: PromoItem[] } 전체 교체 저장(MARK_DB "프로모션_품번")
 export async function GET() {
   try {
-    return NextResponse.json({ ok: true, items: await readPromoItems() }, { headers: NO_STORE });
+    return NextResponse.json({ ok: true, items: await readPromoItems({ all: true }) }, { headers: NO_STORE });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || "읽기 실패" }, { status: 500, headers: NO_STORE });
   }

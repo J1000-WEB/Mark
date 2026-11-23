@@ -47,7 +47,8 @@
   앞자리 0 패딩 있음("00S", "0XL") — 제거하고 사용.
 - **칼라명 공백·잘림(2026-11-23)**: 한컬렉션이 `SBE3U08009ASH KHM`(ASH KHAKI가 잘림 + 사이즈 M)처럼 줄 때가 있음 → `lib/barcodeFix.js` `fixFullColorNameToCode`가 공백을 먼저 지우고,
   새 `fixTruncatedColorName`이 실제 바코드 목록(data/barcodeMaster.json)의 같은 스타일(앞 10자) 바코드를 [사이즈][칼라]/[칼라][사이즈]로 풀어 "칼라명 앞 3자↑ + 사이즈"로 딱 하나 맞으면 바꿈(→ SBE3U08009MAK).
-  S/W 구품번 중 목록에 없는 것만 시도. 대시보드 consignmentUpload.ts(한컬렉션·용인) + PC build-inshop-upload.js 둘 다 적용(PC는 MARK\\lib\\barcodeFix.js를 require).
+  신품번(G…, 스타일 9자)도 같은 문제(GF7LKC503DARK NAM → GF7LKC503DNM, DEEP BL·MELANGE GR·DARK BR 등): 목록에 같은 스타일이 없으면 칼라명 앞부분이 칼라코드 하나로만 이어질 때 신품번 스타일+칼라+사이즈/구품번 스타일+사이즈+칼라로 만듦.
+  꼬리가 이미 정상이면 안 건드림. 11/9~11/22 확인필요 17줄 전부 수정·목록 일치, 정상 936줄은 하나도 안 바뀜(검증). 대시보드 consignmentUpload.ts(한컬렉션·용인) + PC build-inshop-upload.js 둘 다 적용(PC는 MARK\\lib\\barcodeFix.js를 require).
 - **무신사**: A열 정산일자(ISO)→YYYYMMDD, H열 매장명→점포코드 시트에서 채널번호 조회,
   P열 업체바코드, Q열 판매수량, R열 판매금액. "합계" 행(매장명 없음) 자동 제외.
 - **면세(롯데)**: 파일에 날짜 없음 — 업로드 시 날짜 직접 지정 필요. H열=Ref No.(바코드),

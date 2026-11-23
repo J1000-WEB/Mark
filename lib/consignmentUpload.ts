@@ -272,8 +272,9 @@ export function parseHancollection(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       autoFixed = true;
       orderFixedCount++;
     }
-    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(예: SBE3U08009ASH KHM → SBE3U08009MAK) — 실제 바코드 목록에서 하나로 딱 맞을 때만
-    if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(SBE3U08009ASH KHM → SBE3U08009MAK, GF7LKC503DARK NAM → GF7LKC503DNM) — 하나로 딱 맞을 때만
+    //      (구품번·신품번 다. 꼬리가 이미 정상이거나 목록에 있으면 함수가 그대로 돌려줌)
+    {
       const t = fixTruncatedColorName(barcode, BARCODE_MASTER_SET, colorCodeList, DEFAULT_SIZE_CODES);
       if (t.changed) {
         barcode = t.fixed;
@@ -392,8 +393,9 @@ export function parseFactoryYongin(workbook: XLSX.WorkBook, storeCodeMap: Map<st
       autoFixed = true;
       orderFixedCount++;
     }
-    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(예: SBE3U08009ASH KHM → SBE3U08009MAK) — 실제 바코드 목록에서 하나로 딱 맞을 때만
-    if (needsBarcodeValidation(barcode) && !isKnownBarcode(barcode, BARCODE_MASTER_SET)) {
+    // 2-1) MARK 2026-11-23: 칼라명이 잘린 경우(SBE3U08009ASH KHM → SBE3U08009MAK, GF7LKC503DARK NAM → GF7LKC503DNM) — 하나로 딱 맞을 때만
+    //      (구품번·신품번 다. 꼬리가 이미 정상이거나 목록에 있으면 함수가 그대로 돌려줌)
+    {
       const t = fixTruncatedColorName(barcode, BARCODE_MASTER_SET, colorCodeList, DEFAULT_SIZE_CODES);
       if (t.changed) {
         barcode = t.fixed;

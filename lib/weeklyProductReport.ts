@@ -85,7 +85,13 @@ export async function computeWeeklyProductReport(weekStart: string) {
   weeks.forEach((w, i) => [0, 1, 2, 3, 4, 5, 6].forEach((d) => weekIdx.set(addDays(w, d), i)));
 
   // 매장 코드 → 이름(매출탭 스냅샷 채널코드)
-  const snap = (await readSalesSummarySnapshot().catch(() => ({ rows: [] as any[] }))).rows;
+  // MARK 2026-11-23: 11/23 10:41 계산 때 이 읽기가 순간 실패(빈 결과) → 매장 이름을 못 맞춰 점포 판매·재고가 전부 0으로 저장됨. 3번 재시도, 그래도 없으면 에러(저장 안 함).
+  let snap: any[] = [];
+  for (let i = 0; i < 3 && !snap.length; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 5000 * i));
+    snap = (await readSalesSummarySnapshot().catch(() => ({ rows: [] as any[] }))).rows;
+  }
+  if (!snap.length) throw new Error("매출탭 매장 목록(매출_일별_스냅샷)을 읽지 못해 점포 매칭이 안 돼요 — 잠시 뒤 다시 계산해 주세요.");
   const codeName = new Map<string, string>();
   for (const r of snap) if (t(r.channelCode) && r.storeName && !codeName.has(t(r.channelCode))) codeName.set(t(r.channelCode), String(r.storeName));
   const storeKeys = WEEKLY_STORES.map((s) => normalizeStoreKey(codeName.get(s.code) || s.short));
@@ -166,6 +172,8 @@ export async function computeWeeklyProductReport(weekStart: string) {
   const NOT_STORE = /창고|물류|본사|브랜딩|후원|기부|위즈원|제이미|샘플|^오프라인_/;
   const offStoreCols = blocks.filter((b) => b.stockCol >= 0 && !TEAM_NAMES.has(b.name) && !NOT_STORE.test(b.name) && isOff(b.name)).map((b) => b.stockCol);
   const storeStockCols = WEEKLY_STORES.map((_, i) => blocks.find((b) => normalizeStoreKey(b.name) === storeKeys[i])?.stockCol ?? -1);
+  if (blocks.length && storeStockCols.filter((c) => c >= 0).length < WEEKLY_STORES.length / 2)
+    throw new Error(`PIP 시트에서 점포 재고 칸을 거의 못 찾았어요(${storeStockCols.filter((c) => c >= 0).length}/${WEEKLY_STORES.length}) — 잠시 뒤 다시 계산해 주세요.`);
   let stockDate = "";
   type P = {
     year: string; season: string; cat: string; bok: string; item: string; name: string; colorName: string;

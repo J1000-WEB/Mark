@@ -275,11 +275,22 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
                 {(wInfo.get(weeks[hover])?.days ?? 7) < 7 && <span className="ml-1 text-rose-500">보관 {wInfo.get(weeks[hover])?.days}/7일</span>}
               </div>
               {lines.map((g, li) => {
+                const ws = weeks[hover];
                 const v = series[li][hover], lv = lySeries[li]?.[hover] || 0;
+                // 2026-11-23 소천님: 구성비(그 주 전체 대비 %, 년도·상위 필터 적용된 전체 기준) + 8주는 전년비
+                const tot = val(ws, ALL), lyTot = val(lyOf(ws), ALL);
+                const share = g !== ALL && tot ? (v / tot) * 100 : null;
+                const lyShare = g !== ALL && lyTot ? (lv / lyTot) * 100 : null;
                 return (
                   <div key={g} style={{ color: PALETTE[li] }} className="font-bold">
                     {label(g)} {fmt(metric, v)}
-                    {mode === "ly" && <span className="text-slate-500"> · 전년 {fmt(metric, lv)}{lv ? ` (${v >= lv ? "+" : ""}${Math.round((v / lv - 1) * 100)}%)` : ""}</span>}
+                    {share !== null && <span className="text-slate-600"> · 구성비 {share.toFixed(1)}%</span>}
+                    {mode === "ly" && (
+                      <span className="text-slate-500">
+                        {" "}· 전년비 {lv ? `${v >= lv ? "+" : ""}${Math.round((v / lv - 1) * 100)}%` : v ? "신규" : "–"}
+                        <span className="font-normal"> (전년 {fmt(metric, lv)}{lyShare !== null ? ` · 구성비 ${lyShare.toFixed(1)}%` : ""})</span>
+                      </span>
+                    )}
                   </div>
                 );
               })}

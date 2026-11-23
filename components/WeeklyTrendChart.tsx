@@ -19,6 +19,7 @@ function addDays(ymd: string, d: number) {
   return x.toISOString().slice(0, 10);
 }
 
+const tDiff = (a: number | null | undefined, b: number | null | undefined) => (a == null || b == null ? "" : `${a - b >= 0 ? "+" : ""}${(a - b).toFixed(1)}°`);
 export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -32,6 +33,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
   const [pickWeek, setPickWeek] = useState(""); // TOP5 주(빈칸 = 마지막 주)
   const [topRange, setTopRange] = useState<"week" | "all">("week");
   const [hover, setHover] = useState<number | null>(null);
+  const [lyOff, setLyOff] = useState(0); // 8주 창을 과거로 몇 주 옮겼는지
 
   // 계산 안 된 주(pending)가 있으면 이어서 다시 불러옴
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
     let tries = 0;
     const load = () => {
       setLoading(true);
-      const qs = new URLSearchParams({ weeks: "52", ly: "8" });
+      const qs = new URLSearchParams({ weeks: "52", ly: "52" }); // 2026-11-23: 8주 전년비를 52주 안에서 앞뒤로 넘겨 보려고 전년도 52주 다 받음
       if (endWeek) qs.set("end", endWeek);
       fetch(`/api/weekly-trend?${qs}`, { cache: "no-store" })
         .then((r) => r.json())
@@ -88,7 +90,10 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
   }, [data, styleOk, dim]);
   const wInfo = useMemo(() => new Map<string, any>((data?.data || []).map((w: any) => [w.ws, w])), [data]);
 
-  const weeks: string[] = mode === "52" ? data?.weeks || [] : (data?.weeks || []).slice(-8);
+  const allWeeks: string[] = data?.weeks || [];
+  const maxOff = Math.max(0, allWeeks.length - 8);
+  const off = Math.min(lyOff, maxOff);
+  const weeks: string[] = mode === "52" ? allWeeks : allWeeks.slice(allWeeks.length - 8 - off, allWeeks.length - off);
   const lyOf = (ws: string) => addDays(ws, -364);
   const mi = metric === "amt" ? 1 : 0;
   const val = (ws: string, g: string) => byWeek.get(ws)?.get(g)?.[mi] || 0;
@@ -172,6 +177,19 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="button" className={btn(mode === "52")} onClick={() => setMode("52")}>52주</button>
           <button type="button" className={btn(mode === "ly")} onClick={() => setMode("ly")}>8주 · 전년비</button>
+          {mode === "ly" && (
+            <span className="flex items-center gap-0.5">
+              {([[8, "◀ 8주"], [1, "◀ 1주"], [-1, "1주 ▶"], [-8, "8주 ▶"]] as [number, string][]).map(([d, t]) => {
+                const nx = Math.min(maxOff, Math.max(0, off + d));
+                return (
+                  <button key={t} type="button" disabled={nx === off} className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] font-black text-slate-600 disabled:opacity-30" onClick={() => { setLyOff(nx); setPickWeek(""); }}>
+                    {t}
+                  </button>
+                );
+              })}
+              {off > 0 && <button type="button" className="ml-0.5 text-[11px] font-bold text-slate-400 underline" onClick={() => { setLyOff(0); setPickWeek(""); }}>최근</button>}
+            </span>
+          )}
           <span className="mx-1 text-slate-300">|</span>
           <button type="button" className={btn(metric === "amt")} onClick={() => setMetric("amt")}>금액</button>
           <button type="button" className={btn(metric === "qty")} onClick={() => setMetric("qty")}>수량</button>
@@ -271,7 +289,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
               <div className="font-black">
                 {md(weeks[hover])}~{md(addDays(weeks[hover], 6))}
                 {temps[hover] !== null && <span className="ml-1 font-bold text-amber-600">{temps[hover]}°</span>}
-                {mode === "ly" && lyTemps[hover] !== null && <span className="ml-1 text-amber-500">(전년 {lyTemps[hover]}°)</span>}
+                {mode === "ly" && lyTemps[hover] !== null && <span className="ml-1 text-amber-500">(전년 {lyTemps[hover]}°, {tDiff(temps[hover], lyTemps[hover])})</span>}
                 {(wInfo.get(weeks[hover])?.days ?? 7) < 7 && <span className="ml-1 text-rose-500">보관 {wInfo.get(weeks[hover])?.days}/7일</span>}
               </div>
               {lines.map((g, li) => {
@@ -329,9 +347,10 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
                 {weeks.map((ws, i) => (
                   <td key={ws} className="px-1 py-1 text-right tabular-nums">
                     {temps[i] ?? "–"}°<span className="text-slate-400">/{lyTemps[i] ?? "–"}°</span>
+                    {tDiff(temps[i], lyTemps[i]) && <div className={`text-[10px] font-black ${(temps[i] ?? 0) >= (lyTemps[i] ?? 0) ? "text-rose-500" : "text-sky-600"}`}>{tDiff(temps[i], lyTemps[i])}</div>}
                   </td>
                 ))}
-                <td className="px-1 py-1 text-right text-[10px] text-slate-400">올해/전년</td>
+                <td className="px-1 py-1 text-right text-[10px] text-slate-400">올해/전년<div>차이</div></td>
               </tr>
             </tbody>
           </table>

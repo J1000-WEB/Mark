@@ -267,7 +267,7 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
             })}
           </svg>
           {hover !== null && weeks[hover] && (
-            <div className="pointer-events-none absolute top-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 text-[11px] shadow" style={{ left: `${Math.min(80, (x(hover) / W) * 100)}%` }}>
+            <div className="pointer-events-none absolute top-2 z-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white/95 px-2 py-1 text-[11px] shadow" style={x(hover) / W > 0.5 ? { right: `${(1 - x(hover) / W) * 100 + 1}%` } : { left: `${(x(hover) / W) * 100 + 1}%` }}>
               <div className="font-black">
                 {md(weeks[hover])}~{md(addDays(weeks[hover], 6))}
                 {temps[hover] !== null && <span className="ml-1 font-bold text-amber-600">{temps[hover]}°</span>}

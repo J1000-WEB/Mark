@@ -104,9 +104,8 @@ export default function WeeklyTrendChart({ endWeek }: { endWeek?: string }) {
   const lines = sel.filter((g) => g === ALL || groups.includes(g)).slice(0, 5);
   const toggle = (g: string) =>
     setSel((cur) => {
-      if (g === ALL) return [ALL];
-      const base = cur.filter((x) => x !== ALL);
-      const next = base.includes(g) ? base.filter((x) => x !== g) : [...base, g].slice(-5);
+      // 2026-11-23 소천님: "전체"도 다른 칩과 같이 겹쳐 보기
+      const next = cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g].slice(-5);
       return next.length ? next : [ALL];
     });
   const label = (g: string) => (g === ALL ? "전체" : g);

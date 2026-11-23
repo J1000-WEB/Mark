@@ -275,7 +275,7 @@ export default function PromoReportPanel() {
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
-                    <th className="px-2 py-1.5 text-left font-black">프로모션</th>
+                    <th className="whitespace-nowrap px-2 py-1.5 text-left font-black">프로모션</th>
                     <th className={TH} title="PIP 최신 기준 입고 수량">생산(입고)</th>
                     <th className={TH} title="PIP 최신 기준 누적판매(전 채널)">누적판매</th>
                     <th className={`${TH} border-r border-slate-200`}>판매율</th>
@@ -292,7 +292,7 @@ export default function PromoReportPanel() {
                 <tbody>
                   {summary.map((s) => (
                     <tr key={s.group} className="border-t border-slate-100">
-                      <td className="px-2 py-1.5 font-black">{s.group}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 font-black">{s.group}</td>
                       <td className={TD}>{num(s.life.inQty)}</td>
                       <td className={TD}>{num(s.life.sold)}</td>
                       <td className={`${TD} border-r border-slate-100 font-black`}>{pct1(sellThru(s.life))}</td>

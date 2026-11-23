@@ -62,6 +62,24 @@ export async function GET(req: Request) {
     } catch (e: any) {
       cum = { error: e?.message || String(e) };
     }
+    // MARK 2026-11-23 소천님: 라인업 = IMC 현황 프로모션 품번(MARK_DB 프로모션_품번)의 프로모션 이름으로(예전 상품_기준표 라인업 대신).
+    // 출고여부가 "BE만"처럼 한 컬러면 컬러구분에선 그 컬러 줄만. 캐시와 상관없이 응답할 때 붙여서 IMC 목록을 바꾸면 바로 반영.
+    try {
+      const { readPromoItems } = await import("@/lib/promoGroups");
+      const items = await readPromoItems();
+      const byStyle = new Map<string, { group: string; only: string }>();
+      for (const i of items) {
+        const m = String(i.shipped || "").trim().match(/^([A-Z0-9]{2,3})\s*만$/i);
+        if (!byStyle.has(i.style.toUpperCase())) byStyle.set(i.style.toUpperCase(), { group: i.group, only: m ? m[1].toUpperCase() : "" });
+      }
+      rows = rows.map((r: any) => {
+        const hit = byStyle.get(String(r.style || "").toUpperCase());
+        const ok = hit && (!hit.only || mode !== "color" || String(r.color || "").toUpperCase() === hit.only);
+        return { ...r, lineup: ok ? hit!.group : "" };
+      });
+    } catch (e: any) {
+      console.error("IMC 라인업 붙이기 실패", e?.message);
+    }
     return NextResponse.json({ ok: true, ...meta, mode, cache, cum, rows }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     console.error("weekly-product failed", e);

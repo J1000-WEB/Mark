@@ -138,16 +138,16 @@ export default function PromoReportPanel() {
       ws.addRow([]);
       ws.addRow(["", "금주 전체매출(오프)", total.cur.amount, "전주 전체매출(오프)", total.prev.amount, "전주비", g2(total.cur, total.prev)]).eachCell((c: any) => { if (typeof c.value === "number") c.numFmt = Math.abs(c.value) < 1 ? "0.0%" : "#,##0"; });
       ws.addRow([]);
-      styleHead(ws.addRow(["프로모션", "구성", "금주 수량", "금주 금액", "전체매출비중", "전주 수량", "전주 금액", "GAP 수량", "GAP 금액", "신장률", "생산(입고)", "누적판매", "판매율", "재고"]));
+      styleHead(ws.addRow(["프로모션", "생산(입고)", "누적판매", "판매율", "재고", "구성", "금주 수량", "금주 금액", "전체매출비중", "전주 수량", "전주 금액", "GAP 수량", "GAP 금액", "신장률"]));
       for (const s of summary) {
-        styleBody(ws.addRow([s.group, s.mix, s.cur.qty, s.cur.amount, share(s.cur.amount, total.cur.amount) ?? "", s.prev.qty, s.prev.amount, s.cur.qty - s.prev.qty, s.cur.amount - s.prev.amount, g2(s.cur, s.prev), s.life.inQty, s.life.sold, sellThru(s.life) ?? "", s.life.stock]));
+        styleBody(ws.addRow([s.group, s.life.inQty, s.life.sold, sellThru(s.life) ?? "", s.life.stock, s.mix, s.cur.qty, s.cur.amount, share(s.cur.amount, total.cur.amount) ?? "", s.prev.qty, s.prev.amount, s.cur.qty - s.prev.qty, s.cur.amount - s.prev.amount, g2(s.cur, s.prev)]));
       }
       if (summary.length > 1) {
-        const tr = ws.addRow(["합계", sumAll.mix, sumAll.cur.qty, sumAll.cur.amount, share(sumAll.cur.amount, total.cur.amount) ?? "", sumAll.prev.qty, sumAll.prev.amount, sumAll.cur.qty - sumAll.prev.qty, sumAll.cur.amount - sumAll.prev.amount, g2(sumAll.cur, sumAll.prev), sumAll.life.inQty, sumAll.life.sold, sellThru(sumAll.life) ?? "", sumAll.life.stock]);
+        const tr = ws.addRow(["합계", sumAll.life.inQty, sumAll.life.sold, sellThru(sumAll.life) ?? "", sumAll.life.stock, sumAll.mix, sumAll.cur.qty, sumAll.cur.amount, share(sumAll.cur.amount, total.cur.amount) ?? "", sumAll.prev.qty, sumAll.prev.amount, sumAll.cur.qty - sumAll.prev.qty, sumAll.cur.amount - sumAll.prev.amount, g2(sumAll.cur, sumAll.prev)]);
         styleBody(tr, 3);
         tr.eachCell((c: any) => { c.fill = SUM; c.font = { bold: true }; });
       }
-      ws.columns = [{ width: 22 }, { width: 16 }, { width: 12 }, { width: 16 }, { width: 13 }, { width: 12 }, { width: 16 }, { width: 11 }, { width: 14 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 9 }, { width: 11 }];
+      ws.columns = [{ width: 22 }, { width: 12 }, { width: 12 }, { width: 9 }, { width: 11 }, { width: 16 }, { width: 12 }, { width: 16 }, { width: 13 }, { width: 12 }, { width: 16 }, { width: 11 }, { width: 14 }, { width: 10 }];
 
       // 상세(프로모션별 블록)
       const wd = wb.addWorksheet("프로모션별 상세");
@@ -157,16 +157,16 @@ export default function PromoReportPanel() {
         title.font = { bold: true, size: 12 };
         title.getCell(1).fill = TITLE;
         if (g.note) wd.addRow([String(g.note).replace(/\n/g, " / ")]).font = { italic: true, color: { argb: "FF64748B" } };
-        const head = ["출고", "품번", "품명", "소비자가", "현판가", "할인율", "생산(입고)", "누적판매", "판매율", "재고", `금주(${period}) 수량`, "금주 금액", `전주 수량`, "전주 금액", "GAP 수량", "GAP 금액", "신장률"];
+        const head = ["출고", "품번", "품명", "생산(입고)", "누적판매", "판매율", "재고", "소비자가", "현판가", "할인율", `금주(${period}) 수량`, "금주 금액", `전주 수량`, "전주 금액", "GAP 수량", "GAP 금액", "신장률"];
         if (g.prevYear) head.push("전년 수량", "전년 금액", "러닝−전년 수량", "러닝−전년 금액");
         styleHead(wd.addRow(head));
         for (const r of g.rows) {
-          const row = [r.shipped, r.style, r.name, r.consumerPrice || "", r.currentPrice || "", r.consumerPrice && r.currentPrice ? 1 - r.currentPrice / r.consumerPrice : "", r.inQty || 0, r.sold || 0, sellThru(r) ?? "", r.stock || 0, r.cur.qty, r.cur.amount, r.prev.qty, r.prev.amount, r.cur.qty - r.prev.qty, r.cur.amount - r.prev.amount, g2(r.cur, r.prev)];
+          const row = [r.shipped, r.style, r.name, r.inQty || 0, r.sold || 0, sellThru(r) ?? "", r.stock || 0, r.consumerPrice || "", r.currentPrice || "", r.consumerPrice && r.currentPrice ? 1 - r.currentPrice / r.consumerPrice : "", r.cur.qty, r.cur.amount, r.prev.qty, r.prev.amount, r.cur.qty - r.prev.qty, r.cur.amount - r.prev.amount, g2(r.cur, r.prev)];
           if (g.prevYear) row.push(r.prevYear?.qty ?? "", r.prevYear?.amount ?? "", r.runningGap?.qty ?? "", r.runningGap?.amount ?? "");
           styleBody(wd.addRow(row), 4);
         }
         const gl = lifeOf(g.rows);
-        const sum = [`합계 (${g.rows.length}종)`, "", "", "", "", "", gl.inQty, gl.sold, sellThru(gl) ?? "", gl.stock, g.cur.qty, g.cur.amount, g.prev.qty, g.prev.amount, g.cur.qty - g.prev.qty, g.cur.amount - g.prev.amount, g2(g.cur, g.prev)];
+        const sum = [`합계 (${g.rows.length}종)`, "", "", gl.inQty, gl.sold, sellThru(gl) ?? "", gl.stock, "", "", "", g.cur.qty, g.cur.amount, g.prev.qty, g.prev.amount, g.cur.qty - g.prev.qty, g.cur.amount - g.prev.amount, g2(g.cur, g.prev)];
         if (g.prevYear) sum.push(g.prevYearTotal?.qty ?? "", g.prevYearTotal?.amount ?? "", "", "");
         const sr = wd.addRow(sum);
         styleBody(sr, 4);
@@ -276,6 +276,9 @@ export default function PromoReportPanel() {
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-2 py-1.5 text-left font-black">프로모션</th>
+                    <th className={TH} title="PIP 최신 기준 입고 수량">생산(입고)</th>
+                    <th className={TH} title="PIP 최신 기준 누적판매(전 채널)">누적판매</th>
+                    <th className={`${TH} border-r border-slate-200`}>판매율</th>
                     <th className="px-2 py-1.5 text-left font-black">구성</th>
                     <th className={TH}>금주 수량</th>
                     <th className={TH}>금주 금액</th>
@@ -284,15 +287,15 @@ export default function PromoReportPanel() {
                     <th className={TH}>GAP 수량</th>
                     <th className={TH}>GAP 금액</th>
                     <th className={TH}>신장률</th>
-                    <th className={`${TH} border-l border-slate-200`} title="PIP 최신 기준 입고 수량">생산(입고)</th>
-                    <th className={TH} title="PIP 최신 기준 누적판매(전 채널)">누적판매</th>
-                    <th className={TH}>판매율</th>
                   </tr>
                 </thead>
                 <tbody>
                   {summary.map((s) => (
                     <tr key={s.group} className="border-t border-slate-100">
                       <td className="px-2 py-1.5 font-black">{s.group}</td>
+                      <td className={TD}>{num(s.life.inQty)}</td>
+                      <td className={TD}>{num(s.life.sold)}</td>
+                      <td className={`${TD} border-r border-slate-100 font-black`}>{pct1(sellThru(s.life))}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-slate-500">{s.mix}</td>
                       <td className={TD}>{num(s.cur.qty)}</td>
                       <td className={`${TD} font-black`}>{won(s.cur.amount)}</td>
@@ -301,14 +304,14 @@ export default function PromoReportPanel() {
                       <td className={`${TD} ${gColor(s.cur.qty - s.prev.qty)}`}>{signed(s.cur.qty - s.prev.qty)}</td>
                       <td className={`${TD} ${gColor(s.cur.amount - s.prev.amount)}`}>{signed(s.cur.amount - s.prev.amount)}</td>
                       <td className={`${TD} font-black ${gColor(s.gr.v)}`}>{s.gr.label}</td>
-                      <td className={`${TD} border-l border-slate-100`}>{num(s.life.inQty)}</td>
-                      <td className={TD}>{num(s.life.sold)}</td>
-                      <td className={`${TD} font-black`}>{pct1(sellThru(s.life))}</td>
                     </tr>
                   ))}
                   {summary.length > 1 && (
                     <tr className="border-t-2 border-slate-300 bg-slate-50 font-black">
                       <td className="px-2 py-1.5">합계</td>
+                      <td className={TD}>{num(sumAll.life.inQty)}</td>
+                      <td className={TD}>{num(sumAll.life.sold)}</td>
+                      <td className={`${TD} border-r border-slate-100`}>{pct1(sellThru(sumAll.life))}</td>
                       <td className="px-2 py-1.5 text-slate-500">{sumAll.mix}</td>
                       <td className={TD}>{num(sumAll.cur.qty)}</td>
                       <td className={TD}>{won(sumAll.cur.amount)}</td>
@@ -317,9 +320,6 @@ export default function PromoReportPanel() {
                       <td className={`${TD} ${gColor(sumAll.cur.qty - sumAll.prev.qty)}`}>{signed(sumAll.cur.qty - sumAll.prev.qty)}</td>
                       <td className={`${TD} ${gColor(sumAll.cur.amount - sumAll.prev.amount)}`}>{signed(sumAll.cur.amount - sumAll.prev.amount)}</td>
                       <td className={`${TD} ${gColor(sumAll.gr.v)}`}>{sumAll.gr.label}</td>
-                      <td className={`${TD} border-l border-slate-100`}>{num(sumAll.life.inQty)}</td>
-                      <td className={TD}>{num(sumAll.life.sold)}</td>
-                      <td className={TD}>{pct1(sellThru(sumAll.life))}</td>
                     </tr>
                   )}
                 </tbody>
@@ -362,6 +362,9 @@ export default function PromoReportPanel() {
                           <th className="px-2 py-1.5 text-left font-black" rowSpan={2}>
                             품번 / 품명
                           </th>
+                          <th className="border-l border-slate-200 px-2 py-1 text-center font-black" colSpan={4} title="PIP 최신 기준(사이즈·컬러 합, 'BE만'처럼 한 컬러 출고면 그 컬러만)">
+                            생산·판매 (현재)
+                          </th>
                           <th className={TH} rowSpan={2}>
                             소비자가
                           </th>
@@ -370,9 +373,6 @@ export default function PromoReportPanel() {
                           </th>
                           <th className={TH} rowSpan={2}>
                             할인율
-                          </th>
-                          <th className="border-l border-slate-200 px-2 py-1 text-center font-black" colSpan={4} title="PIP 최신 기준(사이즈·컬러 합, 'BE만'처럼 한 컬러 출고면 그 컬러만)">
-                            생산·판매 (현재)
                           </th>
                           <th className="border-l border-slate-200 px-2 py-1 text-center font-black" colSpan={showShare ? 4 : 2}>
                             금주 ({md(data.weekStart)}~{md(data.weekEnd)})
@@ -438,13 +438,13 @@ export default function PromoReportPanel() {
                                   </div>
                                 </div>
                               </td>
-                              <td className={TD}>{r.consumerPrice ? won(r.consumerPrice) : "-"}</td>
-                              <td className={TD}>{r.currentPrice ? won(r.currentPrice) : "-"}</td>
-                              <td className={TD}>{r.consumerPrice && r.currentPrice ? pct1(1 - r.currentPrice / r.consumerPrice) : "-"}</td>
                               <td className={`${TD} border-l border-slate-100`}>{num(r.inQty || 0)}</td>
                               <td className={TD}>{num(r.sold || 0)}</td>
                               <td className={`${TD} font-black`}>{pct1(sellThru(r))}</td>
-                              <td className={`${TD} text-slate-500`}>{num(r.stock || 0)}</td>
+                              <td className={`${TD} text-slate-500 border-r border-slate-100`}>{num(r.stock || 0)}</td>
+                              <td className={TD}>{r.consumerPrice ? won(r.consumerPrice) : "-"}</td>
+                              <td className={TD}>{r.currentPrice ? won(r.currentPrice) : "-"}</td>
+                              <td className={TD}>{r.consumerPrice && r.currentPrice ? pct1(1 - r.currentPrice / r.consumerPrice) : "-"}</td>
                               <td className={`${TD} border-l border-slate-100`}>{num(r.cur.qty)}</td>
                               <td className={`${TD} font-black`}>{won(r.cur.amount)}</td>
                               {showShare && (
@@ -476,15 +476,16 @@ export default function PromoReportPanel() {
                           );
                         })}
                         <tr className="border-t-2 border-slate-200 bg-slate-50 font-black">
-                          <td className="px-2 py-1.5" colSpan={5}>
+                          <td className="px-2 py-1.5" colSpan={2}>
                             합계 ({g.rows.length}종)
                           </td>
                           {(() => { const gl = lifeOf(g.rows); return (<>
                             <td className={`${TD} border-l border-slate-100`}>{num(gl.inQty)}</td>
                             <td className={TD}>{num(gl.sold)}</td>
                             <td className={TD}>{pct1(sellThru(gl))}</td>
-                            <td className={TD}>{num(gl.stock)}</td>
+                            <td className={`${TD} border-r border-slate-100`}>{num(gl.stock)}</td>
                           </>); })()}
+                          <td className={TD} colSpan={3}></td>
                           <td className={`${TD} border-l border-slate-100`}>{num(g.cur.qty)}</td>
                           <td className={TD}>{won(g.cur.amount)}</td>
                           {showShare && (

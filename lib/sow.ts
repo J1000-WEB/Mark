@@ -59,9 +59,13 @@ export async function readSowEvents(): Promise<SowEvent[]> {
   for (let i = s.headerRowIdx + 1; i < s.rows.length; i++) {
     const r = s.rows[i] || [];
     const store = t(r[s.storeCol]);
-    const start = parseDate(r[s.startCol]);
+    const ok = (d: string) => /^20[2-3]\d-\d{2}-\d{2}$/.test(d) && !Number.isNaN(new Date(`${d}T00:00:00Z`).getTime());
+    let start = parseDate(r[s.startCol]);
+    let end = parseDate(r[s.endCol]);
+    if (!ok(end)) end = "";
+    if (!ok(start)) start = end; // 시작일 칸이 깨진 줄(예: -620045)은 종료일로
     if (!store || !start) continue;
-    const end = parseDate(r[s.endCol]) || start;
+    if (!end || end < start || dateRange(start, end).length > 45) end = start;
     let target = n(r[c.target]);
     if (target > 0 && target < 100000) target *= 1_000_000; // 백만원 단위로 적힌 경우
     out.push({

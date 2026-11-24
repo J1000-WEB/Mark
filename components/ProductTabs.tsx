@@ -5,17 +5,18 @@ import { useEffect, useState } from "react";
 import PromoReportPanel from "@/components/PromoReportPanel";
 import WeeklyProductPanel from "@/components/WeeklyProductPanel";
 import CategoryMixPanel from "@/components/CategoryMixPanel";
+import SowReviewPanel from "@/components/SowReviewPanel";
 import SideSubTabs from "@/components/SideSubTabs";
 
 export default function ProductTabs() {
-  const [tab, setTab] = useState<"imc" | "weekly" | "mix">("imc");
+  const [tab, setTab] = useState<"imc" | "weekly" | "mix" | "sow">("imc");
   useEffect(() => {
     try {
       const v = localStorage.getItem("productTab");
-      if (v === "weekly" || v === "imc" || v === "mix") setTab(v);
+      if (v === "weekly" || v === "imc" || v === "mix" || v === "sow") setTab(v);
     } catch {}
   }, []);
-  const pick = (v: "imc" | "weekly" | "mix") => {
+  const pick = (v: "imc" | "weekly" | "mix" | "sow") => {
     setTab(v);
     try {
       localStorage.setItem("productTab", v);
@@ -29,12 +30,13 @@ export default function ProductTabs() {
             ["imc", "IMC 현황"],
             ["weekly", "주간데이터"],
             ["mix", "구성비"],
+            ["sow", "SOW"],
           ] as const
         }
         active={tab}
         onPick={pick}
       />
-      {tab === "imc" ? <PromoReportPanel /> : tab === "weekly" ? <WeeklyProductPanel /> : <CategoryMixPanel />}
+      {tab === "imc" ? <PromoReportPanel /> : tab === "weekly" ? <WeeklyProductPanel /> : tab === "sow" ? <SowReviewPanel /> : <CategoryMixPanel />}
     </>
   );
 }

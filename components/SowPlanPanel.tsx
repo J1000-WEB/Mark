@@ -16,7 +16,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slic
 export default function SowPlanPanel() {
   const [events, setEvents] = useState<any[]>([]);
   const [id, setId] = useState("");
-  const [opt, setOpt] = useState({ basis: "forecast", ratio: 1.75, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "", shipRound: "1" });
+  const [opt, setOpt] = useState({ basis: "forecast", ratio: 1.75, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "", shipRound: "1", layout: "sku", tol: 20 });
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -36,13 +36,15 @@ export default function SowPlanPanel() {
       .catch(() => setError("행사 목록을 못 불러왔어요."));
   }, []);
 
-  const run = () => {
+  const run = (over?: Partial<typeof opt>) => {
+    const o = { ...opt, ...(over || {}) };
+    if (over) setOpt(o);
     if (!id) return;
     setLoading(true);
     setError("");
-    const qs = new URLSearchParams({ plan: id, basis: opt.basis, ratio: String(opt.ratio), perSku: String(opt.perSku), deskSku: String(opt.deskSku), hangerSku: String(opt.hangerSku) });
-    if (opt.desks !== "") qs.set("desks", opt.desks);
-    if (opt.hangers !== "") qs.set("hangers", opt.hangers);
+    const qs = new URLSearchParams({ plan: id, basis: o.basis, ratio: String(o.ratio), perSku: String(o.perSku), deskSku: String(o.deskSku), hangerSku: String(o.hangerSku), layout: o.layout, tol: String(o.tol) });
+    if (o.desks !== "") qs.set("desks", o.desks);
+    if (o.hangers !== "") qs.set("hangers", o.hangers);
     fetch(`/api/sow?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => (j.ok ? setData(j) : setError(j.error || "계산하지 못했어요.")))
@@ -109,8 +111,20 @@ export default function SowPlanPanel() {
             <input className={inp} type="number" value={opt.hangerSku} onChange={(e) => setOpt({ ...opt, hangerSku: Number(e.target.value) })} />바코드
             <span className="text-slate-400">바코드당</span>
             <input className={inp} type="number" value={opt.perSku} onChange={(e) => setOpt({ ...opt, perSku: Number(e.target.value) })} />장
+            <span className="ml-2 text-slate-400">배치</span>
+            {([["sku", "SKU 우선"], ["price", "가격 우선"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setOpt({ ...opt, layout: k })} className={`rounded-lg px-2 py-1 font-black ${opt.layout === k ? "bg-slate-900 text-white" : "bg-white text-slate-500 border border-slate-200"}`}>
+                {l}
+              </button>
+            ))}
+            {opt.layout === "price" && (
+              <>
+                <span className="text-slate-400">바코드 초과 허용</span>
+                <input className={inp} type="number" step="5" value={opt.tol} onChange={(e) => setOpt({ ...opt, tol: Number(e.target.value) })} />%
+              </>
+            )}
           </div>
-          <button type="button" onClick={run} disabled={loading || !id} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40">
+          <button type="button" onClick={() => run()} disabled={loading || !id} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40">
             {loading ? "계산 중…" : "계획 계산"}
           </button>
           {data && (
@@ -263,7 +277,7 @@ export default function SowPlanPanel() {
               )}
             </div>
           ))}
-          <SowLayout data={data} />
+          <SowLayout data={data} loading={loading} onMode={(layout: string) => run({ layout })} />
           <p className="text-[11px] text-slate-400">
             창고 가용 {data.inputs.warehouse} · 매장 재고 {data.inputs.storeStock} · 계절 맞는 이월 후보 {data.candidates}품번칼라 · 최근 120일 SOW {data.inputs.sowHistoryEvents}건 참고 · 계산 {Math.round(data.ms / 1000)}초
           </p>
@@ -274,7 +288,7 @@ export default function SowPlanPanel() {
 }
 
 // MARK 2026-11-24 소천님: 매대·행사 상품 레이아웃(기본 접힘) + 매장 공유용 엑셀/PDF(원가 없음) + 가격조정 양식
-function SowLayout({ data }: { data: any }) {
+function SowLayout({ data, loading, onMode }: { data: any; loading?: boolean; onMode?: (m: string) => void }) {
   const ev = data.event;
   const [saved, setSaved] = useState("");
   const layout: any[] = data.layout || [];
@@ -348,13 +362,31 @@ function SowLayout({ data }: { data: any }) {
           </span>
         ))}
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs font-bold">
+        <span className="text-slate-400">배치 기준</span>
+        {([["sku", "SKU 우선"], ["price", "가격 우선"]] as const).map(([k, l]) => (
+          <button key={k} type="button" disabled={loading} onClick={() => data.layoutMode !== k && onMode?.(k)} className={`rounded-lg px-2.5 py-1 font-black ${data.layoutMode === k ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>
+            {l}
+          </button>
+        ))}
+        <span className="text-[11px] font-normal text-slate-400">
+          {data.layoutMode === "price"
+            ? `한 칸엔 한 가격만 — 칸당 바코드를 ${data.tol}%까지 넘길 수 있고, 그래도 칸이 모자라면 바코드 적은 가격 단계를 아래 단계로 합침`
+            : "칸당 바코드 수를 지킴 — 칸이 모자라면 한 칸에 가격이 섞일 수 있음"}
+        </span>
+      </div>
+      {(data.priceMerges || []).length > 0 && (
+        <p className="mt-2 text-[11px] font-bold text-amber-600">
+          가격 우선으로 맞춘 단계: {data.priceMerges.map((m: any) => `${m.kind} ${won(m.from)}→${won(m.to)}원(${m.n}바코드)`).join(" · ")}
+        </p>
+      )}
       {layout.some((f) => f.mixed) && <p className="mt-2 text-[11px] font-bold text-amber-600">칸이 모자라 일부 매대는 가격을 섞어 배치했어요.</p>}
       <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {layout.map((f) => (
           <div key={`${f.kind}${f.no}`} className="rounded-2xl border border-slate-200 p-3">
             <p className="mb-1 flex items-baseline justify-between text-sm font-black">
               <span>{f.kind === "행거" ? "🧥" : "🧶"} {f.label}</span>
-              <span className="text-[10px] font-bold text-slate-400">{f.used}/{f.cap} 바코드</span>
+              <span className={`text-[10px] font-bold ${f.used > f.cap ? "text-amber-600" : "text-slate-400"}`}>{f.used}/{f.cap} 바코드{f.used > f.cap ? " (초과)" : ""}</span>
             </p>
             {f.items.map((it: any) => (
               <div key={`${it.style}|${it.color}`} className="flex items-center gap-2 border-t border-slate-100 py-1 text-[11px]">

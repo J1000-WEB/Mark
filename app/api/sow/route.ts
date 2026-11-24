@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       const r = await buildSowPlan({
         id: q("plan")!,
         basis: q("basis") === "target" ? "target" : "forecast",
-        ratio: num("ratio"), perSku: num("perSku"), deskSku: num("deskSku"), hangerSku: num("hangerSku"), desks: num("desks"), hangers: num("hangers"),
+        ratio: num("ratio"), perSku: num("perSku"), deskSku: num("deskSku"), hangerSku: num("hangerSku"), desks: num("desks"), hangers: num("hangers"), layoutMode: q("layout") === "price" ? "price" : "sku", tol: num("tol"),
         exclude: q("exclude") !== null ? q("exclude")!.split(",").filter(Boolean) : undefined,
       });
       return NextResponse.json({ ok: true, ...r });

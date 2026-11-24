@@ -316,6 +316,8 @@ export type SowPlanOpts = {
   hangerSku?: number; // 행거 1대 바코드 수(8)
   desks?: number; hangers?: number; // 시트 값 대신
   exclude?: string[]; // 품목 제외(기본 ACC·기타·SHOES·SWIM)
+  layoutMode?: "sku" | "price"; // 배치 기준: sku = 칸당 바코드 수 지킴(가격 섞일 수 있음) / price = 한 칸 한 가격(바코드 수 조금 넘거나 가격 단계 합침)
+  tol?: number; // 가격 우선일 때 칸당 바코드 초과 허용(%, 기본 20)
 };
 
 const HANGER_CATS = /OUTER|아우터/i; // 행거 = 아우터(코트·자켓·점퍼 등), 나머지는 매대
@@ -421,6 +423,63 @@ function layoutFixtures(items: any[], perFixture: number, count: number, kind: "
     const prices = [...new Set(f.items.map((i) => i.sowPrice))].sort((a, b) => b - a);
     return { kind, no: f.no, used: f.used, cap: perFixture, prices, label: `${kind} ${f.no} — ${prices.map((p) => `${(p / 10000).toLocaleString("ko-KR")}만원`).join("·")}`, items: f.items, mixed };
   });
+}
+
+/** 가격 우선 배치(2026-11-24 소천님): 한 칸엔 한 가격만.
+ *  ① 가격 단계마다 칸 수 = ceil(바코드 ÷ 칸당 바코드), 단 칸당 바코드를 tol% 넘겨서 한 칸 줄일 수 있으면 줄임
+ *  ② 그래도 칸이 모자라면 바코드가 가장 적은 가격 단계를 바로 아래 단계로 합침(행사가를 내림, 가장 싼 단계면 위 단계로) — 칸 수에 맞을 때까지
+ *  ③ 단계 하나만 남았는데도 모자라면 칸 수에 맞춰 바코드를 나눠 담음(칸당 바코드 초과) */
+function layoutFixturesByPrice(items: any[], perFixture: number, count: number, kind: "매대" | "행거", tolPct: number) {
+  const tol = Math.max(0, tolPct) / 100;
+  const groups = new Map<number, any[]>();
+  for (const it of items) (groups.get(it.sowPrice) || groups.set(it.sowPrice, []).get(it.sowPrice)!).push(it);
+  const n = (g: any[]) => g.reduce((s, it) => s + it.skus.length, 0);
+  const need = (g: any[], withTol: boolean) => {
+    const c = n(g);
+    let k = Math.max(1, Math.ceil(c / perFixture));
+    if (withTol) while (k > 1 && c <= (k - 1) * perFixture * (1 + tol)) k--;
+    return k;
+  };
+  const total = (withTol: boolean) => [...groups.values()].reduce((s, g) => s + need(g, withTol), 0);
+  const merged: { from: number; to: number; n: number }[] = [];
+  let withTol = total(false) > count;
+  while (withTol && total(true) > count && groups.size > 1) {
+    const tiers = [...groups.keys()].sort((a, b) => b - a);
+    const small = tiers.reduce((m, p) => (n(groups.get(p)!) < n(groups.get(m)!) ? p : m), tiers[0]);
+    const i = tiers.indexOf(small);
+    const to = i < tiers.length - 1 ? tiers[i + 1] : tiers[i - 1];
+    for (const it of groups.get(small)!) {
+      it.priceWhy = `${it.priceWhy || ""} → ${to.toLocaleString("ko-KR")}로 맞춤(가격 우선 배치)`;
+      it.sowPrice = to;
+      it.discount = (it.current || it.consumer) ? 1 - to / (it.current || it.consumer) : null;
+    }
+    merged.push({ from: small, to, n: n(groups.get(small)!) });
+    groups.get(to)!.push(...groups.get(small)!);
+    groups.delete(small);
+  }
+  const tiers = [...groups.keys()].sort((a, b) => b - a);
+  const ks = tiers.map((p) => need(groups.get(p)!, withTol));
+  // 단계 하나로도 모자라면 칸 수만큼으로 줄임(남는 칸이 있으면 큰 단계에 칸을 더 줘서 바코드 수를 맞춤)
+  while (ks.reduce((a, b) => a + b, 0) > count && ks.some((k) => k > 1)) ks[ks.indexOf(Math.max(...ks))]--;
+  const fx: any[] = [];
+  tiers.forEach((p, ti) => {
+    const g = groups.get(p)!.slice().sort((a, b) => (b.sowQty || 0) - (a.sowQty || 0));
+    const k = ks[ti];
+    const per = Math.ceil(n(g) / k);
+    let cur: any = null;
+    for (const it of g) {
+      if (!cur || (cur.used && cur.used + it.skus.length > per && fx.filter((f) => f.price === p).length < k)) {
+        cur = { no: fx.length + 1, items: [], used: 0, price: p };
+        fx.push(cur);
+      }
+      cur.items.push(it);
+      cur.used += it.skus.length;
+    }
+  });
+  return {
+    merged,
+    fx: fx.map((f) => ({ kind, no: f.no, used: f.used, cap: perFixture, prices: [f.price], label: `${kind} ${f.no} — ${(f.price / 10000).toLocaleString("ko-KR")}만원`, items: f.items, mixed: false, over: f.used > perFixture })),
+  };
 }
 
 export async function buildSowPlan(o: SowPlanOpts) {
@@ -630,10 +689,17 @@ export async function buildSowPlan(o: SowPlanOpts) {
     }
   }
   const byPrice = (a: any, b: any) => b.sowPrice - a.sowPrice || (b.sowQty || 0) - (a.sowQty || 0);
-  const layout = [
-    ...layoutFixtures(picked.filter((p) => p.slot === "hanger").sort(byPrice), hangerSku, hangers, "행거"),
-    ...layoutFixtures(picked.filter((p) => p.slot === "desk").sort(byPrice), deskSku, desks, "매대"),
-  ].map((f) => ({ ...f, items: f.items.map((p: any) => ({ style: p.style, color: p.color, name: p.name, colorName: p.colorName, cat: p.cat, bok: p.bok, season: p.season, consumer: p.consumer, current: p.current, sowPrice: p.sowPrice, discount: p.discount, qty: p.qty, sizes: p.skus.map((k: any) => ({ size: k.size, qty: k.qty, barcode: k.barcode })) })) }));
+  const layoutMode = o.layoutMode === "price" ? "price" : "sku";
+  const tol = o.tol ?? 20;
+  const priceMerges: { kind: string; from: number; to: number; n: number }[] = [];
+  const lay = (slot: "hanger" | "desk", per: number, cnt: number, kind: "매대" | "행거") => {
+    const its = picked.filter((p) => p.slot === slot).sort(byPrice);
+    if (layoutMode === "sku") return layoutFixtures(its, per, cnt, kind);
+    const r = layoutFixturesByPrice(its, per, cnt, kind, tol);
+    priceMerges.push(...r.merged.map((x) => ({ kind, ...x })));
+    return r.fx;
+  };
+  const layout = [...lay("hanger", hangerSku, hangers, "행거"), ...lay("desk", deskSku, desks, "매대")].map((f) => ({ ...f, items: f.items.map((p: any) => ({ style: p.style, color: p.color, name: p.name, colorName: p.colorName, cat: p.cat, bok: p.bok, season: p.season, consumer: p.consumer, current: p.current, sowPrice: p.sowPrice, discount: p.discount, qty: p.qty, sizes: p.skus.map((k: any) => ({ size: k.size, qty: k.qty, barcode: k.barcode })) })) }));
   const priceList = [...new Map(picked.map((p) => [p.style, p])).values()]
     .sort((a, b) => b.sowPrice - a.sowPrice || a.style.localeCompare(b.style))
     .map((p) => ({ style: p.style, name: p.name, consumer: p.consumer, current: p.current, sowPrice: p.sowPrice, discount: p.discount, cat: p.cat, why: p.priceWhy }));
@@ -650,6 +716,9 @@ export async function buildSowPlan(o: SowPlanOpts) {
     plan: { amt, qty, baseAmt, baseQty: baseQtySum, addAmt: amt - baseAmt, addQty: qty - baseQtySum, consumerAmt: picked.reduce((s, p) => s + p.consumerAmt, 0), styles: picked.length, ratioToForecast: forecast ? amt / forecast : 0, ratioToTarget: ev.target ? amt / ev.target : 0 },
     picked,
     layout,
+    layoutMode,
+    tol,
+    priceMerges,
     priceList,
     sowValue,
     candidates: ranked.length,

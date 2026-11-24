@@ -358,14 +358,16 @@ export async function appendSowPriceHistory(rows: { date: string; store: string;
 }
 
 /** 행사가 제안: ① 지난 SOW 때 같은 품번 행사가(가장 최근) ② 없으면 소비자가 × 0.54를 가장 가까운 단계로(현재 판매가보다 높으면 그 아래 단계) */
+// ⚠ 팀 가격조정 파일의 "소비자가"는 PIP 판매가(현재 조정된 가격)와 같음(예: WBE3L10511 214,000 = PIP 판매가, 최초 TAG는 269,000) → 기준 = 현재 판매가
 function suggestPrice(consumer: number, current: number, hist?: { price: number; date: string; store: string }) {
   if (hist && hist.price > 0) return { price: hist.price, why: `지난 행사가(${hist.store} ${hist.date.slice(5)})` };
-  if (!consumer) return { price: current || 0, why: "소비자가 없음" };
-  const target = consumer * SOW_PRICE_RATIO;
+  const base = current || consumer;
+  if (!base) return { price: 0, why: "가격 정보 없음" };
+  const target = base * SOW_PRICE_RATIO;
   let best = SOW_PRICE_TIERS[0];
   for (const x of SOW_PRICE_TIERS) if (Math.abs(x - target) < Math.abs(best - target)) best = x;
   if (current > 0 && best > current) best = [...SOW_PRICE_TIERS].reverse().find((x) => x <= current) || current;
-  return { price: best, why: `소비자가×${SOW_PRICE_RATIO} → ${best.toLocaleString("ko-KR")} 단계` };
+  return { price: best, why: `현재가×${SOW_PRICE_RATIO} → ${best.toLocaleString("ko-KR")} 단계` };
 }
 
 /** 매대·행거 배치: 행사가 높은 순으로 품번칼라를 칸(매대 20·행거 8 바코드)에 채움. 가격이 바뀔 때 지금 칸이 절반 이상 찼으면 새 칸 → "3만원 매대"처럼 가격을 맞춤.
@@ -387,11 +389,33 @@ function layoutFixtures(items: any[], perFixture: number, count: number, kind: "
     }
     return fx;
   };
+  // 칸이 모자라면 ① 가격 순서는 지키되 앞 칸 빈자리부터 채우고(first-fit) ② 그래도 모자라면 품번칼라 사이즈를 나눠 빈자리에 넣음
+  const firstFit = (split: boolean) => {
+    const fx: { no: number; items: any[]; used: number }[] = [];
+    for (const it of items) {
+      let rest = it.skus;
+      while (rest.length) {
+        let f = fx.find((x) => x.used + rest.length <= perFixture);
+        if (!f && split) f = fx.find((x) => x.used < perFixture && fx.length >= count);
+        if (!f) {
+          f = { no: fx.length + 1, items: [], used: 0 };
+          fx.push(f);
+        }
+        const take = Math.min(rest.length, perFixture - f.used);
+        const part = take === rest.length ? { ...it, skus: rest } : { ...it, skus: rest.slice(0, take), qty: rest.slice(0, take).reduce((a: number, k: any) => a + k.qty, 0) };
+        f.items.push(part);
+        f.used += take;
+        rest = rest.slice(take);
+      }
+    }
+    return fx;
+  };
   let fx = pack(true);
   let mixed = false;
   if (fx.length > count) {
-    fx = pack(false);
+    fx = firstFit(false);
     mixed = true;
+    if (fx.length > count) fx = firstFit(true);
   }
   return fx.map((f) => {
     const prices = [...new Set(f.items.map((i) => i.sowPrice))].sort((a, b) => b - a);
@@ -588,7 +612,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     p.priceWhy = sg.why;
     p.consumer = k0.consumer || 0;
     p.current = k0.price || 0;
-    p.discount = p.consumer ? 1 - p.sowPrice / p.consumer : null;
+    p.discount = (p.current || p.consumer) ? 1 - p.sowPrice / (p.current || p.consumer) : null; // 현재가 대비
   }
   // 바코드가 아주 적은 가격 단계(3개 미만)는 바로 아래 단계로 합쳐 가격 종류를 줄임(지난 행사가 있는 품번은 그대로)
   for (const slot of ["desk", "hanger"] as const) {
@@ -601,7 +625,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
       if (lower) {
         p.sowPrice = lower;
         p.priceWhy += ` → ${lower.toLocaleString("ko-KR")}로 맞춤(가격 종류 줄이기)`;
-        p.discount = p.consumer ? 1 - lower / p.consumer : null;
+        p.discount = (p.current || p.consumer) ? 1 - lower / (p.current || p.consumer) : null;
       }
     }
   }

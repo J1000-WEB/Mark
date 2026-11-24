@@ -218,7 +218,7 @@ export default function SowPlanPanel() {
                         <th className="px-1 text-left">사이즈별 투입(창고 가용)</th>
                         <th className="px-1 text-right">투입</th>
                         <th className="px-1 text-right">금액</th>
-                        <th className="px-1 text-right" title="소비자가 → 행사가 제안(할인율)">행사가 제안</th>
+                        <th className="px-1 text-right" title="현재가(PIP 판매가) → 행사가 제안(현재가 대비 할인율)">행사가 제안</th>
                         <th className="px-1 text-right" title="최근 120일 SOW 행사 기간 판매(전 점포)">SOW판매</th>
                         <th className="px-1 text-right" title="최근 28일 오프라인 판매">28일판매</th>
                       </tr>
@@ -250,7 +250,7 @@ export default function SowPlanPanel() {
                           <td className="px-1 text-right font-black tabular-nums">{p.qty}</td>
                           <td className="px-1 text-right tabular-nums">{man(p.amt)}</td>
                           <td className="px-1 text-right tabular-nums" title={p.priceWhy}>
-                            <span className="text-slate-400 line-through">{won(p.consumer)}</span> <b className="text-rose-600">{won(p.sowPrice)}</b>
+                            <span className="text-slate-400 line-through">{won(p.current || p.consumer)}</span> <b className="text-rose-600">{won(p.sowPrice)}</b>
                             {p.discount != null && <span className="text-slate-400"> ({Math.round(p.discount * 100)}%)</span>}
                           </td>
                           <td className="px-1 text-right tabular-nums">{p.sowQty || "-"}</td>
@@ -289,24 +289,24 @@ function SowLayout({ data }: { data: any }) {
     return [...m.entries()].sort((a, b) => b[0] - a[0]);
   }, [layout]);
   const title = `${ev.store} SOW ${md(ev.start)}~${md(ev.end)}`;
-  const priceRows = (data.priceList || []).map((p: any, i: number) => [i + 1, p.style, p.name, "*", "전체", p.consumer, p.sowPrice, "할인", p.consumer ? Math.round((1 - p.sowPrice / p.consumer) * 100) : "", `${ev.store} 행사`]);
+  const priceRows = (data.priceList || []).map((p: any, i: number) => [i + 1, p.style, p.name, "*", "전체", p.current || p.consumer, p.sowPrice, "할인", (p.current || p.consumer) ? Math.round((1 - p.sowPrice / (p.current || p.consumer)) * 100) : "", `${ev.store} 행사`]);
   const layoutRows = () => {
     const rows: any[][] = [];
-    for (const f of layout) for (const it of f.items) for (const z of it.sizes) rows.push([f.kind, f.no, it.sowPrice, it.style, it.name, it.color, it.colorName, z.size, z.qty, it.consumer, it.sowPrice, it.discount != null ? Math.round(it.discount * 100) : ""]);
+    for (const f of layout) for (const it of f.items) for (const z of it.sizes) rows.push([f.kind, f.no, it.sowPrice, it.style, it.name, it.color, it.colorName, z.size, z.qty, it.current || it.consumer, it.sowPrice, it.discount != null ? Math.round(it.discount * 100) : ""]);
     return rows;
   };
   const excel = async () => {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["구분", "번호", "매대가격", "품번", "품명", "칼라", "칼라명", "사이즈", "수량", "소비자가", "행사가", "할인율(%)"], ...layoutRows()]), "매대레이아웃");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["구분", "번호", "매대가격", "품번", "품명", "칼라", "칼라명", "사이즈", "수량", "현재가", "행사가", "할인율(%)"], ...layoutRows()]), "매대레이아웃");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["No", "스타일", "스타일명", "칼라", "칼라명", "소비자가", "판매단가", "판매유형", "할인율", "상세비고"], ...priceRows]), "가격조정");
     XLSX.writeFile(wb, `SOW레이아웃_${ev.store}_${ev.start}.xlsx`);
   };
   const pdf = () => {
     const esc = (x: any) => String(x ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" } as any)[c]);
     const cards = layout
-      .map((f) => `<div class="fx"><h3>${esc(f.label)} <small>${f.used}/${f.cap} 바코드</small></h3><table><tr><th>품번</th><th>품명</th><th>칼라</th><th>사이즈(수량)</th><th>소비자가</th><th>행사가</th></tr>${f.items
-        .map((it: any) => `<tr><td>${esc(it.style)}</td><td>${esc(it.name)}</td><td>${esc(it.color)} ${esc(it.colorName)}</td><td>${it.sizes.map((z: any) => `${esc(z.size)}(${z.qty})`).join(" ")}</td><td class="r s">${won(it.consumer)}</td><td class="r b">${won(it.sowPrice)}</td></tr>`)
+      .map((f) => `<div class="fx"><h3>${esc(f.label)} <small>${f.used}/${f.cap} 바코드</small></h3><table><tr><th>품번</th><th>품명</th><th>칼라</th><th>사이즈(수량)</th><th>현재가</th><th>행사가</th></tr>${f.items
+        .map((it: any) => `<tr><td>${esc(it.style)}</td><td>${esc(it.name)}</td><td>${esc(it.color)} ${esc(it.colorName)}</td><td>${it.sizes.map((z: any) => `${esc(z.size)}(${z.qty})`).join(" ")}</td><td class="r s">${won(it.current || it.consumer)}</td><td class="r b">${won(it.sowPrice)}</td></tr>`)
         .join("")}</table></div>`)
       .join("");
     const tierHtml = tiers.map(([p, v]) => `<span>${won(p)}원 · ${v.styles.size}품번 · ${v.qty}장</span>`).join("");
@@ -326,7 +326,7 @@ function SowLayout({ data }: { data: any }) {
   };
   const savePrices = async () => {
     if (!confirm(`${ev.store} 행사가 ${data.priceList.length}품번을 가격조정 이력에 저장할까요? 다음 행사 제안 때 같은 품번은 이 가격을 먼저 써요.`)) return;
-    const r = await fetch("/api/sow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prices: data.priceList.map((p: any) => ({ date: ev.start, store: ev.store, style: p.style, name: p.name, consumer: p.consumer, price: p.sowPrice })) }) }).then((x) => x.json()).catch(() => null);
+    const r = await fetch("/api/sow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prices: data.priceList.map((p: any) => ({ date: ev.start, store: ev.store, style: p.style, name: p.name, consumer: p.current || p.consumer, price: p.sowPrice })) }) }).then((x) => x.json()).catch(() => null);
     setSaved(r?.ok ? `저장했어요(${r.saved}품번)` : "저장 실패");
   };
   return (
@@ -339,7 +339,7 @@ function SowLayout({ data }: { data: any }) {
         <button type="button" onClick={pdf} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black">🖨 PDF(인쇄)</button>
         <button type="button" onClick={savePrices} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black">💾 행사가 이력에 저장</button>
         {saved && <span className="text-xs font-bold text-emerald-600">{saved}</span>}
-        <span className="text-[11px] text-slate-400">행사가 = 지난 SOW 때 같은 품번 가격 → 없으면 소비자가×0.54를 팀 가격 단계(1.6·1.8·2·2.5·3·3.5·4·4.9·5.9·7.5·8.8·9.9만…)로 · 바코드 3개 미만 단계는 아래 단계로 합침</span>
+        <span className="text-[11px] text-slate-400">행사가 = 지난 SOW 때 같은 품번 가격 → 없으면 현재가(PIP 판매가)×0.54를 팀 가격 단계(1.6·1.8·2·2.5·3·3.5·4·4.9·5.9·7.5·8.8·9.9만…)로 · 바코드 3개 미만 단계는 아래 단계로 합침</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
         {tiers.map(([p, v]) => (
@@ -364,7 +364,7 @@ function SowLayout({ data }: { data: any }) {
                   <div className="text-[10px] text-slate-400">{it.style} · {it.color} {it.colorName} · {it.sizes.map((z: any) => `${z.size}(${z.qty})`).join(" ")}</div>
                 </div>
                 <div className="whitespace-nowrap text-right">
-                  <div className="text-[10px] text-slate-400 line-through">{won(it.consumer)}</div>
+                  <div className="text-[10px] text-slate-400 line-through">{won(it.current || it.consumer)}</div>
                   <div className="font-black text-rose-600">{won(it.sowPrice)}</div>
                 </div>
               </div>

@@ -338,14 +338,25 @@ function baselineFor(dm: Map<string, number> | undefined, date: string, before: 
 export async function buildSowPlan(o: SowPlanOpts) {
   const t0 = Date.now();
   const today = kstToday();
-  const [all, salesRows, info, wh, storeStock, pip] = await Promise.all([
+  const [all, salesRows, info, wh, storeStock, pip, refs] = await Promise.all([
     readSowEvents(),
     readSalesSummaryRowsForReports(),
     readStyleInfo().catch(() => ({} as Record<string, string[]>)),
     readWarehouseStockSnapshot(),
     readStoreStockSnapshot().catch(() => ({ rows: [] as any[], meta: null })),
     readPipInfo(),
+    readProductRefs().catch(() => [] as any[]),
   ]);
+  // 2026-11-24 소천님: 러닝의 예전(구)품번도 출고 후보에서 빼야 함(예: WBD3L04501·WBD3L04503 = GF7LKC501·503의 구품번).
+  // 러닝 묶음 = 상품_기준표 재런칭(새↔예전) + 보관 상품정보 P열 통합품번이 자기와 다른 품번·그 통합품번
+  const runningFamily = new Set<string>(buildRefMaps(refs as any).relaunch);
+  for (const [st, v] of Object.entries(info)) {
+    const main = up(v[7]);
+    if (main && main !== st) {
+      runningFamily.add(st);
+      runningFamily.add(main);
+    }
+  }
   const ev = all.find((e) => e.id === String(o.id));
   if (!ev) throw new Error("행사를 찾지 못했어요(세부일정 행 번호 확인).");
   const match = buildStoreMatcher(salesRows as any);
@@ -419,7 +430,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     const st = up(r.styleCode), co = up(r.color), sz = normSize(r.size);
     const p = parseStyleCode(st, ref.getFullYear());
     // 러닝(신품번 시즌자리 5~8)은 계속 파는 상품이라 이월 행사 후보에서 뺌(소천님: 계절 맞는 이월만)
-    if (!p || p.isRunning || !isCarryover(p, ref) || !isSeasonAppropriateNow(p.season, ref)) continue;
+    if (!p || p.isRunning || runningFamily.has(st) || !isCarryover(p, ref) || !isSeasonAppropriateNow(p.season, ref)) continue;
     const inf = info[st] || [];
     const cat = up(inf[0]);
     if (exclude.has(cat)) continue;

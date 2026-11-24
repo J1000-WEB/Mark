@@ -16,7 +16,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slic
 export default function SowPlanPanel() {
   const [events, setEvents] = useState<any[]>([]);
   const [id, setId] = useState("");
-  const [opt, setOpt] = useState({ basis: "forecast", ratio: 1.75, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "" });
+  const [opt, setOpt] = useState({ basis: "forecast", ratio: 1.75, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "", shipRound: "1" });
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -67,7 +67,7 @@ export default function SowPlanPanel() {
     if (!data) return;
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    const up = [["채널", "바코드", "출고차수", "의뢰수량", "대분류", "비고"], ...data.upload.map((r: any) => [r.채널, r.바코드, r.출고차수, r.의뢰수량, r.대분류, r.비고])];
+    const up = [["채널", "바코드", "출고차수", "의뢰수량", "대분류", "비고"], ...data.upload.map((r: any) => [r.채널, r.바코드, opt.shipRound || r.출고차수, r.의뢰수량, r.대분류, r.비고])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(up), "출고업로드");
     const det = [["구분", "품번", "품명", "칼라", "칼라명", "품목", "복종", "시즌", "사이즈", "바코드", "투입수량", "기초", "추가", "창고가용(오프)", "매장재고", "판매가", "투입금액", "과거SOW판매(품번칼라)", "최근28일판매(품번칼라)"]];
     for (const p of data.picked) for (const k of p.skus) det.push([p.slot === "hanger" ? "행거" : "매대", p.style, p.name, p.color, p.colorName, p.cat, p.bok, p.season, k.size, k.barcode, k.qty, k.baseQty, k.qty - k.baseQty, k.avail, k.storeStock, k.price, k.qty * k.price, p.sowQty, p.recentQty]);
@@ -114,11 +114,15 @@ export default function SowPlanPanel() {
             {loading ? "계산 중…" : "계획 계산"}
           </button>
           {data && (
-            <button type="button" onClick={download} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black">⬇ 출고업로드 엑셀</button>
+            <span className="flex items-center gap-1 text-xs font-bold">
+              <span className="text-slate-400">출고차수</span>
+              <input className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-black" value={opt.shipRound} onChange={(e) => setOpt({ ...opt, shipRound: e.target.value.trim() })} />
+              <button type="button" onClick={download} className="ml-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black">⬇ 출고업로드 엑셀</button>
+            </span>
           )}
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          매대 1대 = {opt.deskSku} 바코드, 행거 1대 = {opt.hangerSku} 바코드(아우터는 행거, 나머지는 매대), 바코드당 {opt.perSku}장 = 기초 재고(창고 가용이 적으면 있는 만큼), 투입 목표(현재 판매가 기준)에 못 미치면 같은 바코드에 수량을 더 얹음(파란 +숫자) · 계절 맞는 이월만(ACC·기타·SHOES·SWIM 제외) ·
+          매대 1대 = {opt.deskSku} 바코드, 행거 1대 = {opt.hangerSku} 바코드(아우터는 행거, 나머지는 매대), 바코드당 {opt.perSku}장 = 기초 재고(창고 가용이 적으면 있는 만큼), 투입 목표(현재 판매가 기준)에 못 미치면 같은 바코드에 수량을 더 얹음(파란 +숫자) · 계절 맞는 이월만(러닝(신품번 5~8과 그 구품번)·ACC·기타·SHOES·SWIM 제외) ·
           순위 = 최근 120일 SOW 행사 판매 → 최근 28일 오프라인 판매 → 창고 가용
         </p>
       </div>

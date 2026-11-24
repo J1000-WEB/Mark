@@ -84,17 +84,17 @@ async function writeCache(ws: string, days: number, s: WeekAgg, row?: number) {
 }
 
 let infoCache: { at: number; map: Record<string, string[]> } | null = null;
-/** 스타일 → [품목, 복종, 아이템, 년도, 성별, 스타일명, 시즌] */
+/** 스타일 → [품목, 복종, 아이템, 년도, 성별, 스타일명, 시즌, 통합품번] */
 export async function readStyleInfo(): Promise<Record<string, string[]>> {
   if (infoCache && Date.now() - infoCache.at < 3600 * 1000) return infoCache.map;
-  const vals = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, "상품정보", "B:N");
+  const vals = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, "상품정보", "B:P");
   const map: Record<string, string[]> = {};
   for (let i = 1; i < vals.length; i++) {
     const r = vals[i] || [];
     const st = String(r[0] ?? "").trim().toUpperCase();
     if (!st) continue;
     const t = (j: number) => String(r[j] ?? "").trim();
-    const v = [t(11), t(12), t(7), t(5), t(10), t(1), t(6)];
+    const v = [t(11), t(12), t(7), t(5), t(10), t(1), t(6), t(14).toUpperCase()]; // 7 = 통합품번(P, ERP main_sty_cd)
     const cur = map[st];
     if (!cur) map[st] = v;
     else v.forEach((x, j) => !cur[j] && x && (cur[j] = x)); // 빈 칸은 다른 줄 값으로

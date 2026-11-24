@@ -390,7 +390,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
   const baseSum = days.reduce((a, x) => a + x.base, 0);
   const forecast = baseSum * lift;
 
-  const ratio = o.ratio && o.ratio > 0 ? o.ratio : 2;
+  const ratio = o.ratio && o.ratio > 0 ? o.ratio : 1.75; // 2026-11-24 소천님: 재고 배수 1.75배
   const basis = o.basis === "target" && ev.target > 0 ? "target" : "forecast";
   const goalAmt = (basis === "target" ? ev.target : forecast) * ratio;
 
@@ -411,7 +411,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     const k = `${up(r.styleCode)}|${up(r.color)}|${normSize(r.size)}`;
     storeHave.set(k, (storeHave.get(k) || 0) + Number(r.stock || 0));
   }
-  type Sku = { style: string; color: string; size: string; barcode: string; avail: number; qty: number; price: number; consumer: number; storeStock: number };
+  type Sku = { style: string; color: string; size: string; barcode: string; avail: number; qty: number; baseQty: number; price: number; consumer: number; storeStock: number };
   const groups = new Map<string, { style: string; color: string; name: string; colorName: string; cat: string; bok: string; item: string; season: string; slot: "desk" | "hanger"; skus: Sku[]; avail: number }>();
   for (const r of wh.rows as any[]) {
     const avail = Number(r.offlineStock || 0);
@@ -426,7 +426,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     const k = `${st}|${co}`;
     const pi = pip.get(`${st}|${co}|${sz}`) || pip.get(`${st}|${co}|`) || pip.get(`${st}||`);
     const g = groups.get(k) || { style: st, color: co, name: pi?.name || inf[5] || "", colorName: pi?.colorName || "", cat: inf[0] || "", bok: inf[1] || "", item: inf[2] || "", season: `${String(p.year).slice(2)} ${SEASON_LABEL[p.season]}`, slot: HANGER_CATS.test(cat) ? "hanger" : "desk", skus: [], avail: 0 };
-    g.skus.push({ style: st, color: co, size: sz, barcode: t(r.barcode), avail, qty: Math.min(perSku, avail), price: pi?.price || 0, consumer: pi?.consumer || 0, storeStock: storeHave.get(`${st}|${co}|${sz}`) || 0 });
+    g.skus.push({ style: st, color: co, size: sz, barcode: t(r.barcode), avail, qty: Math.min(perSku, avail), baseQty: Math.min(perSku, avail), price: pi?.price || 0, consumer: pi?.consumer || 0, storeStock: storeHave.get(`${st}|${co}|${sz}`) || 0 });
     g.avail += avail;
     groups.set(k, g);
   }
@@ -475,6 +475,29 @@ export async function buildSowPlan(o: SowPlanOpts) {
     picked.push({ ...x.g, skus, sowQty: x.sow, recentQty: x.rec, qty: q, amt: a, consumerAmt: skus.reduce((s, k) => s + k.qty * k.consumer, 0) });
     if (used.desk >= cap.desk && used.hanger >= cap.hanger) break;
   }
+  // 2026-11-24 소천님: 칸×바코드당 장수 = 기초 재고. 그래도 투입 목표(현재 판매가 기준)에 못 미치면 같은 바코드를 유지한 채
+  // 수량을 1장씩 더 얹음(순위 높은 품번칼라부터 돌아가며, 창고 가용까지).
+  const baseAmt = amt, baseQtySum = qty;
+  if (goalAmt > 0 && amt < goalAmt) {
+    let progressed = true;
+    while (amt < goalAmt && progressed) {
+      progressed = false;
+      for (const p of picked) {
+        for (const k of p.skus as Sku[]) {
+          if (amt >= goalAmt) break;
+          if (k.qty >= k.avail || !k.price) continue;
+          k.qty += 1;
+          p.qty += 1;
+          p.amt += k.price;
+          p.consumerAmt += k.consumer;
+          amt += k.price;
+          qty += 1;
+          progressed = true;
+        }
+        if (amt >= goalAmt) break;
+      }
+    }
+  }
   picked.sort((a, b) => (a.slot === b.slot ? 0 : a.slot === "hanger" ? -1 : 1));
   const store = m;
   const upload = picked.flatMap((p) => p.skus.map((k: Sku) => ({ 채널: store?.code || "", 바코드: k.barcode, 출고차수: "1", 의뢰수량: k.qty, 대분류: "", 비고: `SOW ${ev.start.slice(5)}~${ev.end.slice(5)} ${p.slot === "hanger" ? "행거" : "매대"}` })));
@@ -485,7 +508,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     forecast: { baseSum, lift, liftAll, sameStoreLifts: sameStore, lifts: lifts.sort((a, b) => (a.start < b.start ? 1 : -1)).slice(0, 30), days, amount: forecast },
     basis, ratio, goalAmt,
     capacity: { desks, hangers, deskSku, hangerSku, perSku, desk: cap.desk, hanger: cap.hanger, usedDesk: used.desk, usedHanger: used.hanger },
-    plan: { amt, qty, consumerAmt: picked.reduce((s, p) => s + p.consumerAmt, 0), styles: picked.length, ratioToForecast: forecast ? amt / forecast : 0, ratioToTarget: ev.target ? amt / ev.target : 0 },
+    plan: { amt, qty, baseAmt, baseQty: baseQtySum, addAmt: amt - baseAmt, addQty: qty - baseQtySum, consumerAmt: picked.reduce((s, p) => s + p.consumerAmt, 0), styles: picked.length, ratioToForecast: forecast ? amt / forecast : 0, ratioToTarget: ev.target ? amt / ev.target : 0 },
     picked,
     candidates: ranked.length,
     upload,

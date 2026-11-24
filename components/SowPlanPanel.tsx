@@ -16,7 +16,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slic
 export default function SowPlanPanel() {
   const [events, setEvents] = useState<any[]>([]);
   const [id, setId] = useState("");
-  const [opt, setOpt] = useState({ basis: "forecast", ratio: 2, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "" });
+  const [opt, setOpt] = useState({ basis: "forecast", ratio: 1.75, perSku: 5, deskSku: 20, hangerSku: 8, desks: "", hangers: "" });
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -69,8 +69,8 @@ export default function SowPlanPanel() {
     const wb = XLSX.utils.book_new();
     const up = [["채널", "바코드", "출고차수", "의뢰수량", "대분류", "비고"], ...data.upload.map((r: any) => [r.채널, r.바코드, r.출고차수, r.의뢰수량, r.대분류, r.비고])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(up), "출고업로드");
-    const det = [["구분", "품번", "품명", "칼라", "칼라명", "품목", "복종", "시즌", "사이즈", "바코드", "투입수량", "창고가용(오프)", "매장재고", "판매가", "투입금액", "과거SOW판매(품번칼라)", "최근28일판매(품번칼라)"]];
-    for (const p of data.picked) for (const k of p.skus) det.push([p.slot === "hanger" ? "행거" : "매대", p.style, p.name, p.color, p.colorName, p.cat, p.bok, p.season, k.size, k.barcode, k.qty, k.avail, k.storeStock, k.price, k.qty * k.price, p.sowQty, p.recentQty]);
+    const det = [["구분", "품번", "품명", "칼라", "칼라명", "품목", "복종", "시즌", "사이즈", "바코드", "투입수량", "기초", "추가", "창고가용(오프)", "매장재고", "판매가", "투입금액", "과거SOW판매(품번칼라)", "최근28일판매(품번칼라)"]];
+    for (const p of data.picked) for (const k of p.skus) det.push([p.slot === "hanger" ? "행거" : "매대", p.style, p.name, p.color, p.colorName, p.cat, p.bok, p.season, k.size, k.barcode, k.qty, k.baseQty, k.qty - k.baseQty, k.avail, k.storeStock, k.price, k.qty * k.price, p.sowQty, p.recentQty]);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), "투입상세");
     const fc = [["날짜", "요일", "기준선(8주 같은요일 평균)", "예측"], ...data.forecast.days.map((d: any) => [d.date, DOW[d.dow], Math.round(d.base), Math.round(d.forecast)])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fc), "매출예측");
@@ -100,7 +100,7 @@ export default function SowPlanPanel() {
                 {b === "forecast" ? "매출 예측" : "매출 목표"}
               </button>
             ))}
-            × <input className={inp} type="number" step="0.1" value={opt.ratio} onChange={(e) => setOpt({ ...opt, ratio: Number(e.target.value) })} />배
+            × <input className={inp} type="number" step="0.05" value={opt.ratio} onChange={(e) => setOpt({ ...opt, ratio: Number(e.target.value) })} />배
             <span className="ml-2 text-slate-400">매대</span>
             <input className={inp} placeholder={ev ? String(ev.desks) : ""} value={opt.desks} onChange={(e) => setOpt({ ...opt, desks: e.target.value })} />대 ×
             <input className={inp} type="number" value={opt.deskSku} onChange={(e) => setOpt({ ...opt, deskSku: Number(e.target.value) })} />
@@ -118,7 +118,7 @@ export default function SowPlanPanel() {
           )}
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          매대 1대 = {opt.deskSku} 바코드, 행거 1대 = {opt.hangerSku} 바코드(아우터는 행거, 나머지는 매대), 바코드당 {opt.perSku}장(창고 가용이 적으면 있는 만큼) · 계절 맞는 이월만(ACC·기타·SHOES·SWIM 제외) ·
+          매대 1대 = {opt.deskSku} 바코드, 행거 1대 = {opt.hangerSku} 바코드(아우터는 행거, 나머지는 매대), 바코드당 {opt.perSku}장 = 기초 재고(창고 가용이 적으면 있는 만큼), 투입 목표(현재 판매가 기준)에 못 미치면 같은 바코드에 수량을 더 얹음(파란 +숫자) · 계절 맞는 이월만(ACC·기타·SHOES·SWIM 제외) ·
           순위 = 최근 120일 SOW 행사 판매 → 최근 28일 오프라인 판매 → 창고 가용
         </p>
       </div>
@@ -140,12 +140,12 @@ export default function SowPlanPanel() {
               <Box label="매출 예측" value={`${won(data.forecast.amount)}원`} sub={`평상시 ${man(data.forecast.baseSum)} × 증가율 ${data.forecast.lift.toFixed(2)}배`} tone="text-slate-900" />
               <Box label="매출 목표" value={ev.target ? `${won(ev.target)}원` : "-"} sub={ev.target && data.forecast.amount ? `예측 ÷ 목표 ${Math.round((data.forecast.amount / ev.target) * 100)}%` : ""} tone="text-slate-900" />
               <Box label={`투입 목표 (${data.basis === "target" ? "목표" : "예측"} × ${data.ratio}배)`} value={`${won(data.goalAmt)}원`} sub="판매가 기준" tone="text-orange-600" />
-              <Box label="계획 투입" value={`${won(data.plan.amt)}원`} sub={`${data.plan.qty.toLocaleString("ko-KR")}장 · ${data.plan.styles}품번칼라 · 예측 대비 ${Math.round(data.plan.ratioToForecast * 100)}%${ev.target ? ` · 목표 대비 ${Math.round(data.plan.ratioToTarget * 100)}%` : ""}`} tone="text-blue-600" />
+              <Box label="계획 투입" value={`${won(data.plan.amt)}원`} sub={`${data.plan.qty.toLocaleString("ko-KR")}장(기초 ${data.plan.baseQty.toLocaleString("ko-KR")} + 추가 ${data.plan.addQty.toLocaleString("ko-KR")}) · ${data.plan.styles}품번칼라 · 예측 대비 ${Math.round(data.plan.ratioToForecast * 100)}%${ev.target ? ` · 목표 대비 ${Math.round(data.plan.ratioToTarget * 100)}%` : ""}`} tone="text-blue-600" />
               <Box label="진열 사용" value={`매대 ${data.capacity.usedDesk}/${data.capacity.desk} · 행거 ${data.capacity.usedHanger}/${data.capacity.hanger}`} sub="바코드 수(사용/칸)" tone="text-slate-900" />
             </div>
             {data.plan.amt < data.goalAmt * 0.95 && (
               <p className="mt-2 text-xs font-bold text-rose-600">
-                ⚠ 진열 칸(또는 계절 맞는 이월 창고 재고)이 모자라 투입 목표의 {Math.round((data.plan.amt / Math.max(1, data.goalAmt)) * 100)}%까지만 채웠어요 — 매대·행거를 늘리거나 배수를 조정해 보세요.
+                ⚠ 기초 재고에 수량을 더 얹어도 창고 가용이 모자라 투입 목표의 {Math.round((data.plan.amt / Math.max(1, data.goalAmt)) * 100)}%까지만 채웠어요 — 매대·행거를 늘리거나 배수를 조정해 보세요.
               </p>
             )}
 
@@ -237,7 +237,7 @@ export default function SowPlanPanel() {
                             <div className="flex flex-wrap gap-1">
                               {p.skus.map((k: any) => (
                                 <span key={k.size} className={`rounded border px-1 ${k.qty < data.capacity.perSku ? "border-amber-300 bg-amber-50" : "border-slate-200"}`} title={`바코드 ${k.barcode} · 매장재고 ${k.storeStock}`}>
-                                  {k.size} <b>{k.qty}</b><span className="text-slate-400">({k.avail})</span>
+                                  {k.size} <b>{k.baseQty}</b>{k.qty > k.baseQty && <b className="text-blue-600">+{k.qty - k.baseQty}</b>}<span className="text-slate-400">({k.avail})</span>
                                 </span>
                               ))}
                             </div>

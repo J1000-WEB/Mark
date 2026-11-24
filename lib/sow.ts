@@ -443,7 +443,9 @@ function layoutFixturesByPrice(items: any[], perFixture: number, count: number, 
   const total = (withTol: boolean) => [...groups.values()].reduce((s, g) => s + need(g, withTol), 0);
   const merged: { from: number; to: number; n: number }[] = [];
   let withTol = total(false) > count;
-  while (withTol && total(true) > count && groups.size > 1) {
+  const tiny = Math.ceil(perFixture / 4); // 한 칸의 1/4도 안 되는 가격 단계는 칸이 남아도 합침(빈 매대 방지)
+  const isTiny = () => [...groups.values()].some((g) => n(g) < tiny);
+  while (((withTol && total(true) > count) || isTiny()) && groups.size > 1) {
     const tiers = [...groups.keys()].sort((a, b) => b - a);
     const small = tiers.reduce((m, p) => (n(groups.get(p)!) < n(groups.get(m)!) ? p : m), tiers[0]);
     const i = tiers.indexOf(small);
@@ -465,20 +467,24 @@ function layoutFixturesByPrice(items: any[], perFixture: number, count: number, 
   tiers.forEach((p, ti) => {
     const g = groups.get(p)!.slice().sort((a, b) => (b.sowQty || 0) - (a.sowQty || 0));
     const k = ks[ti];
-    const per = Math.ceil(n(g) / k);
-    let cur: any = null;
-    for (const it of g) {
-      if (!cur || (cur.used && cur.used + it.skus.length > per && fx.filter((f) => f.price === p).length < k)) {
-        cur = { no: fx.length + 1, items: [], used: 0, price: p };
-        fx.push(cur);
-      }
-      cur.items.push(it);
-      cur.used += it.skus.length;
+    // 칸끼리 바코드 수가 고르게: 바코드 많은 품번칼라부터 가장 덜 찬 칸에(칸 안 순서는 판매순)
+    const mine = Array.from({ length: k }, () => ({ no: 0, items: [] as any[], used: 0, price: p }));
+    const order = g.map((it, i) => ({ it, i })).sort((a, b) => b.it.skus.length - a.it.skus.length || a.i - b.i);
+    for (const { it, i } of order) {
+      const f = mine.reduce((m, x) => (x.used < m.used ? x : m), mine[0]);
+      f.items.push({ ...it, _i: i });
+      f.used += it.skus.length;
+    }
+    for (const f of mine) {
+      if (!f.items.length) continue;
+      f.items.sort((a, b) => a._i - b._i);
+      f.no = fx.length + 1;
+      fx.push(f);
     }
   });
   return {
     merged,
-    fx: fx.map((f) => ({ kind, no: f.no, used: f.used, cap: perFixture, prices: [f.price], label: `${kind} ${f.no} — ${(f.price / 10000).toLocaleString("ko-KR")}만원`, items: f.items, mixed: false, over: f.used > perFixture })),
+    fx: fx.map((f) => ({ kind, no: f.no, used: f.used, cap: perFixture, prices: [f.price], label: `${kind} ${f.no} — ${(f.price / 10000).toLocaleString("ko-KR")}만원`, items: f.items.map(({ _i, ...x }: any) => x), mixed: false, over: f.used > perFixture })),
   };
 }
 

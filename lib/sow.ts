@@ -198,13 +198,13 @@ export async function buildSowReview(opts: { ids?: string[] | null } = {}) {
     // 상품(보관 판매, 이 점포 채널)
     const evSet = new Set(dates), prevSet = new Set(dates.map((d) => addDays(d, -7)));
     const ref = new Date(`${e.start}T00:00:00+09:00`);
-    type Agg = { key: string; style: string; color: string; name: string; colorName: string; qty: number; amt: number; pq: number; pa: number; byDay: Record<string, number>; consumerAmt: number; priceAmt: number };
+    type Agg = { key: string; style: string; color: string; name: string; colorName: string; qty: number; amt: number; pq: number; pa: number; byDay: Record<string, number>; consumerAmt: number; priceAmt: number; carryQty: number };
     const byStyle = new Map<string, Agg>(), byColor = new Map<string, Agg>();
     const add = (map: Map<string, Agg>, key: string, st: string, co: string, r: any, cur: boolean) => {
       let a = map.get(key);
       if (!a) {
         const p = pip.get(`${st}|${co}|`) || pip.get(`${st}||`);
-        a = { key, style: st, color: co, name: p?.name || info[st]?.[5] || "", colorName: p?.colorName || "", qty: 0, amt: 0, pq: 0, pa: 0, byDay: {}, consumerAmt: 0, priceAmt: 0 };
+        a = { key, style: st, color: co, name: p?.name || info[st]?.[5] || "", colorName: p?.colorName || "", qty: 0, amt: 0, pq: 0, pa: 0, byDay: {}, consumerAmt: 0, priceAmt: 0, carryQty: 0 };
         map.set(key, a);
       }
       const q = Number(r.qty) || 0, am = Number(r.amount) || 0;
@@ -212,6 +212,7 @@ export async function buildSowReview(opts: { ids?: string[] | null } = {}) {
         a.qty += q;
         a.amt += am;
         a.byDay[r.date] = (a.byDay[r.date] || 0) + q;
+        if (seasonLabelOf(up(r.styleCode), ref).carry) a.carryQty += q; // 재런칭 합산 줄은 실제 판매 품번 기준으로 이월 여부
         const p = pip.get(`${up(r.styleCode)}|${up(r.colorCode)}|${normSize(r.size)}`) || pip.get(`${up(r.styleCode)}||`);
         a.consumerAmt += q * (p?.consumer || 0);
         a.priceAmt += q * (p?.price || 0);
@@ -241,7 +242,7 @@ export async function buildSowReview(opts: { ids?: string[] | null } = {}) {
 
     const styles = [...byStyle.values()].filter((a) => a.qty || a.pq).sort((a, b) => b.amt - a.amt);
     const totQty = styles.reduce((x, a) => x + a.qty, 0), totAmt = styles.reduce((x, a) => x + a.amt, 0);
-    const top = styles.slice(0, 10).map((a) => ({ style: a.style, name: a.name, qty: a.qty, amt: a.amt, pq: a.pq, pa: a.pa, share: totAmt ? a.amt / totAmt : 0, byDay: dates.map((d) => a.byDay[d] || 0), carry: seasonLabelOf(a.style, ref).carry }));
+    const top = styles.slice(0, 10).map((a) => ({ style: a.style, name: a.name, qty: a.qty, amt: a.amt, pq: a.pq, pa: a.pa, share: totAmt ? a.amt / totAmt : 0, byDay: dates.map((d) => a.byDay[d] || 0), carry: a.qty > 0 ? a.carryQty * 2 > a.qty : seasonLabelOf(a.style, ref).carry }));
 
     // 이월 상세(품번|칼라)
     const colors = [...byColor.values()].map((a) => {
@@ -417,7 +418,8 @@ export async function buildSowPlan(o: SowPlanOpts) {
     if (avail <= 0) continue;
     const st = up(r.styleCode), co = up(r.color), sz = normSize(r.size);
     const p = parseStyleCode(st, ref.getFullYear());
-    if (!p || !isCarryover(p, ref) || !isSeasonAppropriateNow(p.season, ref)) continue;
+    // 러닝(신품번 시즌자리 5~8)은 계속 파는 상품이라 이월 행사 후보에서 뺌(소천님: 계절 맞는 이월만)
+    if (!p || p.isRunning || !isCarryover(p, ref) || !isSeasonAppropriateNow(p.season, ref)) continue;
     const inf = info[st] || [];
     const cat = up(inf[0]);
     if (exclude.has(cat)) continue;
@@ -458,9 +460,11 @@ export async function buildSowPlan(o: SowPlanOpts) {
   const used = { desk: 0, hanger: 0 };
   let amt = 0, qty = 0;
   const picked: any[] = [];
-  for (const x of ranked) {
-    if (amt >= goalAmt && goalAmt > 0) break;
+  // 행거(아우터)를 먼저 칸만큼 채우고, 매대는 투입 목표 금액까지(칸이 남으면 남은 대로)
+  const order = [...ranked.filter((x) => x.g.slot === "hanger"), ...ranked.filter((x) => x.g.slot === "desk")];
+  for (const x of order) {
     const slot = x.g.slot;
+    if (slot === "desk" && amt >= goalAmt && goalAmt > 0) break;
     const skus = x.g.skus.sort((a, b) => a.size.localeCompare(b.size, "en", { numeric: true }));
     if (used[slot] + skus.length > cap[slot]) continue;
     used[slot] += skus.length;
@@ -471,6 +475,7 @@ export async function buildSowPlan(o: SowPlanOpts) {
     picked.push({ ...x.g, skus, sowQty: x.sow, recentQty: x.rec, qty: q, amt: a, consumerAmt: skus.reduce((s, k) => s + k.qty * k.consumer, 0) });
     if (used.desk >= cap.desk && used.hanger >= cap.hanger) break;
   }
+  picked.sort((a, b) => (a.slot === b.slot ? 0 : a.slot === "hanger" ? -1 : 1));
   const store = m;
   const upload = picked.flatMap((p) => p.skus.map((k: Sku) => ({ 채널: store?.code || "", 바코드: k.barcode, 출고차수: "1", 의뢰수량: k.qty, 대분류: "", 비고: `SOW ${ev.start.slice(5)}~${ev.end.slice(5)} ${p.slot === "hanger" ? "행거" : "매대"}` })));
 

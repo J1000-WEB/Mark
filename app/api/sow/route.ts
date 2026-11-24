@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readSpecialOfferSheet } from "@/lib/specialOfferWeek";
-import { buildSowReview, buildSowPlan, readSowEvents } from "@/lib/sow";
+import { buildSowReview, buildSowPlan, readSowEvents, readSowPriceHistory, appendSowPriceHistory } from "@/lib/sow";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -15,6 +15,7 @@ export async function GET(req: Request) {
       const s = await readSpecialOfferSheet();
       return NextResponse.json({ ok: true, header: s.rows[s.headerRowIdx], rows: s.rows.slice(s.headerRowIdx + 1).filter((r) => r && r[7]), debug: s.debug });
     }
+    if (q("prices")) return NextResponse.json({ ok: true, rows: await readSowPriceHistory() });
     if (q("list")) return NextResponse.json({ ok: true, events: await readSowEvents() });
     if (q("plan")) {
       const r = await buildSowPlan({
@@ -31,5 +32,16 @@ export async function GET(req: Request) {
   } catch (e: any) {
     console.error("sow", e);
     return NextResponse.json({ ok: false, error: e?.message || "조회 실패" }, { status: 500 });
+  }
+}
+
+// POST {prices:[{date,store,style,name,consumer,price}]} — SOW 가격조정 이력 추가(행사 때 낸 가격조정 엑셀 내용)
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const n = await appendSowPriceHistory(Array.isArray(body?.prices) ? body.prices : []);
+    return NextResponse.json({ ok: true, saved: n });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message || "저장 실패" }, { status: 500 });
   }
 }

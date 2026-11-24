@@ -144,7 +144,7 @@ export default function SowPlanPanel() {
               <Box label="매출 예측" value={`${won(data.forecast.amount)}원`} sub={`평상시 ${man(data.forecast.baseSum)} × 증가율 ${data.forecast.lift.toFixed(2)}배`} tone="text-slate-900" />
               <Box label="매출 목표" value={ev.target ? `${won(ev.target)}원` : "-"} sub={ev.target && data.forecast.amount ? `예측 ÷ 목표 ${Math.round((data.forecast.amount / ev.target) * 100)}%` : ""} tone="text-slate-900" />
               <Box label={`투입 목표 (${data.basis === "target" ? "목표" : "예측"} × ${data.ratio}배)`} value={`${won(data.goalAmt)}원`} sub="판매가 기준" tone="text-orange-600" />
-              <Box label="계획 투입" value={`${won(data.plan.amt)}원`} sub={`${data.plan.qty.toLocaleString("ko-KR")}장(기초 ${data.plan.baseQty.toLocaleString("ko-KR")} + 추가 ${data.plan.addQty.toLocaleString("ko-KR")}) · ${data.plan.styles}품번칼라 · 예측 대비 ${Math.round(data.plan.ratioToForecast * 100)}%${ev.target ? ` · 목표 대비 ${Math.round(data.plan.ratioToTarget * 100)}%` : ""}`} tone="text-blue-600" />
+              <Box label="계획 투입" value={`${won(data.plan.amt)}원`} sub={`${data.plan.qty.toLocaleString("ko-KR")}장(기초 ${data.plan.baseQty.toLocaleString("ko-KR")} + 추가 ${data.plan.addQty.toLocaleString("ko-KR")}) · ${data.plan.styles}품번칼라 · 예측 대비 ${Math.round(data.plan.ratioToForecast * 100)}%${ev.target ? ` · 목표 대비 ${Math.round(data.plan.ratioToTarget * 100)}%` : ""}${data.sowValue ? ` · 행사가 기준 ${man(data.sowValue)}` : ""}`} tone="text-blue-600" />
               <Box label="진열 사용" value={`매대 ${data.capacity.usedDesk}/${data.capacity.desk} · 행거 ${data.capacity.usedHanger}/${data.capacity.hanger}`} sub="바코드 수(사용/칸)" tone="text-slate-900" />
             </div>
             {data.plan.amt < data.goalAmt * 0.95 && (
@@ -218,6 +218,7 @@ export default function SowPlanPanel() {
                         <th className="px-1 text-left">사이즈별 투입(창고 가용)</th>
                         <th className="px-1 text-right">투입</th>
                         <th className="px-1 text-right">금액</th>
+                        <th className="px-1 text-right" title="소비자가 → 행사가 제안(할인율)">행사가 제안</th>
                         <th className="px-1 text-right" title="최근 120일 SOW 행사 기간 판매(전 점포)">SOW판매</th>
                         <th className="px-1 text-right" title="최근 28일 오프라인 판매">28일판매</th>
                       </tr>
@@ -248,6 +249,10 @@ export default function SowPlanPanel() {
                           </td>
                           <td className="px-1 text-right font-black tabular-nums">{p.qty}</td>
                           <td className="px-1 text-right tabular-nums">{man(p.amt)}</td>
+                          <td className="px-1 text-right tabular-nums" title={p.priceWhy}>
+                            <span className="text-slate-400 line-through">{won(p.consumer)}</span> <b className="text-rose-600">{won(p.sowPrice)}</b>
+                            {p.discount != null && <span className="text-slate-400"> ({Math.round(p.discount * 100)}%)</span>}
+                          </td>
                           <td className="px-1 text-right tabular-nums">{p.sowQty || "-"}</td>
                           <td className="px-1 text-right tabular-nums">{p.recentQty || "-"}</td>
                         </tr>
@@ -258,12 +263,116 @@ export default function SowPlanPanel() {
               )}
             </div>
           ))}
+          <SowLayout data={data} />
           <p className="text-[11px] text-slate-400">
             창고 가용 {data.inputs.warehouse} · 매장 재고 {data.inputs.storeStock} · 계절 맞는 이월 후보 {data.candidates}품번칼라 · 최근 120일 SOW {data.inputs.sowHistoryEvents}건 참고 · 계산 {Math.round(data.ms / 1000)}초
           </p>
         </>
       )}
     </div>
+  );
+}
+
+// MARK 2026-11-24 소천님: 매대·행사 상품 레이아웃(기본 접힘) + 매장 공유용 엑셀/PDF(원가 없음) + 가격조정 양식
+function SowLayout({ data }: { data: any }) {
+  const ev = data.event;
+  const [saved, setSaved] = useState("");
+  const layout: any[] = data.layout || [];
+  const tiers = useMemo(() => {
+    const m = new Map<number, { styles: Set<string>; qty: number }>();
+    for (const f of layout) for (const it of f.items) {
+      const v = m.get(it.sowPrice) || { styles: new Set<string>(), qty: 0 };
+      v.styles.add(it.style);
+      v.qty += it.qty;
+      m.set(it.sowPrice, v);
+    }
+    return [...m.entries()].sort((a, b) => b[0] - a[0]);
+  }, [layout]);
+  const title = `${ev.store} SOW ${md(ev.start)}~${md(ev.end)}`;
+  const priceRows = (data.priceList || []).map((p: any, i: number) => [i + 1, p.style, p.name, "*", "전체", p.consumer, p.sowPrice, "할인", p.consumer ? Math.round((1 - p.sowPrice / p.consumer) * 100) : "", `${ev.store} 행사`]);
+  const layoutRows = () => {
+    const rows: any[][] = [];
+    for (const f of layout) for (const it of f.items) for (const z of it.sizes) rows.push([f.kind, f.no, it.sowPrice, it.style, it.name, it.color, it.colorName, z.size, z.qty, it.consumer, it.sowPrice, it.discount != null ? Math.round(it.discount * 100) : ""]);
+    return rows;
+  };
+  const excel = async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["구분", "번호", "매대가격", "품번", "품명", "칼라", "칼라명", "사이즈", "수량", "소비자가", "행사가", "할인율(%)"], ...layoutRows()]), "매대레이아웃");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["No", "스타일", "스타일명", "칼라", "칼라명", "소비자가", "판매단가", "판매유형", "할인율", "상세비고"], ...priceRows]), "가격조정");
+    XLSX.writeFile(wb, `SOW레이아웃_${ev.store}_${ev.start}.xlsx`);
+  };
+  const pdf = () => {
+    const esc = (x: any) => String(x ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" } as any)[c]);
+    const cards = layout
+      .map((f) => `<div class="fx"><h3>${esc(f.label)} <small>${f.used}/${f.cap} 바코드</small></h3><table><tr><th>품번</th><th>품명</th><th>칼라</th><th>사이즈(수량)</th><th>소비자가</th><th>행사가</th></tr>${f.items
+        .map((it: any) => `<tr><td>${esc(it.style)}</td><td>${esc(it.name)}</td><td>${esc(it.color)} ${esc(it.colorName)}</td><td>${it.sizes.map((z: any) => `${esc(z.size)}(${z.qty})`).join(" ")}</td><td class="r s">${won(it.consumer)}</td><td class="r b">${won(it.sowPrice)}</td></tr>`)
+        .join("")}</table></div>`)
+      .join("");
+    const tierHtml = tiers.map(([p, v]) => `<span>${won(p)}원 · ${v.styles.size}품번 · ${v.qty}장</span>`).join("");
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} 레이아웃</title><style>
+      body{font-family:'Pretendard','Malgun Gothic',sans-serif;margin:16px;color:#0f172a;font-size:11px}
+      h1{font-size:18px;margin:0 0 4px} .meta{color:#64748b;margin-bottom:8px} .tiers span{display:inline-block;border:1px solid #cbd5e1;border-radius:6px;padding:2px 6px;margin:0 4px 4px 0}
+      .fx{break-inside:avoid;border:1px solid #cbd5e1;border-radius:8px;padding:8px;margin:8px 0} h3{margin:0 0 6px;font-size:13px} small{color:#94a3b8;font-weight:400}
+      table{width:100%;border-collapse:collapse} th,td{border-bottom:1px solid #e2e8f0;padding:3px 4px;text-align:left} th{color:#64748b;font-weight:700}
+      .r{text-align:right}.s{color:#94a3b8;text-decoration:line-through}.b{font-weight:800;color:#e11d48}
+      @media print{body{margin:8mm}}</style></head><body>
+      <h1>${esc(title)} 매대·행사 상품 레이아웃</h1>
+      <div class="meta">${esc(ev.location || "")} · 매대 ${data.capacity.desks} · 행거 ${data.capacity.hangers} · 투입 ${data.plan.qty.toLocaleString("ko-KR")}장</div>
+      <div class="tiers">${tierHtml}</div>${cards}<script>setTimeout(()=>window.print(),300)</script></body></html>`);
+    w.document.close();
+  };
+  const savePrices = async () => {
+    if (!confirm(`${ev.store} 행사가 ${data.priceList.length}품번을 가격조정 이력에 저장할까요? 다음 행사 제안 때 같은 품번은 이 가격을 먼저 써요.`)) return;
+    const r = await fetch("/api/sow", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prices: data.priceList.map((p: any) => ({ date: ev.start, store: ev.store, style: p.style, name: p.name, consumer: p.consumer, price: p.sowPrice })) }) }).then((x) => x.json()).catch(() => null);
+    setSaved(r?.ok ? `저장했어요(${r.saved}품번)` : "저장 실패");
+  };
+  return (
+    <details className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <summary className="cursor-pointer text-sm font-black">
+        🗂 매대·행사 상품 레이아웃 · 가격 제안 <span className="text-xs font-bold text-slate-400">(펼쳐 보기 · 매장 공유용 엑셀/PDF — 원가 없음)</span>
+      </summary>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={excel} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black">⬇ 엑셀(레이아웃·가격조정)</button>
+        <button type="button" onClick={pdf} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black">🖨 PDF(인쇄)</button>
+        <button type="button" onClick={savePrices} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black">💾 행사가 이력에 저장</button>
+        {saved && <span className="text-xs font-bold text-emerald-600">{saved}</span>}
+        <span className="text-[11px] text-slate-400">행사가 = 지난 SOW 때 같은 품번 가격 → 없으면 소비자가×0.54를 팀 가격 단계(1.6·1.8·2·2.5·3·3.5·4·4.9·5.9·7.5·8.8·9.9만…)로 · 바코드 3개 미만 단계는 아래 단계로 합침</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+        {tiers.map(([p, v]) => (
+          <span key={p} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-bold">
+            <b className="text-rose-600">{won(p)}원</b> · {v.styles.size}품번 · {v.qty.toLocaleString("ko-KR")}장
+          </span>
+        ))}
+      </div>
+      {layout.some((f) => f.mixed) && <p className="mt-2 text-[11px] font-bold text-amber-600">칸이 모자라 일부 매대는 가격을 섞어 배치했어요.</p>}
+      <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        {layout.map((f) => (
+          <div key={`${f.kind}${f.no}`} className="rounded-2xl border border-slate-200 p-3">
+            <p className="mb-1 flex items-baseline justify-between text-sm font-black">
+              <span>{f.kind === "행거" ? "🧥" : "🧶"} {f.label}</span>
+              <span className="text-[10px] font-bold text-slate-400">{f.used}/{f.cap} 바코드</span>
+            </p>
+            {f.items.map((it: any) => (
+              <div key={`${it.style}|${it.color}`} className="flex items-center gap-2 border-t border-slate-100 py-1 text-[11px]">
+                <ProductThumb styleCode={it.style} size={28} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-bold" title={it.name}>{it.name || it.style}</div>
+                  <div className="text-[10px] text-slate-400">{it.style} · {it.color} {it.colorName} · {it.sizes.map((z: any) => `${z.size}(${z.qty})`).join(" ")}</div>
+                </div>
+                <div className="whitespace-nowrap text-right">
+                  <div className="text-[10px] text-slate-400 line-through">{won(it.consumer)}</div>
+                  <div className="font-black text-rose-600">{won(it.sowPrice)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

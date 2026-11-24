@@ -10,7 +10,7 @@ import { readArchivedSales, readArchivedStock } from "@/lib/pipArchive";
 import { readStyleInfo } from "@/lib/weeklyTrend";
 import { parseStyleCode, isCarryover, isSeasonAppropriateNow, SEASON_LABEL } from "@/lib/productCode";
 import { readProductRefs, buildRefMaps } from "@/lib/productRefs";
-import { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById } from "@/lib/googleSheets";
+import { getDailySourceSheetId, getSpreadsheetTitlesById, getSheetValuesById, getDbSheetId, ensureSheetExistsById, appendValuesById } from "@/lib/googleSheets";
 import { pickDailySheetTitle } from "@/lib/dailySales";
 import { isKoreanHoliday } from "@/lib/koreanHolidays";
 
@@ -335,6 +335,70 @@ function baselineFor(dm: Map<string, number> | undefined, date: string, before: 
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
+// ---- SOW 가격조정 이력(MARK_DB "SOW_가격조정이력") — 팀이 행사 때 낸 가격조정 엑셀(의정부 10/30·영등포 11/12·청주 11/13·서울역 11/16)에서 시작
+const PRICE_TAB = "SOW_가격조정이력";
+const PRICE_HEADER = ["적용일", "점포", "스타일", "스타일명", "소비자가", "행사가", "저장시각"];
+// 팀이 쓰는 행사가 단계(위 4개 파일에 나온 값) — 비슷한 가격끼리 묶어 매대 가격을 맞추려고 이 단계 중 하나로 맞춤
+export const SOW_PRICE_TIERS = [9900, 16000, 18000, 20000, 25000, 30000, 35000, 40000, 49000, 59000, 75000, 88000, 99000, 129000, 159000];
+const SOW_PRICE_RATIO = 0.54; // 4개 파일 129줄 행사가 ÷ 소비자가 중앙값
+
+export async function readSowPriceHistory() {
+  const id = getDbSheetId();
+  await ensureSheetExistsById(id, PRICE_TAB, PRICE_HEADER);
+  const vals = await getSheetValuesById(id, PRICE_TAB, "A:G").catch(() => [] as any[][]);
+  return vals.slice(1).filter((r) => t(r?.[2])).map((r) => ({ date: t(r[0]), store: t(r[1]), style: up(r[2]), name: t(r[3]), consumer: n(r[4]), price: n(r[5]) }));
+}
+export async function appendSowPriceHistory(rows: { date: string; store: string; style: string; name?: string; consumer: number; price: number }[]) {
+  const id = getDbSheetId();
+  await ensureSheetExistsById(id, PRICE_TAB, PRICE_HEADER);
+  const stamp = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 19);
+  const vals = rows.filter((r) => r.style && r.price > 0).map((r) => [r.date, r.store, up(r.style), r.name || "", r.consumer || "", r.price, stamp]);
+  if (vals.length) await appendValuesById(id, `'${PRICE_TAB}'!A:G`, vals);
+  return vals.length;
+}
+
+/** 행사가 제안: ① 지난 SOW 때 같은 품번 행사가(가장 최근) ② 없으면 소비자가 × 0.54를 가장 가까운 단계로(현재 판매가보다 높으면 그 아래 단계) */
+function suggestPrice(consumer: number, current: number, hist?: { price: number; date: string; store: string }) {
+  if (hist && hist.price > 0) return { price: hist.price, why: `지난 행사가(${hist.store} ${hist.date.slice(5)})` };
+  if (!consumer) return { price: current || 0, why: "소비자가 없음" };
+  const target = consumer * SOW_PRICE_RATIO;
+  let best = SOW_PRICE_TIERS[0];
+  for (const x of SOW_PRICE_TIERS) if (Math.abs(x - target) < Math.abs(best - target)) best = x;
+  if (current > 0 && best > current) best = [...SOW_PRICE_TIERS].reverse().find((x) => x <= current) || current;
+  return { price: best, why: `소비자가×${SOW_PRICE_RATIO} → ${best.toLocaleString("ko-KR")} 단계` };
+}
+
+/** 매대·행거 배치: 행사가 높은 순으로 품번칼라를 칸(매대 20·행거 8 바코드)에 채움. 가격이 바뀔 때 지금 칸이 절반 이상 찼으면 새 칸 → "3만원 매대"처럼 가격을 맞춤.
+ *  그렇게 했을 때 칸 수가 모자라면 가격을 섞어 빈틈없이 채움. */
+function layoutFixtures(items: any[], perFixture: number, count: number, kind: "매대" | "행거") {
+  const pack = (breakOnPrice: boolean) => {
+    const fx: { no: number; items: any[]; used: number }[] = [];
+    let cur: { no: number; items: any[]; used: number } | null = null;
+    for (const it of items) {
+      const need = it.skus.length;
+      const lastPrice = cur?.items[cur.items.length - 1]?.sowPrice;
+      const priceBreak = breakOnPrice && cur && cur.items.length && lastPrice !== it.sowPrice && cur.used >= perFixture / 2;
+      if (!cur || cur.used + need > perFixture || priceBreak) {
+        cur = { no: fx.length + 1, items: [], used: 0 };
+        fx.push(cur);
+      }
+      cur.items.push(it);
+      cur.used += need;
+    }
+    return fx;
+  };
+  let fx = pack(true);
+  let mixed = false;
+  if (fx.length > count) {
+    fx = pack(false);
+    mixed = true;
+  }
+  return fx.map((f) => {
+    const prices = [...new Set(f.items.map((i) => i.sowPrice))].sort((a, b) => b - a);
+    return { kind, no: f.no, used: f.used, cap: perFixture, prices, label: `${kind} ${f.no} — ${prices.map((p) => `${(p / 10000).toLocaleString("ko-KR")}만원`).join("·")}`, items: f.items, mixed };
+  });
+}
+
 export async function buildSowPlan(o: SowPlanOpts) {
   const t0 = Date.now();
   const today = kstToday();
@@ -347,6 +411,11 @@ export async function buildSowPlan(o: SowPlanOpts) {
     readPipInfo(),
     readProductRefs().catch(() => [] as any[]),
   ]);
+  const priceHist = new Map<string, { price: number; date: string; store: string }>();
+  for (const h of await readSowPriceHistory().catch(() => [] as any[])) {
+    const cur = priceHist.get(h.style);
+    if (!cur || h.date > cur.date) priceHist.set(h.style, { price: h.price, date: h.date, store: h.store });
+  }
   // 2026-11-24 소천님: 러닝의 예전(구)품번도 출고 후보에서 빼야 함(예: WBD3L04501·WBD3L04503 = GF7LKC501·503의 구품번).
   // 러닝 묶음 = 상품_기준표 재런칭(새↔예전) + 보관 상품정보 P열 통합품번이 자기와 다른 품번·그 통합품번
   const runningFamily = new Set<string>(buildRefMaps(refs as any).relaunch);
@@ -511,6 +580,41 @@ export async function buildSowPlan(o: SowPlanOpts) {
   }
   picked.sort((a, b) => (a.slot === b.slot ? 0 : a.slot === "hanger" ? -1 : 1));
   const store = m;
+  // ---- 행사가 제안(품번 단위, 칼라 공통) + 매대·행거 배치(2026-11-24 소천님)
+  for (const p of picked) {
+    const k0 = p.skus[0] || {};
+    const sg = suggestPrice(k0.consumer || 0, k0.price || 0, priceHist.get(p.style));
+    p.sowPrice = sg.price;
+    p.priceWhy = sg.why;
+    p.consumer = k0.consumer || 0;
+    p.current = k0.price || 0;
+    p.discount = p.consumer ? 1 - p.sowPrice / p.consumer : null;
+  }
+  // 바코드가 아주 적은 가격 단계(3개 미만)는 바로 아래 단계로 합쳐 가격 종류를 줄임(지난 행사가 있는 품번은 그대로)
+  for (const slot of ["desk", "hanger"] as const) {
+    const cnt = new Map<number, number>();
+    for (const p of picked.filter((x) => x.slot === slot)) cnt.set(p.sowPrice, (cnt.get(p.sowPrice) || 0) + p.skus.length);
+    const tiers = [...cnt.keys()].sort((a, b) => b - a);
+    for (const p of picked.filter((x) => x.slot === slot)) {
+      if ((cnt.get(p.sowPrice) || 0) >= 3 || priceHist.has(p.style)) continue;
+      const lower = tiers.find((x) => x < p.sowPrice && (cnt.get(x) || 0) >= 3);
+      if (lower) {
+        p.sowPrice = lower;
+        p.priceWhy += ` → ${lower.toLocaleString("ko-KR")}로 맞춤(가격 종류 줄이기)`;
+        p.discount = p.consumer ? 1 - lower / p.consumer : null;
+      }
+    }
+  }
+  const byPrice = (a: any, b: any) => b.sowPrice - a.sowPrice || (b.sowQty || 0) - (a.sowQty || 0);
+  const layout = [
+    ...layoutFixtures(picked.filter((p) => p.slot === "hanger").sort(byPrice), hangerSku, hangers, "행거"),
+    ...layoutFixtures(picked.filter((p) => p.slot === "desk").sort(byPrice), deskSku, desks, "매대"),
+  ].map((f) => ({ ...f, items: f.items.map((p: any) => ({ style: p.style, color: p.color, name: p.name, colorName: p.colorName, cat: p.cat, bok: p.bok, season: p.season, consumer: p.consumer, current: p.current, sowPrice: p.sowPrice, discount: p.discount, qty: p.qty, sizes: p.skus.map((k: any) => ({ size: k.size, qty: k.qty, barcode: k.barcode })) })) }));
+  const priceList = [...new Map(picked.map((p) => [p.style, p])).values()]
+    .sort((a, b) => b.sowPrice - a.sowPrice || a.style.localeCompare(b.style))
+    .map((p) => ({ style: p.style, name: p.name, consumer: p.consumer, current: p.current, sowPrice: p.sowPrice, discount: p.discount, cat: p.cat, why: p.priceWhy }));
+  const sowValue = picked.reduce((s, p) => s + p.sowPrice * p.qty, 0);
+
   const upload = picked.flatMap((p) => p.skus.map((k: Sku) => ({ 채널: store?.code || "", 바코드: k.barcode, 출고차수: "1", 의뢰수량: k.qty, 대분류: "", 비고: `SOW ${ev.start.slice(5)}~${ev.end.slice(5)} ${p.slot === "hanger" ? "행거" : "매대"}` })));
 
   return {
@@ -521,6 +625,9 @@ export async function buildSowPlan(o: SowPlanOpts) {
     capacity: { desks, hangers, deskSku, hangerSku, perSku, desk: cap.desk, hanger: cap.hanger, usedDesk: used.desk, usedHanger: used.hanger },
     plan: { amt, qty, baseAmt, baseQty: baseQtySum, addAmt: amt - baseAmt, addQty: qty - baseQtySum, consumerAmt: picked.reduce((s, p) => s + p.consumerAmt, 0), styles: picked.length, ratioToForecast: forecast ? amt / forecast : 0, ratioToTarget: ev.target ? amt / ev.target : 0 },
     picked,
+    layout,
+    priceList,
+    sowValue,
     candidates: ranked.length,
     upload,
     inputs: { warehouse: (wh as any).meta?.uploadedAt || "", storeStock: (storeStock as any).meta?.uploadedAt || "", sowHistoryEvents: recentEvents.length },

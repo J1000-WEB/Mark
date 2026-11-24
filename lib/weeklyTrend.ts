@@ -85,7 +85,7 @@ async function writeCache(ws: string, days: number, s: WeekAgg, row?: number) {
 
 let infoCache: { at: number; map: Record<string, string[]> } | null = null;
 /** 스타일 → [품목, 복종, 아이템, 년도, 성별, 스타일명, 시즌] */
-async function readStyleInfo(): Promise<Record<string, string[]>> {
+export async function readStyleInfo(): Promise<Record<string, string[]>> {
   if (infoCache && Date.now() - infoCache.at < 3600 * 1000) return infoCache.map;
   const vals = await getSheetValuesById(PIP_ARCHIVE_SHEET_ID, "상품정보", "B:N");
   const map: Record<string, string[]> = {};

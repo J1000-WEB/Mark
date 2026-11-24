@@ -1,19 +1,34 @@
 import { NextResponse } from "next/server";
 import { readSpecialOfferSheet } from "@/lib/specialOfferWeek";
+import { buildSowReview, buildSowPlan } from "@/lib/sow";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// MARK 2026-11-24: 상품탭 SOW(스페셜오퍼위크) 리뷰 — 작업 중(시트 구조 확인용 debug)
+// MARK 2026-11-24: 스페셜오퍼위크(SOW) — GET ?ids=행,행(리뷰, 없으면 가장 최근 끝난 행사 묶음) / GET ?plan=행&basis=forecast|target&ratio=2&perSku=5&desks=&hangers=
 export async function GET(req: Request) {
   const u = new URL(req.url);
+  const q = (k: string) => u.searchParams.get(k);
+  const num = (k: string) => (q(k) !== null && q(k) !== "" ? Number(q(k)) : undefined);
   try {
-    if (u.searchParams.get("debug") === "sheet") {
+    if (q("debug") === "sheet") {
       const s = await readSpecialOfferSheet();
-      return NextResponse.json({ ok: true, header: s.rows[s.headerRowIdx], top: s.rows.slice(0, s.headerRowIdx), sample: s.rows.slice(-25), n: s.rows.length, debug: s.debug });
+      return NextResponse.json({ ok: true, header: s.rows[s.headerRowIdx], rows: s.rows.slice(s.headerRowIdx + 1).filter((r) => r && r[7]), debug: s.debug });
     }
-    return NextResponse.json({ ok: false, error: "준비 중" });
+    if (q("plan")) {
+      const r = await buildSowPlan({
+        id: q("plan")!,
+        basis: q("basis") === "target" ? "target" : "forecast",
+        ratio: num("ratio"), perSku: num("perSku"), deskSku: num("deskSku"), hangerSku: num("hangerSku"), desks: num("desks"), hangers: num("hangers"),
+        exclude: q("exclude") !== null ? q("exclude")!.split(",").filter(Boolean) : undefined,
+      });
+      return NextResponse.json({ ok: true, ...r });
+    }
+    const ids = q("ids") ? q("ids")!.split(",").filter(Boolean) : null;
+    const r = await buildSowReview({ ids });
+    return NextResponse.json({ ok: true, ...r });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message }, { status: 500 });
+    console.error("sow", e);
+    return NextResponse.json({ ok: false, error: e?.message || "조회 실패" }, { status: 500 });
   }
 }

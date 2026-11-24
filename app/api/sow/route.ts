@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readSpecialOfferSheet } from "@/lib/specialOfferWeek";
-import { buildSowReview, buildSowPlan } from "@/lib/sow";
+import { buildSowReview, buildSowPlan, readSowEvents } from "@/lib/sow";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -15,6 +15,7 @@ export async function GET(req: Request) {
       const s = await readSpecialOfferSheet();
       return NextResponse.json({ ok: true, header: s.rows[s.headerRowIdx], rows: s.rows.slice(s.headerRowIdx + 1).filter((r) => r && r[7]), debug: s.debug });
     }
+    if (q("list")) return NextResponse.json({ ok: true, events: await readSowEvents() });
     if (q("plan")) {
       const r = await buildSowPlan({
         id: q("plan")!,

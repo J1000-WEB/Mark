@@ -9,6 +9,7 @@ import NavTabs from "@/components/NavTabs";
 import { Card, Empty, Kpi } from "@/components/Shared";
 import { fmtNum, markData, won } from "@/lib/mark";
 import ProductThumb from "@/components/ProductThumb";
+import SowPlanPanel from "@/components/SowPlanPanel";
 import { compactStyleChannelRows } from "@/lib/styleChannelCompact";
 
 
@@ -2962,6 +2963,7 @@ const INV_TABS = [
   ["outlet", "팩토리아울렛"],
   ["online", "온라인 이관요청"],
   ["slow", "저소진·프로모션"],
+  ["sow", "SOW 계획"],
   ["perf", "성과"],
   ["data", "데이터 관리"],
 ] as const;
@@ -3296,6 +3298,8 @@ export default function InventoryDashboard() {
             <StockInboundAlertCard />
           </>
         )}
+
+        {invTab === "sow" && <SowPlanPanel />}
 
         {invTab === "perf" && (
           <>

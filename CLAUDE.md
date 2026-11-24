@@ -86,6 +86,10 @@
   결과는 logs/inshop-verify.log + 대시보드 POST `/api/inshop-verify`(`lib/inshopVerify.ts`, MARK_DB `인샵업로드_검증`, 안 맞으면 Resend 메일 → sjc@generalidea.co.kr만, env INSHOP_VERIFY_EMAIL_TO). GET = 최근 7일.
   매출탭 배너(`SalesRefreshBanner` 아래 `InshopVerifyNotice`)에 가장 최근 매출일 결과 — 안 맞으면 빨간 "인샵 업로드 확인필요!!!", 맞으면 초록 한 줄.
   한컬렉션·롯데는 원본 합계가 없어 ②③만. 수동: `node verify-inshop-upload.js YYYYMMDD [--no-post]`(run-now 허용).
+  **2026-11-24**: 9:40에 안 맞으면 18시까지 20분마다 다시 확인(올리지 않고 확인만, 전부 일치하면 그때 기록 → 배너 초록, 메일 재발송 없음).
+- **ERP 업로드 재시도(2026-11-24)**: 11/24 2:20 로그인창이 로딩만 돌다 150초 넘겨 실패 → 그날 인샵매출 ERP 미반영(소천님이 아침에 직접 올림).
+  `sgerp-login.au3`는 준비 안 되면 ERP를 껐다 켜며 3번까지 기다리고(실패 화면은 바탕화면 디버그_ERP업로드_로그인실패_*.png), `schedule-sgerp-upload.js`는 실패 시 10분 뒤 다시(하루 3번).
+  원격 1회 실행: erp-agent에 `run-erp-upload-now.txt` 파일을 만들면 1분 안에 실행(자동 재시도 없음, 화면·키보드를 씀 — 근무 중엔 소천님께 먼저 확인).
 - ⚠️ device_commit_files는 같은 stagedPath(outputs 파일명)로 두 번째 커밋하면 **예전 내용을 쓰는 경우가 있음** → 고친 파일은 새 이름(예: sscu-v3.js)으로 복사해서 커밋.
 - ⚠️ **PC .js를 고치면 run-all이 바로 전부 재시작됨**(파일 감시) → 2026-11-23 9:37 build-inshop-upload.js 커밋으로 월요일 9:20 보관(11/20)·9:30 주간데이터 대기 작업이 끊김(run-now로 다시 돌림). **새벽 0~4시·아침 9:15~9:50엔 PC .js 커밋 금지**, 급하면 끝난 뒤에.
 - ⚠️ PC 파일 commit 후엔 반드시 다시 stage해서 cmp — 2026-11-20 schedule-style-channel-upload.js가 **예전 버전(6,990바이트)으로 덮어써진 채** 15분 있었음(바로 복구).

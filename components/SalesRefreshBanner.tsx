@@ -48,7 +48,7 @@ function InshopVerifyNotice({ refreshKey }: { refreshKey?: any }) {
           {x.name}({x.channel}) {x.status} · 원본 {n(x.sourceAmount)} · 업로드 {n(x.uploadAmount)}원/{n(x.uploadQty)}장 · ERP {n(x.erpAmount)}원/{n(x.erpQty)}장{x.note ? ` · ${x.note}` : ""}
         </p>
       ))}
-      <p className="mt-0.5 text-[10px] font-semibold text-rose-500">{at.slice(5, 16)} 확인 · ERP에 다시 올린 뒤 9:40 검증에서 다시 확인돼요</p>
+      <p className="mt-0.5 text-[10px] font-semibold text-rose-500">{at.slice(5, 16)} 확인 · ERP에 다시 올리면 18시까지 20분마다 자동으로 다시 확인돼요(맞으면 초록으로 바뀜)</p>
     </div>
   );
 }

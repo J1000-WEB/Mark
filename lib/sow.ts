@@ -37,6 +37,45 @@ const dateRange = (a: string, b: string) => {
 };
 const dow = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
 
+// 2026-11-25: 행사를 여러 개 고르면 구글 시트 1분당 읽기 한도(429)에 걸림 → 자주 안 바뀌는 시트는 잠깐 메모리에 두고,
+// 보관 판매·재고는 날짜별로 기억해 이미 읽은 날짜는 다시 안 읽음(서버 인스턴스가 살아 있는 동안).
+const memo = new Map<string, { at: number; p: Promise<any> }>();
+function cached<T>(key: string, ms: number, fn: () => Promise<T>): Promise<T> {
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.p;
+  const p = fn().catch((e) => { memo.delete(key); throw e; });
+  memo.set(key, { at: Date.now(), p });
+  return p;
+}
+const saleByDate = new Map<string, { at: number; rows: any[] }>();
+async function readSalesCached(dates: string[]) {
+  const today = kstToday();
+  const fresh = (d: string, at: number) => Date.now() - at < (d >= addDays(today, -3) ? 10 : 120) * 60 * 1000; // 최근 3일은 위탁 늦게 들어와서 짧게
+  const miss = dates.filter((d) => { const c = saleByDate.get(d); return !c || !fresh(d, c.at); });
+  if (miss.length) {
+    const { rows, foundDates } = await readArchivedSales(miss, { maxGap: 60 });
+    const by = new Map<string, any[]>(foundDates.map((d) => [d, []]));
+    for (const r of rows) by.get(r.date)?.push(r);
+    for (const [d, rs] of by) saleByDate.set(d, { at: Date.now(), rows: rs });
+    if (saleByDate.size > 120) for (const k of [...saleByDate.keys()].slice(0, saleByDate.size - 120)) saleByDate.delete(k);
+  }
+  const rows: any[] = [], foundDates: string[] = [];
+  for (const d of dates) { const c = saleByDate.get(d); if (c) { foundDates.push(d); for (const r of c.rows) rows.push(r); } }
+  return { rows, foundDates };
+}
+const stockByDate = new Map<string, { at: number; v: any }>();
+async function readStockCached(dates: string[]) {
+  const miss = dates.filter((d) => { const c = stockByDate.get(d); return !c || Date.now() - c.at > 60 * 60 * 1000; });
+  if (miss.length) {
+    const m = await readArchivedStock(miss);
+    for (const d of miss) stockByDate.set(d, { at: Date.now(), v: m.get(d) });
+    if (stockByDate.size > 16) for (const k of [...stockByDate.keys()].slice(0, stockByDate.size - 16)) stockByDate.delete(k);
+  }
+  const out = new Map<string, any>();
+  for (const d of dates) { const c = stockByDate.get(d); if (c?.v) out.set(d, c.v); }
+  return out;
+}
+
 export type SowEvent = {
   id: string; // 세부일정 시트 행 번호
   year: string; month: string; week: string; status: string;
@@ -151,10 +190,10 @@ export async function buildSowReview(opts: { ids?: string[] | null } = {}) {
   const today = kstToday();
   const yesterday = addDays(today, -1);
   const [all, salesRows, info, refs, pip] = await Promise.all([
-    readSowEvents(),
-    readSalesSummaryRowsForReports(),
+    cached("events", 5 * 60 * 1000, readSowEvents),
+    cached("salesRows", 10 * 60 * 1000, readSalesSummaryRowsForReports),
     readStyleInfo().catch(() => ({} as Record<string, string[]>)),
-    readProductRefs().catch(() => [] as any[]),
+    cached("refs", 30 * 60 * 1000, readProductRefs).catch(() => [] as any[]),
     readPipInfo(),
   ]);
   const { mainOf } = buildRefMaps(refs as any);
@@ -180,8 +219,8 @@ export async function buildSowReview(opts: { ids?: string[] | null } = {}) {
     return { e, to, dates, m: match(e.store) };
   });
   const [{ rows: sales, foundDates }, stockMap] = await Promise.all([
-    readArchivedSales([...needDates].sort(), { maxGap: 40 }),
-    readArchivedStock([...stockDates].sort()).catch(() => new Map()),
+    readSalesCached([...needDates].sort()),
+    readStockCached([...stockDates].sort()).catch(() => new Map()),
   ]);
   const found = new Set(foundDates);
 

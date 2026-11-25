@@ -32,7 +32,7 @@ export default function SowReviewPanel() {
     const qs = ids && ids.length ? `?ids=${ids.join(",")}` : "";
     fetch(`/api/sow${qs}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => alive && (j.ok ? setData(j) : setError(j.error || "불러오지 못했어요.")))
+      .then((j) => alive && (j.ok ? setData(j) : setError(/quota|429|rate/i.test(String(j.error || "")) ? "구글 시트 읽기 한도(1분당)에 잠깐 걸렸어요 — 1분쯤 뒤에 다시 눌러주세요." : j.error || "불러오지 못했어요.")))
       .catch(() => alive && setError("불러오지 못했어요."))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -49,7 +49,10 @@ export default function SowReviewPanel() {
   const from = evs.map((e) => e.period.from).sort()[0] || "";
   const to = evs.map((e) => e.period.to).sort().pop() || "";
   const list: any[] = data?.list || [];
-  const selected = new Set(evs.map((e) => e.event.id));
+  const shown = new Set(evs.map((e) => e.event.id));
+  // 2026-11-25: 고를 때마다 바로 불러오면 구글 시트 1분당 읽기 한도에 걸림 → 고른 뒤 "이대로 보기"로 한 번만
+  const [draft, setDraft] = useState<Set<string> | null>(null);
+  const selected = draft || shown;
   const listByMonth = useMemo(() => {
     const m = new Map<string, any[]>();
     for (const e of list) (m.get(e.start.slice(0, 7)) || m.set(e.start.slice(0, 7), []).get(e.start.slice(0, 7))!).push(e);
@@ -66,7 +69,7 @@ export default function SowReviewPanel() {
             {from && `진행기간 ${md(from)} ~ ${md(to)} · 진행 점포 ${evs.length}개점 (${evs.filter((e) => e.period.done).length}개 종료)`} · 매출 = 매출탭(ERP 실제 금액) · 상품·이월 = PIP 보관(점포 채널) · 기준일 {data?.asOf}
           </p>
         </div>
-        <button type="button" onClick={() => setPickOpen(!pickOpen)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black">
+        <button type="button" onClick={() => { setDraft(pickOpen ? null : new Set(shown)); setPickOpen(!pickOpen); }} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black">
           행사 고르기 {pickOpen ? "▲" : "▼"}
         </button>
       </div>
@@ -85,7 +88,7 @@ export default function SowReviewPanel() {
                     onChange={() => {
                       const cur = new Set(selected);
                       cur.has(e.id) ? cur.delete(e.id) : cur.add(e.id);
-                      setIds([...cur]);
+                      setDraft(cur);
                     }}
                   />
                   {e.store} {md(e.start)}~{md(e.end)}
@@ -93,7 +96,17 @@ export default function SowReviewPanel() {
               ))}
             </div>
           ))}
-          <button type="button" className="text-slate-400 underline" onClick={() => setIds(null)}>최근 행사로</button>
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              type="button"
+              disabled={loading || !selected.size}
+              className="rounded-xl bg-slate-900 px-3 py-1.5 font-black text-white disabled:opacity-40"
+              onClick={() => { setIds([...selected]); setDraft(null); setPickOpen(false); }}
+            >
+              이대로 보기 ({selected.size}개)
+            </button>
+            <button type="button" className="text-slate-400 underline" onClick={() => { setIds(null); setDraft(null); setPickOpen(false); }}>최근 행사로</button>
+          </div>
         </div>
       )}
 

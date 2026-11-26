@@ -73,6 +73,8 @@ export type StoreSkuRow = { storeCode: string; storeName: string; style: string;
 export type WhRow = { style: string; color: string; size: string; availOff: number; barcode: string };
 export type IssuedRt = { fromStore: string; style: string; color: string; size: string; qty: number };
 export type StoreRequest = { storeCode: string; style: string; color: string; size: string; qty: number; note?: string };
+// 2026-11-26 소천님: 매장요청(반출) — 매장이 빼고 싶은 품번. 칼라·사이즈를 비우면 그 매장 그 품번(칼라) 재고 전부, 수량 0/비우면 그 SKU 재고 전부
+export type StoreOutRequest = { storeCode: string; style: string; color?: string; size?: string; qty?: number; note?: string };
 
 const GRADE_ORDER = ["A", "B", "C", "D"];
 const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -83,6 +85,7 @@ export function runShipRtEngine(input: {
   whRaw: WhRow[];
   issuedToday?: IssuedRt[];
   storeRequests?: StoreRequest[];
+  storeOutRequests?: StoreOutRequest[];
   relaunchNewToOld?: Map<string, string>; // 신품번 → 구품번
   relaunchSet?: Set<string>; // 재런칭 목록(신·구 모두)
 }) {
@@ -520,6 +523,100 @@ export function runShipRtEngine(input: {
     지시수량: l.qty, 승인날짜: "", 보낼매장명: l.exportStoreName, 받을매장명: l.storeName,
   }));
 
+  // ── 매장요청(반출) — 2026-11-26 소천님 ──
+  // 위 출고·RT를 다 반영한 "예상 재고" 기준으로 받을 매장을 고름:
+  //  ① 같은 SKU가 적정재고보다 모자란 매장(모자란 양 큰 순, 같으면 등급·순위 높은 순) — 모자란 만큼
+  //  ② 그래도 남으면 같은 품번(스타일)이 최근 잘 팔리는데 이 SKU가 1장 이하인 매장 — 2장씩(품번 판매 많은 순)
+  //  ③ 그래도 남으면 창고 반품 권장
+  const plannedOf = (r: any) => r.stock + (r.shipQty || 0) + (r.bonusShipQty || 0) + (r.rtInQty || 0) + (r.bonusRtInQty || 0) + (r.requestInQty || 0) + (r.relaunchInQty || 0) + (r.outReqInQty || 0) - (r.rtOutQty || 0) - (r.bonusRtOutQty || 0) - (r.outReqOutQty || 0);
+  const styleSalesByStore = new Map<string, number>(); // 스타일|매장 → 기간판매
+  rows.forEach((r) => styleSalesByStore.set(`${r.style}|${r.storeCode}`, (styleSalesByStore.get(`${r.style}|${r.storeCode}`) || 0) + (r.period || 0)));
+  const outReqRtLines: any[] = [];
+  const outReqReturn: any[] = [];
+  const outReqNoMatch: any[] = [];
+  (input.storeOutRequests || []).forEach((req) => {
+    const code = String(req.storeCode).trim();
+    const style = String(req.style || "").trim().toUpperCase();
+    const color = String(req.color || "").trim().toUpperCase();
+    const size = String(req.size || "").trim().toUpperCase();
+    const si = stores.get(code);
+    const fromName = si ? si.name : code;
+    const mine = rows.filter((r) => r.storeCode === code && r.style === style && (!color || r.color === color) && (!size || r.size === size) && plannedOf(r) > 0);
+    if (!mine.length) {
+      outReqNoMatch.push({ exportStoreCode: code, storeCode: code, storeName: fromName, style, color, size, need: req.qty || 0, note: req.note || "", reason: si ? "이 매장에 그 품번(칼라·사이즈) 재고가 없어요 — 철자 확인" : "출고·RT 설정의 매장 목록에 없는 매장코드예요" });
+      return;
+    }
+    let left = req.qty && req.qty > 0 ? req.qty : Infinity; // 수량 비우면 재고 전부
+    for (const from of mine) {
+      if (left <= 0) break;
+      let give = Math.min(left, Math.floor(plannedOf(from)));
+      if (give <= 0) continue;
+      left -= give;
+      const group = (bySku.get(from.skuKey) || []).filter((r) => r.storeCode !== code && !isStoreStyleExcluded(r.storeCode, r.style));
+      const send = (to: any, qty: number, why: string) => {
+        const before = plannedOf(to);
+        outReqRtLines.push({
+          exportStoreCode: code, exportStoreName: fromName, storeCode: to.storeCode, storeName: to.storeName, style: from.style, color: from.color, size: from.size, qty,
+          importStock: r1(before), importWeeks: to.period > 0 ? r1(before / ((to.period / cfg.periodDays) * 7)) : null, why, note: req.note || "",
+        });
+        to.outReqInQty = (to.outReqInQty || 0) + qty;
+        from.outReqOutQty = (from.outReqOutQty || 0) + qty;
+        give -= qty;
+      };
+      // ①
+      const needers = group
+        .map((r) => {
+          const target = r.period > 0 ? r.properStock : r.status === "보충" ? Math.max(1, r.bonusTarget || 1) : 0;
+          return { r, need: Math.floor(target - plannedOf(r) + 1e-6) };
+        })
+        .filter((x) => x.need > 0)
+        .sort((a, b) => b.need - a.need || a.r.priorityScore - b.r.priorityScore);
+      for (const x of needers) {
+        if (give <= 0) break;
+        const q = Math.min(give, x.need);
+        send(x.r, q, x.r.status === "보충" ? "품절(예전 판매 있음) 보충" : `적정재고보다 ${x.need}장 모자람`);
+      }
+      // ②
+      if (give > 0) {
+        const fans = [...stores.values()]
+          .filter((st) => String(st.code) !== code && !isStoreStyleExcluded(String(st.code), from.style) && (styleSalesByStore.get(`${from.style}|${st.code}`) || 0) > 0)
+          .map((st) => {
+            let row = group.find((r) => r.storeCode === String(st.code));
+            if (!row) {
+              const g = cfg.grades[String(st.grade)];
+              const wOv = cfg.storeWeeksOverride?.[String(st.code)];
+              row = { storeCode: String(st.code), storeName: st.name, style: from.style, color: from.color, size: from.size, skuKey: from.skuKey, stock: 0, period: 0, cum: 0, status: "정상", grade: String(st.grade), rank: st.rank, priorityScore: 999, properStock: 0, diff: 0, stockWeeks: 0, weeksTarget: wOv != null ? wOv : g ? g.weeks : cfg.defaultWeeks, excessTh: g ? g.excess : cfg.defaultExcess, availOff: 0, shortage: 0, shipQty: 0, rtNeed: 0 };
+              rows.push(row);
+              (bySku.get(from.skuKey) || bySku.set(from.skuKey, []).get(from.skuKey)!).push(row);
+            }
+            return { r: row, sales: styleSalesByStore.get(`${from.style}|${st.code}`) || 0 };
+          })
+          .filter((x) => plannedOf(x.r) <= 1)
+          .sort((a, b) => b.sales - a.sales);
+        for (const x of fans) {
+          if (give <= 0) break;
+          send(x.r, Math.min(give, 2), `이 품번 최근 ${cfg.periodDays}일 ${x.sales}장 판매 · 이 사이즈 ${Math.max(0, Math.round(plannedOf(x.r)))}장`);
+        }
+      }
+      // ③
+      if (give > 0) {
+        const wh = whMap.get(`${from.style}|${from.color}|${from.size}`);
+        outReqReturn.push({ exportStoreCode: code, storeCode: code, storeName: fromName, style: from.style, color: from.color, size: from.size, qty: give, barcode: (wh && wh.barcode) || from.barcode || "", note: req.note || "", reason: "받을 만한 매장이 없어요(모자란 매장·이 품번 잘 팔리는 매장 없음) — 창고 반품 권장" });
+        from.outReqOutQty = (from.outReqOutQty || 0) + give;
+      }
+    }
+  });
+  const requestOutRtUpload = outReqRtLines.map((l) => ({
+    보낼채널코드: l.exportStoreCode, 받을채널코드: l.storeCode, 스타일: l.style, 칼라: l.color, 사이즈: l.size,
+    지시수량: l.qty, 승인날짜: "", 보낼매장명: l.exportStoreName, 받을매장명: l.storeName,
+  }));
+  const requestOutDetail = outReqRtLines.map((l) => ({
+    exportStoreCode: l.exportStoreCode, exportStoreName: l.exportStoreName, style: l.style, color: l.color, size: l.size,
+    importStoreCode: l.storeCode, importStoreName: l.storeName, allocQty: l.qty, importStock: l.importStock, importWeeks: l.importWeeks, reason: l.why, note: l.note,
+  }));
+  const requestOutReturn = outReqReturn;
+  const requestOutNoMatch = outReqNoMatch;
+
   // ── 매장요청 업로드/상세 ──
   const requestShipUpload = requestShipLines.map((l) => ({ 채널: l.storeCode, 바코드: l.barcode, 출고차수: cfg.shipRound, 의뢰수량: l.qty, 대분류: "", 비고: "매장요청" + (l.note ? " - " + l.note : "") }));
   const requestRtUpload = requestRtLines.map((l) => ({
@@ -559,8 +656,8 @@ export function runShipRtEngine(input: {
   };
   const projRows = rows
     .map((r) => {
-      const inbound = (r.shipQty || 0) + (r.bonusShipQty || 0) + (r.rtInQty || 0) + (r.bonusRtInQty || 0) + (r.requestInQty || 0) + (r.relaunchInQty || 0);
-      const outbound = (r.rtOutQty || 0) + (r.bonusRtOutQty || 0);
+      const inbound = (r.shipQty || 0) + (r.bonusShipQty || 0) + (r.rtInQty || 0) + (r.bonusRtInQty || 0) + (r.requestInQty || 0) + (r.relaunchInQty || 0) + (r.outReqInQty || 0);
+      const outbound = (r.rtOutQty || 0) + (r.bonusRtOutQty || 0) + (r.outReqOutQty || 0);
       const projStock = Math.max(0, r.stock + inbound - outbound);
       const calc = calcStatusFor(projStock, r.period, r.cum, r.weeksTarget, r.excessTh);
       return {
@@ -585,6 +682,7 @@ export function runShipRtEngine(input: {
     bonusShip, bonusShipUpload, bonusRt, bonusRtUpload,
     relaunchFallbackShipUpload, relaunchFallbackRtUpload, relaunchFallbackDetail,
     requestShipUpload, requestRtUpload, requestNoMatch,
+    requestOutRtUpload, requestOutDetail, requestOutReturn, requestOutNoMatch,
     projRows, analysisRows,
     autoBestTopList: cfg.bestAuto ? [...autoBestTop] : null,
     totals: {
@@ -596,6 +694,8 @@ export function runShipRtEngine(input: {
       bonusRtQtySum: bonusRtUpload.reduce((a, r) => a + r.지시수량, 0),
       requestShipQtySum: requestShipUpload.reduce((a, r) => a + r.의뢰수량, 0),
       requestRtQtySum: requestRtUpload.reduce((a, r) => a + r.지시수량, 0),
+      requestOutRtQtySum: requestOutRtUpload.reduce((a, r) => a + r.지시수량, 0),
+      requestOutReturnQtySum: requestOutReturn.reduce((a, r) => a + r.qty, 0),
       relaunchFallbackQtySum: relaunchFallback.reduce((a, f) => a + f.qty, 0),
     },
   };

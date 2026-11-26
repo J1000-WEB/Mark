@@ -9,7 +9,7 @@ import { readStoreStockSnapshot, readWarehouseStockSnapshot } from "./dataBuilde
 import { readOfflineSalesRows } from "./salesSource";
 import { buildRefMaps, readProductRefs } from "./productRefs";
 import { readRtOrders } from "./rtOrders";
-import { DEFAULT_SHIP_RT_CONFIG, runShipRtEngine, type ShipRtConfig, type StoreRequest } from "./shipRtEngine";
+import { DEFAULT_SHIP_RT_CONFIG, runShipRtEngine, type ShipRtConfig, type StoreRequest, type StoreOutRequest } from "./shipRtEngine";
 
 const CONFIG_SHEET = "출고RT_설정";
 
@@ -51,7 +51,7 @@ function dateList(from: string, to: string) {
   return out;
 }
 
-export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: Partial<ShipRtConfig> } = {}) {
+export async function computeShipRt(opts: { requests?: StoreRequest[]; outRequests?: StoreOutRequest[]; config?: Partial<ShipRtConfig> } = {}) {
   const t0 = Date.now();
   const saved = await readShipRtConfig();
   const cfg: ShipRtConfig = { ...saved.config, ...(opts.config || {}) };
@@ -116,7 +116,11 @@ export async function computeShipRt(opts: { requests?: StoreRequest[]; config?: 
     .map((r) => ({ ...r, storeCode: String(r.storeCode).trim(), style: up(r.style), color: up(r.color), size: normSize(r.size), qty: Number(r.qty || 0) }))
     .filter((r) => r.storeCode && r.style && r.qty > 0);
 
-  const result = runShipRtEngine({ cfg, storeRaw, whRaw, issuedToday, storeRequests: requests, relaunchNewToOld, relaunchSet: maps.relaunch });
+  const outRequests = (opts.outRequests || [])
+    .map((r) => ({ storeCode: String(r.storeCode || "").trim(), style: up(r.style), color: up(r.color), size: r.size ? normSize(r.size) : "", qty: Number(r.qty || 0), note: r.note || "" }))
+    .filter((r) => r.storeCode && r.style);
+
+  const result = runShipRtEngine({ cfg, storeRaw, whRaw, issuedToday, storeRequests: requests, storeOutRequests: outRequests, relaunchNewToOld, relaunchSet: maps.relaunch });
 
   return {
     ...result,

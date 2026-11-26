@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       const r = await saveShipRtConfig(body.config || {}, String(body.by || ""));
       return NextResponse.json({ ok: true, ...r });
     }
-    const result = await computeShipRt({ requests: Array.isArray(body?.requests) ? body.requests : [], config: body?.config || undefined });
+    const result = await computeShipRt({ requests: Array.isArray(body?.requests) ? body.requests : [], outRequests: Array.isArray(body?.outRequests) ? body.outRequests : [], config: body?.config || undefined });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     console.error("ship-rt failed:", e);

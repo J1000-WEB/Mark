@@ -28,7 +28,11 @@ const TABS: { key: string; label: string; upload?: "ship" | "rt"; desc: string; 
   { key: "relaunchFallbackRtUpload", group: "rt", label: "재런칭 RT", upload: "rt", desc: "신품번 부족분을 구품번 과잉 매장에서" },
   { key: "requestShipUpload", group: "ship", label: "매장요청 출고", upload: "ship", desc: "매장요청건 — 창고에서" },
   { key: "requestRtUpload", group: "rt", label: "매장요청 RT", upload: "rt", desc: "매장요청건 — 창고로 못 채운 건 과잉 매장에서" },
-  { key: "requestNoMatch", group: "ship", label: "매장요청 미충족", desc: "못 채운 매장요청과 이유" },
+  { key: "requestNoMatch", group: "ship", label: "매장요청 미충족", desc: "못 채운 매장요청(입고)과 이유" },
+  { key: "requestOutRtUpload", group: "rt", label: "매장반출 RT", upload: "rt", desc: "매장요청건(반출) — 그 SKU가 모자란 매장 → 이 품번 잘 팔리는 매장 순으로 RT" },
+  { key: "requestOutDetail", group: "rt", label: "매장반출 상세", desc: "반출 RT를 어디로 왜 보내는지(받는 매장 예상재고·재고주수)" },
+  { key: "requestOutReturn", group: "rt", label: "매장반출 창고반품", desc: "받을 만한 매장이 없어 창고 반품을 권하는 수량" },
+  { key: "requestOutNoMatch", group: "rt", label: "매장반출 확인필요", desc: "그 매장에 재고가 없거나 매장코드가 목록에 없는 반출 요청" },
   { key: "chulgoRows", group: "ship", label: "출고 상세", desc: "출고 배분 근거" },
   { key: "idongDetail", group: "rt", label: "RT 상세", desc: "RT 매칭 근거(매칭없음 포함)" },
   { key: "relaunchFallbackDetail", group: "rt", label: "재런칭 상세", desc: "재런칭 구품번 보충 근거" },
@@ -46,6 +50,17 @@ function parseRequests(text: string) {
     .map((p) => ({ storeCode: p[0], style: p[1], color: p[2], size: p[3], qty: Number(p[4]), note: p[5] || "" }));
 }
 
+// 2026-11-26: 매장요청건(반출) — 매장코드, 스타일, 칼라(비우면 전체), 사이즈(비우면 전체), 수량(비우면 그 재고 전부), 비고
+function parseOutRequests(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.split(/\t|,/).map((x) => x.trim()))
+    .filter((p) => p.length >= 2 && /\d/.test(p[0]) && p[1])
+    .map((p) => ({ storeCode: p[0], style: p[1], color: p[2] || "", size: p[3] || "", qty: Number(p[4]) || 0, note: p[5] || "" }));
+}
+
 // MARK 2026-11-20: 출고 / RT 나눠 보기 + 매장 고르기(출고 기본 신사·성수, RT 기본 전체)
 const SHIP_DEFAULT = ["21011", "21030"]; // 신사 플래그십, 성수 플래그십
 const recvOf = (r: any) => String(r.받을채널코드 ?? r.importStoreCode ?? r.채널 ?? r.storeCode ?? "");
@@ -58,6 +73,7 @@ export default function ShipRtPanel() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [showCfg, setShowCfg] = useState(false);
   const [reqText, setReqText] = useState("");
+  const [outText, setOutText] = useState("");
   const [shipRound, setShipRound] = useState("");
   const [running, setRunning] = useState(false);
   const [sec, setSec] = useState(0);
@@ -81,6 +97,7 @@ export default function ShipRtPanel() {
       const rp = localStorage.getItem("rtPick");
       if (rp) setRtPick(JSON.parse(rp));
       setReqText(localStorage.getItem("shipRtRequests") || "");
+      setOutText(localStorage.getItem("shipRtOutRequests") || "");
     } catch {}
   }, []);
   useEffect(() => {
@@ -91,13 +108,14 @@ export default function ShipRtPanel() {
   }, [running]);
 
   const requests = useMemo(() => parseRequests(reqText), [reqText]);
+  const outRequests = useMemo(() => parseOutRequests(outText), [outText]);
 
   async function run() {
     setRunning(true);
     setErr("");
     try {
-      try { localStorage.setItem("shipRound", shipRound); localStorage.setItem("shipRtRequests", reqText); } catch {}
-      const r = await fetch("/api/ship-rt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "run", requests, config: { ...(cfg || {}), shipRound } }) });
+      try { localStorage.setItem("shipRound", shipRound); localStorage.setItem("shipRtRequests", reqText); localStorage.setItem("shipRtOutRequests", outText); } catch {}
+      const r = await fetch("/api/ship-rt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "run", requests, outRequests, config: { ...(cfg || {}), shipRound } }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "계산 실패");
       setRes(j);
@@ -182,9 +200,18 @@ export default function ShipRtPanel() {
       </div>
 
       <details className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-        <summary className="cursor-pointer text-sm font-black text-slate-700">🙋 매장요청건 {requests.length ? `(${requests.length}건)` : ""}</summary>
+        <summary className="cursor-pointer text-sm font-black text-slate-700">🙋 매장요청건(입고) {requests.length ? `(${requests.length}건)` : ""}</summary>
         <p className="mt-2 text-[11px] font-semibold text-slate-500">한 줄에 하나: 매장코드, 스타일, 칼라, 사이즈, 수량, 비고(선택) — 쉼표나 엑셀에서 복사한 탭 모두 돼요. 창고에서 먼저, 모자라면 과잉 매장 RT로 채워요.</p>
         <textarea value={reqText} onChange={(e) => setReqText(e.target.value)} rows={4} placeholder={"21030,GF7LKC501,BK,L,3,고객요청"} className="mt-2 w-full rounded-xl border border-slate-300 p-2 font-mono text-xs" />
+      </details>
+
+      <details className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <summary className="cursor-pointer text-sm font-black text-slate-700">📤 매장요청건(반출) {outRequests.length ? `(${outRequests.length}건)` : ""}</summary>
+        <p className="mt-2 text-[11px] font-semibold text-slate-500">
+          매장이 빼고 싶은 품번 — 한 줄에 하나: 매장코드, 스타일, 칼라, 사이즈, 수량, 비고. 칼라·사이즈를 비우면 그 품번 전부, 수량을 비우면 그 재고 전부예요.
+          위 출고·RT를 다 반영한 예상 재고 기준으로 ① 그 SKU가 적정재고보다 모자란 매장(많이 모자란 순) ② 이 품번이 최근 잘 팔리는데 그 사이즈가 1장 이하인 매장(2장씩) 순으로 RT를 만들고, 남으면 창고 반품을 권해요. 결과는 🔁 RT 화면에 있어요.
+        </p>
+        <textarea value={outText} onChange={(e) => setOutText(e.target.value)} rows={4} placeholder={"21011,GF3LKP505,,,,매장 정체\n21030,GF7LKC501,BK,XL,2"} className="mt-2 w-full rounded-xl border border-slate-300 p-2 font-mono text-xs" />
       </details>
 
       <details open={showCfg} onToggle={(e) => setShowCfg((e.target as HTMLDetailsElement).open)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -315,6 +342,8 @@ export default function ShipRtPanel() {
                   ["보충 RT", `${fmt(sumQty(filtered("bonusRtUpload")))}장`, ""],
                   ["재런칭 RT", `${fmt(sumQty(filtered("relaunchFallbackRtUpload")))}장`, ""],
                   ["매장요청 RT", `${fmt(sumQty(filtered("requestRtUpload")))}장`, ""],
+                  ["매장반출 RT", `${fmt(sumQty(filtered("requestOutRtUpload")))}장`, ""],
+                  ["매장반출 창고반품", `${fmt(filtered("requestOutReturn").reduce((a: number, r: any) => a + (Number(r.qty) || 0), 0))}장`, filtered("requestOutReturn").length ? "text-amber-600" : ""],
                 ]
             ).map(([l, v, c]) => (
               <div key={String(l)} className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -327,7 +356,7 @@ export default function ShipRtPanel() {
             {mode === "ship" ? (
               <button type="button" onClick={() => download(["chulgoUpload", "bonusShipUpload", "relaunchFallbackShipUpload", "requestShipUpload"], `출고업로드_${stamp()}.xlsx`)} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white">⬇ 출고 업로드 엑셀{shipPick.length ? `(${shipPick.length}개 매장)` : "(전체)"}</button>
             ) : (
-              <button type="button" onClick={() => download(["rtUpload", "bonusRtUpload", "relaunchFallbackRtUpload", "requestRtUpload"], `RT업로드_${stamp()}.xlsx`)} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white">⬇ RT 업로드 엑셀{rtPick.length ? `(${rtPick.length}개 매장)` : "(전체)"}</button>
+              <button type="button" onClick={() => download(["rtUpload", "bonusRtUpload", "relaunchFallbackRtUpload", "requestRtUpload", "requestOutRtUpload"], `RT업로드_${stamp()}.xlsx`)} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white">⬇ RT 업로드 엑셀{rtPick.length ? `(${rtPick.length}개 매장)` : "(전체)"}</button>
             )}
             <span className="text-[11px] font-semibold text-slate-400">시트별로 나뉘어 있어요(자동/보충/재런칭/매장요청). 고른 매장분만 들어가요.</span>
           </div>

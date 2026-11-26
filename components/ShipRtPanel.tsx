@@ -31,7 +31,8 @@ const TABS: { key: string; label: string; upload?: "ship" | "rt"; desc: string; 
   { key: "requestNoMatch", group: "ship", label: "매장요청 미충족", desc: "못 채운 매장요청(입고)과 이유" },
   { key: "requestOutRtUpload", group: "rt", label: "매장반출 RT", upload: "rt", desc: "매장요청건(반출) — 그 SKU가 모자란 매장 → 이 품번 잘 팔리는 매장 순으로 RT" },
   { key: "requestOutDetail", group: "rt", label: "매장반출 상세", desc: "반출 RT를 어디로 왜 보내는지(받는 매장 예상재고·재고주수)" },
-  { key: "requestOutReturn", group: "rt", label: "매장반출 창고반품", desc: "받을 만한 매장이 없어 창고 반품을 권하는 수량" },
+  { key: "requestOutReturnUpload", group: "rt", label: "반품업로드", upload: "rt", desc: "매장반출 중 받을 매장이 없는 것 — ERP 반품 업로드 양식(채널·스타일·칼라·사이즈·수량)" },
+  { key: "requestOutReturn", group: "rt", label: "매장반출 창고반품", desc: "받을 만한 매장이 없어 창고 반품을 권하는 수량과 이유" },
   { key: "requestOutNoMatch", group: "rt", label: "매장반출 확인필요", desc: "그 매장에 재고가 없거나 매장코드가 목록에 없는 반출 요청" },
   { key: "chulgoRows", group: "ship", label: "출고 상세", desc: "출고 배분 근거" },
   { key: "idongDetail", group: "rt", label: "RT 상세", desc: "RT 매칭 근거(매칭없음 포함)" },
@@ -155,17 +156,25 @@ export default function ShipRtPanel() {
   }
   const sumQty = (rows: any[]) => rows.reduce((a, r) => a + Number(r.의뢰수량 ?? r.지시수량 ?? r.qty ?? 0), 0);
 
-  async function download(keys: string[], filename: string) {
+  async function download(keys: string[], filename: string, returnForm = false) {
     if (!res) return;
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     for (const k of keys) {
       const rows: any[] = filtered(k);
       const def = TABS.find((t) => t.key === k)!;
-      const cols = rows.length ? Object.keys(rows[0]) : [];
+      const cols = rows.length ? Object.keys(rows[0]) : returnForm ? ["채널", "스타일", "칼라", "사이즈", "수량"] : [];
       const header = def.upload ? cols : cols.map((c) => LABELS[c] || c);
       const aoa = [header, ...rows.map((r) => cols.map((c) => r[c] ?? ""))];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), def.label.slice(0, 28));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      if (returnForm) {
+        // ERP 반품 양식: 채널·스타일·칼라·사이즈는 텍스트(앞자리 0 유지), 수량만 숫자
+        aoa.forEach((row, ri) => row.forEach((v, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
+          if (ri === 0 || ci < 4) ws[addr] = { t: "s", v: String(v ?? ""), z: "@" };
+        }));
+      }
+      XLSX.utils.book_append_sheet(wb, ws, returnForm ? "Sample" : def.label.slice(0, 28));
     }
     XLSX.writeFile(wb, filename);
   }
@@ -356,7 +365,12 @@ export default function ShipRtPanel() {
             {mode === "ship" ? (
               <button type="button" onClick={() => download(["chulgoUpload", "bonusShipUpload", "relaunchFallbackShipUpload", "requestShipUpload"], `출고업로드_${stamp()}.xlsx`)} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white">⬇ 출고 업로드 엑셀{shipPick.length ? `(${shipPick.length}개 매장)` : "(전체)"}</button>
             ) : (
+<>
               <button type="button" onClick={() => download(["rtUpload", "bonusRtUpload", "relaunchFallbackRtUpload", "requestRtUpload", "requestOutRtUpload"], `RT업로드_${stamp()}.xlsx`)} className="h-9 rounded-full bg-emerald-600 px-4 text-xs font-black text-white">⬇ RT 업로드 엑셀{rtPick.length ? `(${rtPick.length}개 매장)` : "(전체)"}</button>
+              {filtered("requestOutReturnUpload").length > 0 && (
+                <button type="button" onClick={() => download(["requestOutReturnUpload"], `반품업로드_${stamp()}.xlsx`, true)} className="h-9 rounded-full bg-amber-600 px-4 text-xs font-black text-white">⬇ 반품 업로드 엑셀({fmt(sumQty(filtered("requestOutReturnUpload")))}장)</button>
+              )}
+              </>
             )}
             <span className="text-[11px] font-semibold text-slate-400">시트별로 나뉘어 있어요(자동/보충/재런칭/매장요청). 고른 매장분만 들어가요.</span>
           </div>

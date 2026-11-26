@@ -615,6 +615,8 @@ export function runShipRtEngine(input: {
     importStoreCode: l.storeCode, importStoreName: l.storeName, allocQty: l.qty, importStock: l.importStock, importWeeks: l.importWeeks, reason: l.why, note: l.note,
   }));
   const requestOutReturn = outReqReturn;
+  // 2026-11-26 소천님 ERP 반품 업로드 양식: 채널·스타일·칼라·사이즈·수량(모두 텍스트, 수량만 숫자)
+  const requestOutReturnUpload = outReqReturn.map((r) => ({ 채널: r.storeCode, 스타일: r.style, 칼라: r.color, 사이즈: r.size, 수량: r.qty }));
   const requestOutNoMatch = outReqNoMatch;
 
   // ── 매장요청 업로드/상세 ──
@@ -682,7 +684,7 @@ export function runShipRtEngine(input: {
     bonusShip, bonusShipUpload, bonusRt, bonusRtUpload,
     relaunchFallbackShipUpload, relaunchFallbackRtUpload, relaunchFallbackDetail,
     requestShipUpload, requestRtUpload, requestNoMatch,
-    requestOutRtUpload, requestOutDetail, requestOutReturn, requestOutNoMatch,
+    requestOutRtUpload, requestOutDetail, requestOutReturn, requestOutReturnUpload, requestOutNoMatch,
     projRows, analysisRows,
     autoBestTopList: cfg.bestAuto ? [...autoBestTop] : null,
     totals: {

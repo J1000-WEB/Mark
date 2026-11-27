@@ -105,7 +105,10 @@ export async function buildDailyReview(day?: string) {
       by.set(r.styleCode, x);
     }
     const top = [...by.entries()].sort((p, q) => q[1][0] - p[1][0]).slice(0, 5);
-    if (top.length) lines.push(`👕 TOP5 ${top.map(([s, v]) => `${s} ${v[0]}장`).join(", ")}`);
+    // 읽어주기 때 품번은 어색해서 상품명(보관 상품정보 스타일명)을 앞에, 품번은 괄호로(읽을 땐 괄호 품번을 뺌)
+    const info = await (await import("@/lib/weeklyTrend")).readStyleInfo().catch(() => ({} as Record<string, string[]>));
+    const nm = (st: string) => String(info[st]?.[5] || "").trim();
+    if (top.length) lines.push(`👕 TOP5 ${top.map(([s, v]) => `${nm(s) ? `${nm(s)}(${s})` : s} ${v[0]}장`).join(", ")}`);
   } catch {}
 
   // 진행 중 스오크

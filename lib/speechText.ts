@@ -22,6 +22,7 @@ export function toSpeech(text: string) {
   s = s.replace(/(\d{1,2})\/(\d{1,2})(?!\d)/g, "$1월 $2일");
   // 금액: 121백 → 1억 2,100만원, 5.6억 → 5.6억원, 5,136만 → 5,136만원
   s = s.replace(/([+-]?)(\d[\d,]*(?:\.\d+)?)백/g, (_, sg, v) => wonWords(Number(v.replace(/,/g, "")) * 1e6) + (sg === "+" ? " 증가" : sg === "-" ? " 감소" : ""));
+  s = s.replace(/(\d+\.\d+)억/g, (_, v) => wonWords(Number(v) * 1e8)); // 18.94억 → 18억 9,400만원
   s = s.replace(/(\d[\d,.]*)억(?!\s*\d|원)/g, "$1억원");
   s = s.replace(/(\d[\d,]*)만(?!원)/g, "$1만원");
   // 증감: +12.7% → 12.7% 증가, -2% → 2% 감소, +263장 → 263장 증가
@@ -29,12 +30,16 @@ export function toSpeech(text: string) {
   s = s.replace(/(^|[\s(,])-(\d[\d,.]*)\s*(%|장)/g, "$1$2$3 감소");
   s = s.replace(/\+(\d[\d.]*)°C/g, "$1도 높음").replace(/(^|[\s(])-(\d[\d.]*)°C/g, "$1$2도 낮음");
   s = s.replace(/1\+1/g, "원 플러스 원");
+  s = s.replace(/\s*\((?=[A-Z0-9]*\d)[A-Z][A-Z0-9]{6,}\)/g, ""); // 상품명(GF7LKC501) → 상품명
+  s = s.replace(/TOP\s*5/gi, "탑 파이브").replace(/TOP\s*10/gi, "탑 텐");
   s = s.replace(/%/g, "퍼센트");
   s = s.replace(/°C/g, "도");
   s = s.replace(/(\d)~(\d)/g, "$1에서 $2");
   s = s.replace(/\[(\d+)\]/g, "");
   s = s.replace(/^\s*[·•]\s*/gm, "").replace(/\s*[·•]\s*/g, ", ").replace(/\s*\/\s*/g, ", ").replace(/→/g, ",").replace(/※/g, "");
   s = s.replace(/^\s*-\s*/gm, "");
+  // 숫자 안 쉼표는 빼야 "5,136만"을 "오, 백삼십육만"으로 끊어 읽지 않음
+  s = s.replace(/(\d),(?=\d{3}(?!\d))/g, "$1").replace(/(\d),(?=\d{3}(?!\d))/g, "$1");
   s = s.replace(/[ \t]+/g, " ");
   // 줄 끝마다 마침표(읽을 때 쉬게)
   s = s

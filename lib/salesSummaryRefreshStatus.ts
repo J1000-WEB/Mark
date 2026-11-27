@@ -3,7 +3,6 @@
 // 매출탭 상단 배너로 보여줍니다(안 들어왔으면 "용인 업데이트 확인필요!!!").
 //   로그 시트(MARK_DB) "매출탭_자동갱신_로그": [실행시각(KST), 구분, 성공, 오류, 확인일, 용인매출, 무신사매출, 반영행수]
 
-import { isKoreanHoliday } from "@/lib/koreanHolidays";
 import { getDbSheetId, ensureSheetExistsById, appendValuesById, getSheetValuesById } from "./googleSheets";
 import { readSalesSummarySnapshot } from "./dataBuilder";
 
@@ -36,13 +35,9 @@ export async function checkLateStores(date?: string) {
   const today = kstNowParts().date;
   const checkDate = date || addDays(today, -1);
   const { rows } = await readSalesSummarySnapshot();
-  const isWork = (d: string) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return w !== 0 && w !== 6 && !isKoreanHoliday(d); };
-  const musinsaSkipped = !date && !isWork(today);
-  const musinsaDates: string[] = [];
-  if (!date && !musinsaSkipped) {
-    let d = addDays(today, -1);
-    for (let i = 0; i < 10; i++) { musinsaDates.unshift(d); if (isWork(d)) break; d = addDays(d, -1); }
-  } else musinsaDates.push(checkDate);
+  // MARK 2026-11-27 소천님: 무신사는 이제 매일 밤 10~12시에 받아 올림(주말 포함) → 매일 어제 하루만 확인
+  const musinsaSkipped = false;
+  const musinsaDates: string[] = [checkDate];
   let yongin = 0, musinsa = 0, yonginRow = false;
   const musinsaUpdated = new Set<string>(); // 매출(수량 또는 금액)이 들어온 무신사 매장(어제)
   const musinsaByDate = new Map<string, number>(); // 날짜별 매출 들어온 무신사 매장 수
@@ -97,22 +92,23 @@ export async function getRefreshStatus() {
   const now = kstNowParts();
   const [runs, live] = await Promise.all([readRecentRuns(), checkLateStores()]);
   const todayRuns = runs.filter((r) => r.at.slice(0, 10) === now.date);
+  // MARK 2026-11-27: 무신사를 밤에 올리므로 새벽 4:00 갱신이면 다 들어와 있어야 함 → 오늘 4:00 갱신(또는 그 뒤 갱신)이 있으면 바로 판정, 9:20은 빠진 날 다시 가져오기
   const after930 = todayRuns.find((r) => r.ok && r.at.slice(11, 16) >= "09:20");
+  const afterDawn = todayRuns.find((r) => r.ok && r.at.slice(11, 16) >= "03:50") || null;
   const lastOk = runs.find((r) => r.ok) || null;
-  // MARK 2026-11-02: 무신사도 용인처럼 확인 — 어제 매출이 0이면 "확인필요" 목록에 넣음
   const missing: string[] = [];
   if (!live.yonginOk) missing.push("용인");
   if (!live.musinsaOk) missing.push("무신사");
   let phase: "pending" | "missing" | "ok";
-  if (!missing.length) phase = after930 || now.hhmm >= "09:20" ? "ok" : "pending";
-  // 9:30 갱신이 10시까지 기록이 없으면(실패/지연) 기다리지 않고 확인필요로 띄움
-  else phase = after930 || now.hhmm >= "10:00" ? "missing" : "pending";
+  if (!missing.length) phase = "ok";
+  else phase = afterDawn || now.hhmm >= "05:00" ? "missing" : "pending";
   return {
     now: now.label,
     phase,
     missing,
     check: live,
     after930: after930 || null,
+    afterDawn,
     lastOk,
     todayRuns,
   };

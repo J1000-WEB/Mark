@@ -1,4 +1,4 @@
-// MARK 2026-11-27 소천님: 알림은 메일 대신 카카오톡으로, 그때그때가 아니라 매일 아침 9:20(매출탭 갱신 직후) 한 번에.
+// MARK 2026-11-27 소천님: 알림은 메일 대신 카카오톡으로, 그때그때가 아니라 매일 아침 한 번에(처음 9:20 → 같은 날 7:50으로 옮김, /api/kakao/digest 크론).
 // - 낮·밤에 생긴 알림(sendEmailAlert)은 MARK_DB "알림_대기"에 쌓아 두기만 함
 // - 9:20 크론(sales-summary-drive-import slot 0920) 끝에 sendDailyDigest(): 어제 매출 · 인샵 업로드 검증 · 용인/무신사 반영 · 쌓인 알림을
 //   카톡 "나와의 채팅"으로(카톡 텍스트 한 통 200자 → 줄 단위로 나눠 여러 통). 보낸 알림은 D열에 보낸 시각 기록.
@@ -79,7 +79,7 @@ export async function sendDailyDigest(check?: any) {
     lines.push("② 인샵 업로드: 못 읽음");
   }
 
-  // ③ 용인·무신사 매출 반영(9:20 매출탭 갱신 결과)
+  // ③ 용인·무신사 매출 반영(새벽 4:00 매출탭 갱신 결과 — 무신사는 전날 밤에 올림)
   if (check) {
     const miss = [!check.yonginOk ? "용인" : "", !check.musinsaOk && !check.musinsaSkipped ? "무신사" : ""].filter(Boolean);
     lines.push(miss.length ? `③ 매출탭 ⚠ ${miss.join("·")} ${check.checkDate || ""} 매출 없음 — ERP 확인` : "③ 매출탭 ✅ 용인·무신사 반영됨");

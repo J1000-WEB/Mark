@@ -35,7 +35,7 @@ export function chunk(lines: string[], max = 195) {
   return out;
 }
 
-export async function sendDailyDigest(check?: any) {
+export async function sendDailyDigest(check?: any, opts: { dryRun?: boolean } = {}) {
   const { sendKakaoMemo } = await import("@/lib/kakao");
   const lines: string[] = [];
   const today = kstDay(0);
@@ -85,7 +85,27 @@ export async function sendDailyDigest(check?: any) {
     lines.push(miss.length ? `③ 매출탭 ⚠ ${miss.join("·")} ${check.checkDate || ""} 매출 없음 — ERP 확인` : "③ 매출탭 ✅ 용인·무신사 반영됨");
   }
 
-  // ④ 밤사이 쌓인 다른 알림
+  // ④ PIP(스타일별 채널별) 새벽 업로드 — 시트 기준일자·줄 수 + 보관 시트에 어제가 저장됐는지 (2026-11-28 소천님)
+  try {
+    const { getDailySourceSheetId, getSpreadsheetTitlesById } = await import("@/lib/googleSheets");
+    const { pickDailySheetTitle } = await import("@/lib/dailySales");
+    const sid = getDailySourceSheetId();
+    const title = pickDailySheetTitle(await getSpreadsheetTitlesById(sid));
+    const ab = title ? ((await getSheetValuesById(sid, title, "A:B")) || []) : [];
+    const dataRows = ab.slice(3).filter((r) => String(r?.[1] ?? "").trim());
+    const base = String(dataRows[0]?.[1] ?? "").replace(/\D/g, "").slice(0, 8);
+    const baseIso = base.length === 8 ? `${base.slice(0, 4)}-${base.slice(4, 6)}-${base.slice(6, 8)}` : "";
+    let archived = false;
+    try { archived = (await (await import("@/lib/pipArchive")).archivedSalesDates()).includes(y); } catch {}
+    const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+    if (!title || !dataRows.length) lines.push("④ PIP ⚠ 시트를 못 읽었어요 — 새벽 업로드 확인");
+    else if (baseIso && baseIso < y) lines.push(`④ PIP ⚠ 기준일 ${md(baseIso)} (어제 ${md(y)} 아님) · ${dataRows.length.toLocaleString("ko-KR")}줄`);
+    else lines.push(`④ PIP ✅ ${baseIso ? md(baseIso) : "?"} 기준 ${dataRows.length.toLocaleString("ko-KR")}줄 · 보관 ${archived ? "✅" : "⚠ 어제 없음"}`);
+  } catch {
+    lines.push("④ PIP: 못 읽음");
+  }
+
+  // ⑤ 밤사이 쌓인 다른 알림
   const id = getDbSheetId();
   await ensureSheetExistsById(id, TAB, HEADER);
   const raw = await getSheetValuesById(id, TAB, "A:D").catch(() => [] as any[][]);
@@ -94,14 +114,15 @@ export async function sendDailyDigest(check?: any) {
     if (i === 0 || !r?.[1] || String(r?.[3] || "")) return;
     pending.push({ row: i + 1, subject: String(r[1]) });
   });
-  // 인샵 검증·용인/무신사 알림은 ②③에 이미 들어 있으니 ④에선 뺌
+  // 인샵 검증·용인/무신사 알림은 ②③에 이미 들어 있으니 ⑤에선 뺌
   const others = [...new Set(pending.map((p) => p.subject).filter((s) => !/인샵 매출 업로드 확인필요|업데이트 확인필요/.test(s)))];
   if (others.length) {
-    lines.push(`④ 그 외 알림 ${others.length}건`);
+    lines.push(`⑤ 그 외 알림 ${others.length}건`);
     for (const s of others.slice(0, 8)) lines.push(`· ${s.replace(/^\[MARK\]\s*/, "")}`);
-  } else lines.push("④ 그 외 알림 없음");
+  } else lines.push("⑤ 그 외 알림 없음");
 
   const msgs = chunk(lines);
+  if (opts.dryRun) return { ok: true, dryRun: true, messages: msgs, results: [] as any[] };
   const results = [];
   for (const m of msgs) results.push(await sendKakaoMemo(m, undefined, { button: false })); // 점검은 눌러서 할 게 없어 버튼 없음
   const ok = results.every((r) => r.ok);

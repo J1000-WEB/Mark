@@ -11,7 +11,7 @@ export const KAKAO_REDIRECT = `${SITE}/api/kakao/callback`;
 type Tok = { access: string; refresh: string; accessExp: number; refreshExp: number; savedAt?: string };
 
 export function kakaoKey() {
-  return process.env.KAKAO_REST_KEY || "";
+  return (process.env.KAKAO_REST_KEY || "").trim();
 }
 export function kakaoLoginUrl() {
   const q = new URLSearchParams({ client_id: kakaoKey(), redirect_uri: KAKAO_REDIRECT, response_type: "code", scope: "talk_message" });
@@ -38,7 +38,7 @@ async function writeTok(t: Tok) {
 
 async function tokenRequest(params: Record<string, string>) {
   const body = new URLSearchParams({ client_id: kakaoKey(), ...params });
-  if (process.env.KAKAO_CLIENT_SECRET) body.set("client_secret", process.env.KAKAO_CLIENT_SECRET);
+  if (process.env.KAKAO_CLIENT_SECRET?.trim()) body.set("client_secret", process.env.KAKAO_CLIENT_SECRET.trim());
   const r = await fetch("https://kauth.kakao.com/oauth/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, body });
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) throw new Error(`카카오 토큰 실패: ${j.error_description || j.error || r.status}`);
@@ -75,6 +75,11 @@ export async function kakaoStatus() {
   const t = await readTok().catch(() => null);
   return {
     hasKey: !!kakaoKey(),
+    keyLen: kakaoKey().trim().length, // 보통 32
+    keyHasSpace: kakaoKey() !== kakaoKey().trim(),
+    hasSecret: !!process.env.KAKAO_CLIENT_SECRET,
+    secretLen: (process.env.KAKAO_CLIENT_SECRET || "").trim().length,
+    secretHasSpace: (process.env.KAKAO_CLIENT_SECRET || "") !== (process.env.KAKAO_CLIENT_SECRET || "").trim(),
     connected: !!t?.refresh,
     refreshUntil: t?.refreshExp ? new Date(t.refreshExp + 9 * 3600 * 1000).toISOString().slice(0, 10) : "",
     savedAt: t?.savedAt || "",

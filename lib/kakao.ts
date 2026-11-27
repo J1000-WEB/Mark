@@ -54,8 +54,12 @@ export async function kakaoExchangeCode(code: string) {
 }
 
 /** 유효한 access 토큰(필요하면 새로 받음). force=true면 access가 남아 있어도 갱신(refresh 연장용) */
+// 같은 실행 안에서 여러 통 보낼 때 시트를 매번 읽지 않게(구글 시트 1분 읽기 한도)
+let memTok: Tok | null = null;
 export async function kakaoAccess(force = false): Promise<string> {
+  if (!force && memTok?.access && memTok.accessExp - Date.now() > 5 * 60 * 1000) return memTok.access;
   const t = await readTok();
+  memTok = t;
   if (!t?.refresh) throw new Error("카카오 연결 안 됨 — /api/kakao/login 에서 한 번 로그인해 주세요.");
   const now = Date.now();
   if (!force && t.access && t.accessExp - now > 5 * 60 * 1000) return t.access;
@@ -68,6 +72,7 @@ export async function kakaoAccess(force = false): Promise<string> {
     refreshExp: j.refresh_token ? now + (j.refresh_token_expires_in || 5183999) * 1000 : t.refreshExp,
   };
   await writeTok(next);
+  memTok = next;
   return next.access;
 }
 

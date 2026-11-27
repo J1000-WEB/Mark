@@ -185,6 +185,8 @@ async function send(lines: string[]) {
 export async function runSalesReview(opts: { kind?: "auto" | "daily" | "weekly"; day?: string; week?: string; dryRun?: boolean; force?: boolean } = {}) {
   const kind = opts.kind || "auto";
   const out: any = { ok: true };
+  // 토큰을 먼저 읽어 둠(리뷰 만들며 시트를 많이 읽은 뒤엔 1분 읽기 한도에 걸릴 수 있음)
+  if (!opts.dryRun) await (await import("@/lib/kakao")).kakaoAccess().catch(() => "");
   const today = kstToday();
   const doDaily = kind === "auto" || kind === "daily";
   const doWeekly = kind === "weekly" || (kind === "auto" && dw(today) === "월");

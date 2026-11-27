@@ -129,6 +129,12 @@ async function readTabDateIndex(sheetId: string, tab: string) {
   return map;
 }
 
+/** 재고 보관 시트(재고_일별)에 그 날짜가 저장됐는지 — 아침 점검 알림용 */
+export async function archivedStockHasDate(d: string) {
+  stockIdxCache.delete(`${STOCK_ARCHIVE_SHEET_ID}|재고_일별`);
+  return (await readTabDateIndex(STOCK_ARCHIVE_SHEET_ID, "재고_일별")).has(d);
+}
+
 function prevSunday(ymd: string) {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - d.getUTCDay());

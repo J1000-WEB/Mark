@@ -105,7 +105,26 @@ export async function sendDailyDigest(check?: any, opts: { dryRun?: boolean } = 
     lines.push("④ PIP: 못 읽음");
   }
 
-  // ⑤ 밤사이 쌓인 다른 알림
+  // ⑤ 물류 가용재고(ERP ONOFF 7:00) · 보관 시트 재고(재고_일별, 어제) (2026-11-28 소천님)
+  try {
+    const parts: string[] = [];
+    const { getWarehouseStockSnapshotMeta } = await import("@/lib/dataBuilder");
+    const meta: any = await getWarehouseStockSnapshotMeta().catch(() => null);
+    const at = String(meta?.uploadedAt || "");
+    const atDay = at.replace(/[./]/g, "-").slice(0, 10);
+    const rc = Number(meta?.rowCount || 0);
+    if (!at) parts.push("물류가용 ⚠ 기록 없음");
+    else if (atDay === today) parts.push(`물류가용 ✅ ${at.slice(11, 16)} ${rc ? `${rc.toLocaleString("ko-KR")}줄` : ""}`.trim());
+    else parts.push(`물류가용 ⚠ 마지막 ${at.slice(5, 16)}`);
+    const { archivedStockHasDate } = await import("@/lib/pipArchive");
+    const has = await archivedStockHasDate(y).catch(() => null);
+    parts.push(has == null ? "보관재고 못 읽음" : has ? "보관재고 ✅" : "보관재고 ⚠ 어제 없음");
+    lines.push(`⑤ ${parts.join(" · ")}`);
+  } catch {
+    lines.push("⑤ 물류가용·보관재고: 못 읽음");
+  }
+
+  // ⑥ 밤사이 쌓인 다른 알림
   const id = getDbSheetId();
   await ensureSheetExistsById(id, TAB, HEADER);
   const raw = await getSheetValuesById(id, TAB, "A:D").catch(() => [] as any[][]);
@@ -114,12 +133,12 @@ export async function sendDailyDigest(check?: any, opts: { dryRun?: boolean } = 
     if (i === 0 || !r?.[1] || String(r?.[3] || "")) return;
     pending.push({ row: i + 1, subject: String(r[1]) });
   });
-  // 인샵 검증·용인/무신사 알림은 ②③에 이미 들어 있으니 ⑤에선 뺌
+  // 인샵 검증·용인/무신사 알림은 ②③에 이미 들어 있으니 ⑥에선 뺌
   const others = [...new Set(pending.map((p) => p.subject).filter((s) => !/인샵 매출 업로드 확인필요|업데이트 확인필요/.test(s)))];
   if (others.length) {
-    lines.push(`⑤ 그 외 알림 ${others.length}건`);
+    lines.push(`⑥ 그 외 알림 ${others.length}건`);
     for (const s of others.slice(0, 8)) lines.push(`· ${s.replace(/^\[MARK\]\s*/, "")}`);
-  } else lines.push("⑤ 그 외 알림 없음");
+  } else lines.push("⑥ 그 외 알림 없음");
 
   const msgs = chunk(lines);
   if (opts.dryRun) return { ok: true, dryRun: true, messages: msgs, results: [] as any[] };

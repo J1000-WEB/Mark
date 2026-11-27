@@ -126,6 +126,10 @@
     "app/api/rt-suggestions/route.ts": {
       "memory": 3009,
       "maxDuration": 300
+    },
+    "app/api/kakao/review/route.ts": {
+      "memory": 1024,
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -172,6 +176,10 @@
     {
       "path": "/api/sales-summary-drive-import?slot=0920",
       "schedule": "20 0 * * *"
+    },
+    {
+      "path": "/api/kakao/review",
+      "schedule": "0 23 * * *"
     }
   ]
 }

@@ -21,7 +21,7 @@ export async function queueAlert(subject: string, html: string) {
 }
 
 /** 줄들을 200자 안쪽 메시지 여러 개로 */
-function chunk(lines: string[], max = 195) {
+export function chunk(lines: string[], max = 195) {
   const out: string[] = [];
   let cur = "";
   for (const l of lines) {

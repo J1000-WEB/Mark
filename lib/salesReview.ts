@@ -261,6 +261,8 @@ export async function runSalesReview(opts: { kind?: "auto" | "daily" | "weekly";
     const o: any = (out[j.k] = { key: r.key, summary: r.summary.join("\n"), text: r.lines.join("\n") });
     if (opts.dryRun) continue;
     await saveReview(j.k, r.key, o.summary, o.text).catch((e) => (o.saveError = String(e?.message || e)));
+    // 리뷰 화면 "읽어주기"가 바로 나오게 소리도 미리 만들어 둠(Google 음성이 꺼져 있으면 그냥 넘어감)
+    o.tts = await (await import("@/lib/reviewTts")).synthReview(o.text).then((t) => (t.ok ? (t.cached ? "저장본 있음" : "만듦") : `안 됨: ${String(t.error || "").slice(0, 60)}`)).catch(() => "안 됨");
     if (!opts.force && (await alreadySent(j.k, r.key))) { o.skipped = "이미 보냄"; continue; }
     const s = await sendSummary(j.k, r.key, r.summary);
     o.sent = s;

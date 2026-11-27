@@ -1,0 +1,92 @@
+import { google } from "googleapis";
+import { createHash } from "crypto";
+import { getPrivateKey, getDbSheetId, ensureSheetExistsById, getSheetValuesById, appendValuesById, uploadBinaryFileToDrive, downloadDriveFileWritable } from "@/lib/googleSheets";
+import { toSpeech } from "@/lib/speechText";
+
+// 리뷰 소리내어 읽기 — Google Cloud Text-to-Speech(서비스 계정, 프로젝트에서 "Cloud Text-to-Speech API" 사용 설정 필요)
+// 목소리: 자연스러운 여성(Chirp3 HD) → 안 되면 Neural2-A. 응답 = mp3 base64 조각들(한 번에 5000바이트 제한이라 줄 단위로 나눔).
+const VOICES = [process.env.TTS_VOICE || "ko-KR-Chirp3-HD-Aoede", "ko-KR-Neural2-A"];
+let tokenCache: { at: number; token: string } | null = null;
+
+async function token() {
+  if (tokenCache && Date.now() - tokenCache.at < 30 * 60 * 1000) return tokenCache.token;
+  const auth = new google.auth.JWT({ email: process.env.GOOGLE_CLIENT_EMAIL, key: getPrivateKey(), scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+  const t = await auth.authorize();
+  tokenCache = { at: Date.now(), token: String(t.access_token) };
+  return tokenCache.token;
+}
+
+function pieces(text: string, maxBytes = 3000) {
+  const out: string[] = [];
+  let cur = "";
+  for (const l of text.split("\n")) {
+    if (cur && Buffer.byteLength(cur + "\n" + l) > maxBytes) { out.push(cur); cur = l; }
+    else cur = cur ? `${cur}\n${l}` : l;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// 한 번 만든 소리는 드라이브에 mp3로 저장해 두고 다음부터 그걸 틈(몇 명이 몇 번 들어도 Google 요청은 글 하나당 한 번)
+const CACHE_TAB = "카톡리뷰_음성";
+async function cachedAudio(hash: string): Promise<{ voice: string; audio: string[] } | null> {
+  try {
+    const id = getDbSheetId();
+    await ensureSheetExistsById(id, CACHE_TAB, ["해시", "파일ID(JSON)", "목소리", "저장시각"]);
+    const v = (await getSheetValuesById(id, CACHE_TAB, "A:C")) || [];
+    const r = v.find((x: any[]) => x?.[0] === hash);
+    if (!r) return null;
+    const ids: string[] = JSON.parse(String(r[1] || "[]"));
+    const audio: string[] = [];
+    for (const f of ids) audio.push((await downloadDriveFileWritable(f)).buffer.toString("base64"));
+    return { voice: String(r[2] || ""), audio };
+  } catch {
+    return null;
+  }
+}
+async function saveAudio(hash: string, voice: string, audio: string[]) {
+  try {
+    const ids: string[] = [];
+    for (let i = 0; i < audio.length; i++) {
+      const f = await uploadBinaryFileToDrive(`review-tts-${hash.slice(0, 12)}-${i + 1}.mp3`, Buffer.from(audio[i], "base64"), "audio/mpeg");
+      ids.push(String(f.id));
+    }
+    const stamp = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 19);
+    await appendValuesById(getDbSheetId(), `'${CACHE_TAB}'!A:D`, [[hash, JSON.stringify(ids), voice, stamp]]);
+  } catch {}
+}
+
+/** 리뷰 글 → mp3 조각(base64). 같은 글은 드라이브 저장본을 씀. */
+export async function synthReview(text: string, rateIn?: number): Promise<{ ok: boolean; voice?: string; audio?: string[]; speech: string; cached?: boolean; error?: string }> {
+  const speech = toSpeech(String(text || ""));
+  if (!speech) return { ok: false, error: "읽을 글이 없어요.", speech };
+  const rate = Number(rateIn) || 1.05;
+  const hash = createHash("sha1").update(`${VOICES.join(",")}|${rate}|${speech}`).digest("hex");
+  const hit = await cachedAudio(hash);
+  if (hit?.audio.length) return { ok: true, voice: hit.voice, audio: hit.audio, speech, cached: true };
+  try {
+    const tk = await token();
+    let lastErr = "";
+    for (const voice of VOICES) {
+      const audio: string[] = [];
+      let failed = false;
+      for (const p of pieces(speech)) {
+        const r = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ input: { text: p }, voice: { languageCode: "ko-KR", name: voice }, audioConfig: { audioEncoding: "MP3", speakingRate: rate } }),
+        });
+        const j: any = await r.json().catch(() => ({}));
+        if (!r.ok || !j.audioContent) { lastErr = j?.error?.message || `TTS 실패(${r.status})`; failed = true; break; }
+        audio.push(j.audioContent);
+      }
+      if (!failed) {
+        await saveAudio(hash, voice, audio);
+        return { ok: true, voice, audio, speech };
+      }
+    }
+    return { ok: false, error: lastErr, speech };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message || e), speech };
+  }
+}

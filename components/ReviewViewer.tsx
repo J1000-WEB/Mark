@@ -151,7 +151,6 @@ export default function ReviewViewer() {
         {err && <div className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</div>}
         {rev && !loading && (
           <>
-            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[13px] font-bold leading-6 text-slate-700 whitespace-pre-wrap">{rev.summary.replace(/^\[MARK\][^\n]*\n?/, "")}</div>
             <div className="mt-4 space-y-1 text-[14px] leading-7 text-slate-800">
               {rev.text.split("\n").slice(1).map((l, i) => {
                 const head = /^\[\d+\]|^\[이번주/.test(l);

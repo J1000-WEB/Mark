@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
-import { getPrivateKey } from "@/lib/googleSheets";
+import { createHash } from "crypto";
+import { getPrivateKey, getDbSheetId, ensureSheetExistsById, getSheetValuesById, appendValuesById, uploadBinaryFileToDrive, downloadDriveFileWritable } from "@/lib/googleSheets";
 import { toSpeech } from "@/lib/speechText";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +31,43 @@ function pieces(text: string, maxBytes = 3000) {
   return out;
 }
 
+// 한 번 만든 소리는 드라이브에 mp3로 저장해 두고 다음부터 그걸 틈(몇 명이 몇 번 들어도 Google 요청은 글 하나당 한 번)
+const CACHE_TAB = "카톡리뷰_음성";
+async function cachedAudio(hash: string): Promise<{ voice: string; audio: string[] } | null> {
+  try {
+    const id = getDbSheetId();
+    await ensureSheetExistsById(id, CACHE_TAB, ["해시", "파일ID(JSON)", "목소리", "저장시각"]);
+    const v = (await getSheetValuesById(id, CACHE_TAB, "A:C")) || [];
+    const r = v.find((x: any[]) => x?.[0] === hash);
+    if (!r) return null;
+    const ids: string[] = JSON.parse(String(r[1] || "[]"));
+    const audio: string[] = [];
+    for (const f of ids) audio.push((await downloadDriveFileWritable(f)).buffer.toString("base64"));
+    return { voice: String(r[2] || ""), audio };
+  } catch {
+    return null;
+  }
+}
+async function saveAudio(hash: string, voice: string, audio: string[]) {
+  try {
+    const ids: string[] = [];
+    for (let i = 0; i < audio.length; i++) {
+      const f = await uploadBinaryFileToDrive(`review-tts-${hash.slice(0, 12)}-${i + 1}.mp3`, Buffer.from(audio[i], "base64"), "audio/mpeg");
+      ids.push(String(f.id));
+    }
+    const stamp = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 19);
+    await appendValuesById(getDbSheetId(), `'${CACHE_TAB}'!A:D`, [[hash, JSON.stringify(ids), voice, stamp]]);
+  } catch {}
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const speech = toSpeech(String(body?.text || ""));
   if (!speech) return NextResponse.json({ ok: false, error: "읽을 글이 없어요." }, { status: 400 });
+  const rate = Number(body?.rate) || 1.05;
+  const hash = createHash("sha1").update(`${VOICES.join(",")}|${rate}|${speech}`).digest("hex");
+  const hit = await cachedAudio(hash);
+  if (hit?.audio.length) return NextResponse.json({ ok: true, voice: hit.voice, audio: hit.audio, speech, cached: true });
   try {
     const tk = await token();
     let lastErr = "";
@@ -44,13 +78,16 @@ export async function POST(req: Request) {
         const r = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
           method: "POST",
           headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ input: { text: p }, voice: { languageCode: "ko-KR", name: voice }, audioConfig: { audioEncoding: "MP3", speakingRate: Number(body?.rate) || 1.05 } }),
+          body: JSON.stringify({ input: { text: p }, voice: { languageCode: "ko-KR", name: voice }, audioConfig: { audioEncoding: "MP3", speakingRate: rate } }),
         });
         const j: any = await r.json().catch(() => ({}));
         if (!r.ok || !j.audioContent) { lastErr = j?.error?.message || `TTS 실패(${r.status})`; failed = true; break; }
         audio.push(j.audioContent);
       }
-      if (!failed) return NextResponse.json({ ok: true, voice, audio, speech });
+      if (!failed) {
+        await saveAudio(hash, voice, audio);
+        return NextResponse.json({ ok: true, voice, audio, speech });
+      }
     }
     return NextResponse.json({ ok: false, error: lastErr, speech });
   } catch (e: any) {

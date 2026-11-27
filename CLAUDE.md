@@ -429,6 +429,7 @@
   **같은 날 변경(소천님)**: 리뷰는 **요약 한 통 + "자세히 보기" → `/review?kind=&key=`**(메뉴 "리뷰", `components/ReviewViewer.tsx`: 일간/주간 탭, ◀▶·날짜 고르기, 지난 리뷰 목록, 다시 만들기).
   본문은 MARK_DB `카톡리뷰_기록`(종류·기준·저장시각·요약·본문)에 매일 저장, 저장 안 된 과거 날짜·주는 열면 만들어 저장(GET `/api/review?kind&key[&rebuild=1]`, `?list=1`).
   **🔊 읽어주기** = POST `/api/review/tts`(`lib/speechText.ts` toSpeech로 "121백→1억 2,100만원", "+2%→2퍼센트 증가" 등 바꿈) → Google Cloud TTS(서비스 계정, 목소리 ko-KR-Chirp3-HD-Aoede → Neural2-A, env TTS_VOICE),
+  한 번 만든 소리는 드라이브(GOOGLE_DRIVE 폴더)에 mp3로 저장, MARK_DB `카톡리뷰_음성`(해시·파일ID·목소리) — 같은 글은 다시 요청 안 함(요금 = 글 하나당 한 번).
   **프로젝트 24347967100에 Cloud Text-to-Speech API 사용 설정 필요**(안 되어 있으면 기기 브라우저 목소리로 대신 읽음). 9:20 점검 알림은 버튼 없음(`sendKakaoMemo(..., {button:false})` = buttons []).
 - 이미 구축되어 있고 **재사용 대상**: 일간매출 스냅샷 누락 알림, PIP 대용량 업로드 실패 알림
   등에서 이미 씀. 새 알림 기능 만들 때 이 인프라 그대로 재사용하면 됨.

@@ -168,13 +168,12 @@ export async function buildWeeklyReview(weekMonday?: string) {
   if (tw.length) { lines.push("[이번주 스오크]"); lines.push(...tw); }
   const f: any = auto.facts?.sales || {};
   const offers: any[] = auto.facts?.offers || [];
-  const oT = offers.reduce((x, o) => x + (o.target || 0), 0), oA = offers.filter((o) => o.target).reduce((x, o) => x + o.actual, 0);
   const promoLine = lines.find((l) => /^- 실적: 판매/.test(l));
   const summary = [
     lines[0],
     `매출 ${eok(f.cur || 0)}${f.target ? `(목표 ${Math.round(((f.cur || 0) / f.target) * 100)}%)` : ""} · 전주 ${pct(rate(f.cur, f.lw))} · 전년 ${pct(rate(f.cur, f.ly))} · 동일매장 ${pct(f.likeYoy ?? null)}`,
     ...(promoLine ? [`프로모션 ${promoLine.replace(/^- 실적: 판매\s*/, "").split(" / ")[0]}`] : []),
-    ...(oT ? [`스오크 ${offers.length}개소 진척 ${Math.round((oA / oT) * 100)}%`] : []),
+    ...(offers.length ? [`스오크 ${offers.length}개소 매출 ${eok(offers.reduce((x, o) => x + (o.actual || 0), 0))} (${offers.map((o) => `${short(String(o.store)).replace(/\s*(아울렛|백화점|점)$/,"")} ${man(o.actual || 0)}`).join(", ")})`] : []),
   ];
   return { week: wk, lines, summary };
 }

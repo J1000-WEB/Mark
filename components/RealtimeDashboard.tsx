@@ -359,16 +359,7 @@ export default function RealtimeDashboard() {
               </Card>
             </section>
 
-            <Card
-              title="재고 이슈 (추정 재고 적은 순)"
-              right={
-                <span className="text-xs font-semibold text-slate-400">
-                  {data.stockBaselineDate ? `${data.stockBaselineDate} 새벽 스냅샷 - 오늘 판매 기준 추정치` : "재고 스냅샷을 찾지 못했습니다"}
-                </span>
-              }
-            >
-              <StockIssueList rows={data.stockIssues || []} />
-            </Card>
+            {/* 2026-11-27 소천님: "재고 이슈" 카드는 지금은 쓰기 어려워 뺌(StockIssueList 코드는 남김) */}
           </>
         )}
       </div>

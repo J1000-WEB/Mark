@@ -67,7 +67,10 @@ export async function buildMeetingAuto(weekMonday: string) {
     readSalesSummaryRowsForReports(),
     readWeatherHistory().catch(() => [] as any[]),
     readSpecialOfferSheet().catch(() => null),
-    buildPromoReport(rs).catch((e) => ({ error: String(e?.message || e) }) as any),
+    // 2026-11-27 소천님: IMC 현황에서 마지막으로 저장한 "조회" 프로모션만(저장 안 했으면 전부)
+    import("@/lib/promoReport").then((m) => m.readPromoView()).catch(() => ({ groups: null as string[] | null }))
+      .then((v) => buildPromoReport(rs, v.groups && v.groups.length ? v.groups : null))
+      .catch((e) => ({ error: String(e?.message || e) }) as any),
   ]);
 
   // ---- 매출

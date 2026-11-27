@@ -161,17 +161,23 @@ export async function buildMeetingAuto(weekMonday: string) {
 
   let n = 2;
   // 그룹 제목 "아르노 윈터위크 (10/23~11/12) → 블랙…" → "아르노 윈터위크"
-  const shortTitle = (t: string) => t.replace(/^[①-⑳\d.\s]+/, "").split(/\s*[(→/★]|\s\d{1,3},\d{3}원|\s\d+개소/)[0].trim() || t;
+  // 제목이 설명(예: "9개소 적용 매장 : 성수, …")이라 프로모션 이름이 안 들어 있으면 구분 이름(월레스와그로밋)을 씀
+  const shortTitle = (t: string, group = "") => {
+    const s = t.replace(/^[①-⑳\d.\s]+/, "").split(/\s*[(→/★]|\s\d{1,3},\d{3}원|\s\d+개소/)[0].trim() || t;
+    const nz = (x: string) => x.replace(/\s/g, "");
+    if (group && (!nz(s).includes(nz(group)) || /[:：]|개소|매장/.test(s))) return group;
+    return s;
+  };
   const pg = Array.isArray(promo?.groups) ? promo.groups.filter((g: any) => g.cur.qty > 0 || g.prev.qty > 0) : [];
   if (pg.length) {
     const tq = pg.reduce((a: number, g: any) => a + g.cur.qty, 0), ta = pg.reduce((a: number, g: any) => a + g.cur.amount, 0);
     const pq = pg.reduce((a: number, g: any) => a + g.prev.qty, 0), pa = pg.reduce((a: number, g: any) => a + g.prev.amount, 0);
     L.push("");
-    L.push(`[${n++}] 프로모션: **${[...pg].sort((a: any, b: any) => b.cur.amount - a.cur.amount).slice(0, 3).map((g: any) => shortTitle(g.title)).join(" + ")}**`);
+    L.push(`[${n++}] 프로모션: **${[...pg].sort((a: any, b: any) => b.cur.amount - a.cur.amount).slice(0, 3).map((g: any) => shortTitle(g.title, g.group)).join(" + ")}**`);
     L.push(`- 실적: 판매 ${tq.toLocaleString("ko-KR")}장, ${eok(ta)}, 비중 ${cur.amt ? Math.round((ta / cur.amt) * 1000) / 10 : "-"}% / 전주 ${pq.toLocaleString("ko-KR")}장, ${eok(pa)}${pa ? `, ${pct(ta / pa - 1, 0)}` : ""}`);
     L.push("- 카테고리별 판매분석 :");
     for (const g of pg) {
-      const t = shortTitle(g.title);
+      const t = shortTitle(g.title, g.group);
       L.push(`  · ${t} ${g.cur.qty.toLocaleString("ko-KR")}장·${baek(g.cur.amount)} (전주 ${signN(g.cur.qty - g.prev.qty, "장")}, ${signBaek(g.cur.amount - g.prev.amount)})`);
     }
   }

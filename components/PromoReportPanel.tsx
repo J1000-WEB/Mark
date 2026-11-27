@@ -48,35 +48,32 @@ export default function PromoReportPanel() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showShare, setShowShare] = useState(false);
-  // 보고 싶은 프로모션만 체크(브라우저에 기억) — 저장값 없으면 전부
-  const [hidden, setHidden] = useState<Record<string, boolean>>({});
+  // 2026-11-27 소천님: 고른 프로모션을 저장(MARK_DB "IMC_조회설정" — PC·폰 같은 선택)해 두고, 다음부터 그 프로모션만 계산해서 불러옴
+  const [sel, setSel] = useState<string[] | null>(null); // 저장된 선택(null = 전부)
+  const [viewReady, setViewReady] = useState(false);
+  const [savedAt, setSavedAt] = useState("");
+  const [draft, setDraft] = useState<Set<string> | null>(null); // 체크 중(저장 전)
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
-    try {
-      setHidden(JSON.parse(localStorage.getItem("promoReportHidden") || "{}") || {});
-    } catch {}
+    fetch("/api/promo-report?view=1", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.ok) { setSel(j.groups && j.groups.length ? j.groups : null); setSavedAt(j.savedAt || ""); }
+      })
+      .catch(() => {})
+      .finally(() => setViewReady(true));
   }, []);
-  const toggleGroup = (g: string) =>
-    setHidden((h) => {
-      const next = { ...h, [g]: !h[g] };
-      try {
-        localStorage.setItem("promoReportHidden", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  const setAll = (show: boolean, list: string[]) => {
-    const next: Record<string, boolean> = {};
-    if (!show) list.forEach((g) => (next[g] = true));
-    setHidden(next);
-    try {
-      localStorage.setItem("promoReportHidden", JSON.stringify(next));
-    } catch {}
-  };
+  const selKey = sel ? sel.join("|") : "";
 
   useEffect(() => {
+    if (!viewReady) return;
     let alive = true;
     setLoading(true);
     setError("");
-    fetch(`/api/promo-report${week ? `?week=${week}` : ""}`, { cache: "no-store" })
+    const qs = new URLSearchParams();
+    if (week) qs.set("week", week);
+    if (sel) qs.set("groups", sel.join("|"));
+    fetch(`/api/promo-report${qs.toString() ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (!alive) return;
@@ -88,10 +85,32 @@ export default function PromoReportPanel() {
     return () => {
       alive = false;
     };
-  }, [week]);
+  }, [week, selKey, viewReady]);
 
-  const allGroups: any[] = data?.groups || [];
-  const groups: any[] = allGroups.filter((g) => !hidden[g.group]);
+  const allNames: string[] = data?.allGroups || (data?.groups || []).map((g: any) => g.group);
+  const shownSet = new Set(sel || allNames);
+  const checked = draft || shownSet;
+  const dirty = !!draft && (draft.size !== shownSet.size || [...draft].some((g) => !shownSet.has(g)));
+  const toggleGroup = (g: string) => {
+    const next = new Set(checked);
+    next.has(g) ? next.delete(g) : next.add(g);
+    setDraft(next);
+  };
+  async function applyAndSave() {
+    if (!draft || !draft.size) return;
+    setSaving(true);
+    const list = allNames.filter((g) => draft.has(g));
+    try {
+      const r = await fetch("/api/promo-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ groups: list }) });
+      const j = await r.json();
+      if (j.ok) setSavedAt(j.savedAt || "");
+    } catch {}
+    setSel(list.length === allNames.length ? null : list);
+    setDraft(null);
+    setSaving(false);
+  }
+
+  const groups: any[] = data?.groups || [];
   const total = data?.total;
   const isOpen = (g: string) => open[g] !== false; // 기본 펼침
 
@@ -198,25 +217,33 @@ export default function PromoReportPanel() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {allGroups.length > 0 && (
+          {allNames.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5">
-              <span className="px-1 text-xs font-black text-slate-400">조회</span>
-              {allGroups.map((g) => (
+              <span className="px-1 text-xs font-black text-slate-400" title={savedAt ? `저장 ${savedAt}` : "저장된 선택 없음(전부)"}>조회</span>
+              {allNames.map((g) => (
                 <label
-                  key={g.group}
-                  className={`flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${hidden[g.group] ? "text-slate-400" : "bg-slate-100 text-slate-800"}`}
+                  key={g}
+                  className={`flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${checked.has(g) ? "bg-slate-100 text-slate-800" : "text-slate-400"}`}
                 >
-                  <input type="checkbox" checked={!hidden[g.group]} onChange={() => toggleGroup(g.group)} className="h-3.5 w-3.5" />
-                  {g.group}
+                  <input type="checkbox" checked={checked.has(g)} onChange={() => toggleGroup(g)} className="h-3.5 w-3.5" />
+                  {g}
                 </label>
               ))}
               <button
                 type="button"
                 className="rounded-lg px-2 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-100"
-                onClick={() => setAll(groups.length !== allGroups.length, allGroups.map((g) => g.group))}
+                onClick={() => setDraft(checked.size !== allNames.length ? new Set(allNames) : new Set())}
               >
-                {groups.length !== allGroups.length ? "전체" : "전체해제"}
+                {checked.size !== allNames.length ? "전체" : "전체해제"}
               </button>
+              {dirty && (
+                <>
+                  <button type="button" disabled={saving || !checked.size} onClick={applyAndSave} className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white disabled:opacity-40">
+                    {saving ? "저장 중…" : `💾 이 선택 저장·불러오기 (${checked.size}개)`}
+                  </button>
+                  <button type="button" onClick={() => setDraft(null)} className="rounded-lg px-2 py-1 text-[11px] font-bold text-slate-400 hover:bg-slate-100">취소</button>
+                </>
+              )}
             </div>
           )}
           <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black" onClick={() => data && setWeek(addDays(data.weekStart, -7))}>

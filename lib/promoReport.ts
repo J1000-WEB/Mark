@@ -151,8 +151,13 @@ export type PromoGroupReport = {
   life: { inQty: number; sold: number; stock: number };
 };
 
-export async function buildPromoReport(weekStartInput?: string) {
-  const items = await readPromoItems();
+export async function buildPromoReport(weekStartInput?: string, onlyGroups?: string[] | null) {
+  const allItems = await readPromoItems();
+  const allGroups: string[] = [];
+  for (const i of allItems) if (!allGroups.includes(i.group)) allGroups.push(i.group);
+  // 2026-11-27 소천님: 저장해 둔 프로모션만 계산(카테고리가 늘어나서) — onlyGroups 없으면 전부(회의 탭 등)
+  const pick = onlyGroups && onlyGroups.length ? new Set(onlyGroups) : null;
+  const items = pick ? allItems.filter((i) => pick.has(i.group)) : allItems;
   const lastMonday = addDays(mondayOf(kstToday()), -7);
   const weekStart = weekStartInput && /^\d{4}-\d{2}-\d{2}$/.test(weekStartInput) ? mondayOf(weekStartInput) : lastMonday;
   const prevStart = addDays(weekStart, -7);
@@ -236,5 +241,30 @@ export async function buildPromoReport(weekStartInput?: string) {
     total: { cur: cur.total, prev: prev.total },
     dataDates: { cur: cur.datesWithData, prev: prev.datesWithData, ly: ly?.datesWithData || [] },
     groups,
+    allGroups,
   };
+}
+
+// ── IMC 현황 "조회" 선택 저장(2026-11-27 소천님) — MARK_DB "IMC_조회설정" A2 = JSON {groups:[...]} (PC·폰 어디서 열어도 같은 선택)
+const VIEW_TAB = "IMC_조회설정";
+export async function readPromoView(): Promise<{ groups: string[] | null; savedAt: string }> {
+  const { getDbSheetId, ensureSheetExistsById, getSheetValuesById } = await import("@/lib/googleSheets");
+  const id = getDbSheetId();
+  await ensureSheetExistsById(id, VIEW_TAB, ["설정(JSON)", "저장시각"]);
+  const v = await getSheetValuesById(id, VIEW_TAB, "A2:B2").catch(() => [] as any[][]);
+  try {
+    const j = JSON.parse(String(v?.[0]?.[0] || "null"));
+    return { groups: Array.isArray(j?.groups) ? j.groups.map(String) : null, savedAt: String(v?.[0]?.[1] || "") };
+  } catch {
+    return { groups: null, savedAt: "" };
+  }
+}
+export async function savePromoView(groups: string[]) {
+  const { getDbSheetId, ensureSheetExistsById, getSheetsClient } = await import("@/lib/googleSheets");
+  const id = getDbSheetId();
+  await ensureSheetExistsById(id, VIEW_TAB, ["설정(JSON)", "저장시각"]);
+  const stamp = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 19);
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({ spreadsheetId: id, range: `'${VIEW_TAB}'!A2:B2`, valueInputOption: "RAW", requestBody: { values: [[JSON.stringify({ groups }), stamp]] } });
+  return stamp;
 }

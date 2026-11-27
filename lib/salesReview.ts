@@ -134,7 +134,7 @@ export async function buildDailyReview(day?: string) {
         const act = m ? rows.filter((x) => x.storeName === m && x.date >= start && x.date <= d).reduce((s, x) => s + x.amount, 0) : 0;
         const tv = tCol >= 0 ? Number(String(r[tCol] ?? "").replace(/[^\d.-]/g, "")) : NaN;
         const tw = isFinite(tv) && tv > 0 ? (tv < 100000 ? tv * 1e6 : tv) : 0;
-        out.push(`${short(store)} ${man(act)}${tw ? `/${man(tw)} ${Math.round((act / tw) * 100)}%` : ""}`);
+        out.push(`${short(store)} ${man(act)}${tw ? ` (목표 ${man(tw)}의 ${Math.round((act / tw) * 100)}%)` : ""}`);
       }
       if (out.length) lines.push(`🏷 스오크 진행 ${out.join(", ")}`);
     }

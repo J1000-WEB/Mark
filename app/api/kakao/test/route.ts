@@ -15,6 +15,6 @@ export async function POST(req: Request) {
     const check = await checkLateStores().catch(() => null);
     return NextResponse.json(await sendDailyDigest(check));
   }
-  const r = await sendKakaoMemo(String(body?.text || "[MARK] 테스트 메시지예요."));
+  const r = await sendKakaoMemo(String(body?.text || "[MARK] 테스트 메시지예요."), undefined, body?.noButton ? { button: false } : {});
   return NextResponse.json(r);
 }

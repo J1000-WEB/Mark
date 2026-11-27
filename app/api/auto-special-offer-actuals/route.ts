@@ -82,9 +82,11 @@ export async function GET(req: Request) {
     }
 
     const result = await runUpdate();
+    // 2026-11-27: 매일 5시 크론 김에 카카오톡 알림 연결(refresh 토큰)이 끊기지 않게 연장
+    const kakao = await import("@/lib/kakao").then((m) => m.kakaoKeepAlive()).catch((e: any) => ({ error: e?.message }));
 
     return NextResponse.json(
-      { ok: true, ...result },
+      { ok: true, ...result, kakao },
       { headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   } catch (error: any) {

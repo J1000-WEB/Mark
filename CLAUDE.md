@@ -416,6 +416,9 @@
   RT이관/가격변경/프로모션 집행에도 연결하면 실제 효과 추적 가능(다음 과제로 남아있음).
 
 ### 이메일 알림 인프라 (`lib/alerts.ts`, Resend API)
+- **2026-11-27 메일이 실제론 안 나가고 있었음**(로그 "메일 못 보냄"): 보내는 주소가 Resend 테스트용(onboarding@resend.dev)이라 가입 메일로만 발송 가능 → 소천님이 Resend에 generalidea.co.kr 도메인 인증 진행 중(하이웍스 메일, DNS에 Resend 레코드 추가 — 기존 MX는 그대로). Verified 뒤 Vercel `ALERT_EMAIL_FROM`·`ALERT_EMAIL_TO` 넣기. 점검 GET `/api/inshop-verify?mailcheck=1`(발송 없음).
+- **카카오톡 "나에게 보내기"(2026-11-27, `lib/kakao.ts`)**: `sendEmailAlert`가 메일 전에 같은 알림을 카톡 "나와의 채팅"으로도 보냄(200자, "대시보드 열기" 버튼) — 소천님이 받아서 팀방에 전달. Vercel `KAKAO_REST_KEY`(선택 `KAKAO_CLIENT_SECRET`), 카카오 앱 Redirect URI `/api/kakao/callback`·동의항목 talk_message.
+  연결: `/api/kakao/login` 한 번 → 토큰 MARK_DB `카카오_토큰` A2. 상태 GET `/api/kakao/test`, 테스트 POST {text}. refresh 토큰(약 2달)은 매일 5:00 `auto-special-offer-actuals` 크론이 1달 안 남으면 연장(`kakaoKeepAlive`).
 - 이미 구축되어 있고 **재사용 대상**: 일간매출 스냅샷 누락 알림, PIP 대용량 업로드 실패 알림
   등에서 이미 씀. 새 알림 기능 만들 때 이 인프라 그대로 재사용하면 됨.
 - 환경변수: `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM`(선택).

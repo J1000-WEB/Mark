@@ -7,6 +7,14 @@
 
 // toOverride: 이 알림만 다른 주소로 보낼 때(예: 인샵 업로드 검증 → 소천님 회사 메일)
 export async function sendEmailAlert(subject: string, html: string, toOverride?: string) {
+  // 2026-11-27: 같은 알림을 카카오톡 "나와의 채팅"으로도(연결돼 있을 때만, 실패해도 메일은 그대로)
+  if (process.env.KAKAO_REST_KEY) {
+    try {
+      const { sendKakaoMemo } = await import("@/lib/kakao");
+      const plain = html.replace(/<(br|\/p|\/tr)[^>]*>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").replace(/\n\s*/g, "\n").trim();
+      await sendKakaoMemo(`${subject}\n${plain}`.slice(0, 200));
+    } catch {}
+  }
   const apiKey = process.env.RESEND_API_KEY;
   const to = toOverride || process.env.ALERT_EMAIL_TO;
   const from = process.env.ALERT_EMAIL_FROM || "MARK 알림 <onboarding@resend.dev>";

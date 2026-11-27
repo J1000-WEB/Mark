@@ -79,7 +79,10 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams.get("slot");
     const slot = q === "0400" ? "04:00" : q === "0920" || q === "0930" ? "09:30" : slotOf(kstNowParts().hhmm);
     const result = await runAndLog(slot);
-    return NextResponse.json(result, { status: result.ok ? 200 : 500, headers: { "Cache-Control": "no-store, max-age=0" } });
+    // 2026-11-27 소천님: 9:20 갱신 끝나면 하루치 알림을 카톡으로 한 번에
+    let digest: any = null;
+    if (slot === "09:30") digest = await import("@/lib/dailyDigest").then((m) => m.sendDailyDigest((result as any).check)).catch((e: any) => ({ ok: false, error: e?.message }));
+    return NextResponse.json({ ...result, digest }, { status: result.ok ? 200 : 500, headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     console.error("sales-summary-drive-import (cron) failed:", error);
     return NextResponse.json({ ok: false, error: error?.message || "드라이브 자동 가져오기 실패" }, { status: 500 });

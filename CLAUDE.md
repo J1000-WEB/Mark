@@ -419,6 +419,10 @@
 - **2026-11-27 메일이 실제론 안 나가고 있었음**(로그 "메일 못 보냄"): 보내는 주소가 Resend 테스트용(onboarding@resend.dev)이라 가입 메일로만 발송 가능 → 소천님이 Resend에 generalidea.co.kr 도메인 인증 진행 중(하이웍스 메일, DNS에 Resend 레코드 추가 — 기존 MX는 그대로). Verified 뒤 Vercel `ALERT_EMAIL_FROM`·`ALERT_EMAIL_TO` 넣기. 점검 GET `/api/inshop-verify?mailcheck=1`(발송 없음).
 - **카카오톡 "나에게 보내기"(2026-11-27, `lib/kakao.ts`)**: `sendEmailAlert`가 메일 전에 같은 알림을 카톡 "나와의 채팅"으로도 보냄(200자, "대시보드 열기" 버튼) — 소천님이 받아서 팀방에 전달. Vercel `KAKAO_REST_KEY`(선택 `KAKAO_CLIENT_SECRET`), 카카오 앱 Redirect URI `/api/kakao/callback`·동의항목 talk_message.
   연결: `/api/kakao/login` 한 번 → 토큰 MARK_DB `카카오_토큰` A2. 상태 GET `/api/kakao/test`, 테스트 POST {text}. refresh 토큰(약 2달)은 매일 5:00 `auto-special-offer-actuals` 크론이 1달 안 남으면 연장(`kakaoKeepAlive`).
+- **2026-11-27 소천님: 메일은 안 보내고(Resend 안 씀, 다시 켜려면 Vercel `ALERT_EMAIL_ENABLED=1`), 알림은 매일 9:20에 카톡 한 번에**(`lib/dailyDigest.ts`):
+  `sendEmailAlert`는 MARK_DB `알림_대기`(생긴시각·제목·내용·보낸시각)에 쌓기만 함(호출부엔 ok:true). 9:20 크론(sales-summary-drive-import slot 0920 → "09:30") 끝에 `sendDailyDigest(check)`:
+  ① 어제 매출(매출탭 화이트리스트 합, 전주 동요일 대비) ② 인샵 업로드 검증 최근 매출일(일치/확인필요 채널) ③ 용인·무신사 반영 ④ 그 외 쌓인 알림 제목 → 200자씩 나눠 카톡 여러 통, 성공하면 쌓인 줄에 보낸 시각.
+  지금 한 번: POST `/api/kakao/test` {digest:true}. ⚠ 인샵 검증 9:40 재확인 결과는 다음 날 아침에 반영.
 - 이미 구축되어 있고 **재사용 대상**: 일간매출 스냅샷 누락 알림, PIP 대용량 업로드 실패 알림
   등에서 이미 씀. 새 알림 기능 만들 때 이 인프라 그대로 재사용하면 됨.
 - 환경변수: `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM`(선택).

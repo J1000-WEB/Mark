@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type NavKey = "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" | "rounding" | "product" | "meeting";
+export type NavKey = "schedule" | "sales-data" | "daily" | "weekly" | "monthly" | "inventory" | "insights" | "snapshot" | "trends" | "logic" | "vmd" | "store" | "store-brief" | "realtime" | "store-sales" | "rounding" | "product" | "meeting" | "review";
 
 // 2026-11-19 소천님 요청 순서: 매출 상품 실시간 재고CTRL 주간 매장 라운딩
 const tabs = [
@@ -21,6 +21,7 @@ const tabs = [
   { key: "store", label: "매장", href: "/store", icon: "🏬" },
   { key: "rounding", label: "라운딩", href: "/rounding", icon: "🧭" },
   { key: "meeting", label: "회의", href: "/meeting", icon: "📝" },
+  { key: "review", label: "리뷰", href: "/review", icon: "📰" },
 ] as const;
 
 export default function NavTabs({ active }: { active: NavKey }) {

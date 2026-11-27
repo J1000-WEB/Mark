@@ -9,7 +9,7 @@ import { readOfflineSalesRows } from "@/lib/salesSource";
 import { isPromoExcludedStore } from "@/lib/promoReport";
 import { buildMeetingAuto, addDays, mondayOf } from "@/lib/meetingReport";
 import { chunk } from "@/lib/dailyDigest";
-import { getDbSheetId, ensureSheetExistsById, getSheetValuesById, appendValuesById } from "@/lib/googleSheets";
+import { getDbSheetId, ensureSheetExistsById, getSheetValuesById, appendValuesById, updateValuesById } from "@/lib/googleSheets";
 
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -139,7 +139,13 @@ export async function buildDailyReview(day?: string) {
 
   const mus = [...cur.entries()].filter(([n, x]) => /무신사/.test(n) && x.a > 0).length;
   if (!mus) lines.push("※ 무신사 매출은 아직 미반영(아침 업로드 후 매출탭에서)");
-  return { day: d, lines, sales: { a, aw, ay, tgt, like: rate(lc, ll) } };
+  const summary = [
+    `[MARK] 전일 리뷰 ${md(d)}(${dw(d)})`,
+    `매출 ${eok(a)}${tgt ? `(목표 ${Math.round((a / tgt) * 100)}%)` : ""} · 전주 ${pct(rate(a, aw))} · 전년 ${pct(rate(a, ay))} · 동일매장 ${pct(rate(lc, ll))}`,
+    `${+d.slice(5, 7)}월 누계 ${eok(ma)}${mt ? `(목표 ${Math.round((ma / mt) * 100)}%)` : ""} · 전년 ${pct(rate(ma, mly))}`,
+    ...(good[0] ? [`📈 ${short(good[0].n)} ${pct(rate(good[0].a, good[0].w))} · 📉 ${bad[0] ? `${short(bad[0].n)} ${pct(rate(bad[0].a, bad[0].w))}` : "-"}`] : []),
+  ];
+  return { day: d, lines, summary, sales: { a, aw, ay, tgt, like: rate(lc, ll) } };
 }
 
 /** 회의 탭 "지난주" 칸 자동 초안을 카톡용 줄로 */
@@ -160,7 +166,61 @@ export async function buildWeeklyReview(weekMonday?: string) {
   // 이번주 스오크 일정
   const tw = String(auto.thisWeek || "").split("\n").map((l) => l.replace(/\*\*/g, "").trim()).filter((l) => /^- (금주|차주)/.test(l));
   if (tw.length) { lines.push("[이번주 스오크]"); lines.push(...tw); }
-  return { week: wk, lines };
+  const f: any = auto.facts?.sales || {};
+  const offers: any[] = auto.facts?.offers || [];
+  const oT = offers.reduce((x, o) => x + (o.target || 0), 0), oA = offers.filter((o) => o.target).reduce((x, o) => x + o.actual, 0);
+  const promoLine = lines.find((l) => /^- 실적: 판매/.test(l));
+  const summary = [
+    lines[0],
+    `매출 ${eok(f.cur || 0)}${f.target ? `(목표 ${Math.round(((f.cur || 0) / f.target) * 100)}%)` : ""} · 전주 ${pct(rate(f.cur, f.lw))} · 전년 ${pct(rate(f.cur, f.ly))} · 동일매장 ${pct(f.likeYoy ?? null)}`,
+    ...(promoLine ? [`프로모션 ${promoLine.replace(/^- 실적: 판매\s*/, "").split(" / ")[0]}`] : []),
+    ...(oT ? [`스오크 ${offers.length}개소 진척 ${Math.round((oA / oT) * 100)}%`] : []),
+  ];
+  return { week: wk, lines, summary };
+}
+
+const STORE_TAB = "카톡리뷰_기록";
+const STORE_HEADER = ["종류", "기준", "저장시각", "요약", "본문"];
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || process.env.MARK_BASE_URL || "https://mark-khaki.vercel.app").replace(/\/$/, "");
+
+export type SavedReview = { kind: "daily" | "weekly"; key: string; savedAt: string; summary: string; text: string };
+
+async function readStoreRows() {
+  const id = getDbSheetId();
+  await ensureSheetExistsById(id, STORE_TAB, STORE_HEADER);
+  return ((await getSheetValuesById(id, STORE_TAB, "A:E").catch(() => [] as any[][])) || []) as any[][];
+}
+export async function listSavedReviews(): Promise<Omit<SavedReview, "text">[]> {
+  const v = await readStoreRows();
+  return v.slice(1).filter((r) => r?.[0] && r?.[1]).map((r) => ({ kind: r[0], key: String(r[1]), savedAt: String(r[2] || ""), summary: String(r[3] || "") }))
+    .sort((a, b) => (a.key < b.key ? 1 : -1));
+}
+export async function readSavedReview(kind: string, key: string): Promise<SavedReview | null> {
+  const v = await readStoreRows();
+  const r = v.find((x, i) => i > 0 && x?.[0] === kind && String(x?.[1]) === key);
+  return r ? { kind: r[0], key, savedAt: String(r[2] || ""), summary: String(r[3] || ""), text: String(r[4] || "") } : null;
+}
+export async function saveReview(kind: "daily" | "weekly", key: string, summary: string, text: string) {
+  const id = getDbSheetId();
+  const v = await readStoreRows();
+  const idx = v.findIndex((x, i) => i > 0 && x?.[0] === kind && String(x?.[1]) === key);
+  const row = [kind, key, kstStamp(), summary, text.slice(0, 45000)];
+  if (idx > 0) await updateValuesById(id, `'${STORE_TAB}'!A${idx + 1}:E${idx + 1}`, [row]);
+  else await appendValuesById(id, `'${STORE_TAB}'!A:E`, [row]);
+  return { kind, key, savedAt: row[2], summary, text };
+}
+/** 저장된 게 없으면 만들어서 저장(과거 날짜·주도 열어보면 생김) */
+export async function getOrBuildReview(kind: "daily" | "weekly", key: string, rebuild = false): Promise<SavedReview> {
+  if (!rebuild) {
+    const saved = await readSavedReview(kind, key);
+    if (saved) return saved;
+  }
+  if (kind === "daily") {
+    const r = await buildDailyReview(key);
+    return saveReview("daily", r.day, r.summary.join("\n"), r.lines.join("\n"));
+  }
+  const r = await buildWeeklyReview(key);
+  return saveReview("weekly", r.week, r.summary.join("\n"), r.lines.join("\n"));
 }
 
 async function alreadySent(kind: string, key: string) {
@@ -173,38 +233,37 @@ async function logSent(kind: string, key: string, ok: boolean) {
   await appendValuesById(getDbSheetId(), `'${LOG_TAB}'!A:D`, [[kstStamp(), kind, key, ok ? "ok" : "fail"]]).catch(() => {});
 }
 
-async function send(lines: string[]) {
-  const { sendKakaoMemo, } = await import("@/lib/kakao");
-  const msgs = chunk(lines);
-  const results = [];
-  for (const m of msgs) results.push(await sendKakaoMemo(m, `${process.env.NEXT_PUBLIC_SITE_URL || "https://mark-khaki.vercel.app"}/meeting`));
-  return { ok: results.every((r: any) => r.ok), messages: msgs, results };
+/** 요약 한 통(200자) + "자세히 보기" → /review 화면 */
+async function sendSummary(kind: string, key: string, summary: string[]) {
+  const { sendKakaoMemo } = await import("@/lib/kakao");
+  const link = `${SITE}/review?kind=${kind}&key=${key}`;
+  let text = summary.join("\n");
+  if (text.length > 200) text = chunk(summary, 200)[0];
+  const r = await sendKakaoMemo(text, link, { button: "자세히 보기" });
+  return { ...r, text, link };
 }
 
-/** kind: auto(매일 전일 + 월요일이면 전주도) | daily | weekly. dryRun이면 안 보내고 글만. */
+/** kind: auto(매일 전일 + 월요일이면 전주도) | daily | weekly. dryRun이면 안 보내고 안 저장, 글만. */
 export async function runSalesReview(opts: { kind?: "auto" | "daily" | "weekly"; day?: string; week?: string; dryRun?: boolean; force?: boolean } = {}) {
   const kind = opts.kind || "auto";
   const out: any = { ok: true };
-  // 토큰을 먼저 읽어 둠(리뷰 만들며 시트를 많이 읽은 뒤엔 1분 읽기 한도에 걸릴 수 있음)
   if (!opts.dryRun) await (await import("@/lib/kakao")).kakaoAccess().catch(() => "");
   const today = kstToday();
   const doDaily = kind === "auto" || kind === "daily";
   const doWeekly = kind === "weekly" || (kind === "auto" && dw(today) === "월");
-  if (doDaily) {
-    const r = await buildDailyReview(opts.day);
-    out.daily = { day: r.day, text: r.lines.join("\n") };
-    if (!opts.dryRun) {
-      if (!opts.force && (await alreadySent("daily", r.day))) out.daily.skipped = "이미 보냄";
-      else { const s = await send(r.lines); out.daily.sent = s; await logSent("daily", r.day, s.ok); out.ok = out.ok && s.ok; }
-    }
-  }
-  if (doWeekly) {
-    const r = await buildWeeklyReview(opts.week);
-    out.weekly = { week: r.week, text: r.lines.join("\n") };
-    if (!opts.dryRun) {
-      if (!opts.force && (await alreadySent("weekly", r.week))) out.weekly.skipped = "이미 보냄";
-      else { const s = await send(r.lines); out.weekly.sent = s; await logSent("weekly", r.week, s.ok); out.ok = out.ok && s.ok; }
-    }
+  const jobs: { k: "daily" | "weekly"; build: () => Promise<{ key: string; lines: string[]; summary: string[] }> }[] = [];
+  if (doDaily) jobs.push({ k: "daily", build: async () => { const r = await buildDailyReview(opts.day); return { key: r.day, lines: r.lines, summary: r.summary }; } });
+  if (doWeekly) jobs.push({ k: "weekly", build: async () => { const r = await buildWeeklyReview(opts.week); return { key: r.week, lines: r.lines, summary: r.summary }; } });
+  for (const j of jobs) {
+    const r = await j.build();
+    const o: any = (out[j.k] = { key: r.key, summary: r.summary.join("\n"), text: r.lines.join("\n") });
+    if (opts.dryRun) continue;
+    await saveReview(j.k, r.key, o.summary, o.text).catch((e) => (o.saveError = String(e?.message || e)));
+    if (!opts.force && (await alreadySent(j.k, r.key))) { o.skipped = "이미 보냄"; continue; }
+    const s = await sendSummary(j.k, r.key, r.summary);
+    o.sent = s;
+    await logSent(j.k, r.key, s.ok);
+    out.ok = out.ok && s.ok;
   }
   return out;
 }

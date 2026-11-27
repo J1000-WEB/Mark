@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { Readable } from "stream";
 
-function getPrivateKey() {
+export function getPrivateKey() {
   const raw = process.env.GOOGLE_PRIVATE_KEY || "";
   return raw.replace(/\\n/g, "\n");
 }

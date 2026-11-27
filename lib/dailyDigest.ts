@@ -103,7 +103,7 @@ export async function sendDailyDigest(check?: any) {
 
   const msgs = chunk(lines);
   const results = [];
-  for (const m of msgs) results.push(await sendKakaoMemo(m));
+  for (const m of msgs) results.push(await sendKakaoMemo(m, undefined, { button: false })); // 점검은 눌러서 할 게 없어 버튼 없음
   const ok = results.every((r) => r.ok);
   if (ok && pending.length) {
     const sheets = await getSheetsClient();

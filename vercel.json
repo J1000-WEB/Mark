@@ -130,6 +130,10 @@
     "app/api/kakao/review/route.ts": {
       "memory": 1024,
       "maxDuration": 300
+    },
+    "app/api/review/route.ts": {
+      "memory": 1024,
+      "maxDuration": 300
     }
   },
   "crons": [

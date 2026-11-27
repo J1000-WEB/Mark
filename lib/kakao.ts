@@ -92,12 +92,15 @@ export async function kakaoStatus() {
 }
 
 /** 카톡 "나와의 채팅"으로 텍스트(200자까지) + 대시보드 버튼 */
-export async function sendKakaoMemo(text: string, link = SITE) {
+export async function sendKakaoMemo(text: string, link = SITE, opts: { button?: string | false } = {}) {
   if (!kakaoKey()) return { ok: false, error: "KAKAO_REST_KEY 환경변수가 없어요." };
   try {
     const access = await kakaoAccess();
     const msg = text.length > 200 ? text.slice(0, 197) + "…" : text;
-    const template = { object_type: "text", text: msg, link: { web_url: link, mobile_web_url: link }, button_title: "대시보드 열기" };
+    const template: any = { object_type: "text", text: msg, link: { web_url: link, mobile_web_url: link } };
+    // 버튼 없이(점검 알림) = buttons: [] / 기본 "대시보드 열기"
+    if (opts.button === false) template.buttons = [];
+    else template.button_title = opts.button || "대시보드 열기";
     const r = await fetch("https://kapi.kakao.com/v2/api/talk/memo/default/send", {
       method: "POST",
       headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" },

@@ -188,6 +188,10 @@
     {
       "path": "/api/kakao/digest",
       "schedule": "50 22 * * *"
+    },
+    {
+      "path": "/api/kakao/review",
+      "schedule": "30 23 * * *"
     }
   ]
 }

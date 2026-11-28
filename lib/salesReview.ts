@@ -23,13 +23,31 @@ const rate = (a: number, b: number) => (b ? a / b - 1 : null);
 const short = (n: string) => n.replace(/^오프라인_/, "").replace(/^(롯데|현대|신세계|스타필드)\s*(백화점|아울렛)?\s*/, "").replace(/점$/, "") || n;
 const LOG_TAB = "카톡리뷰_로그";
 
+// 2026-11-28 소천님: 구글 시트 1분 읽기 한도(429) 등으로 데이터가 비어 오면 매출 0인 리뷰가 저장됐음(11/19) →
+// 읽은 결과가 비면 20·40·60초 뒤 다시 읽고, 그래도 비면 리뷰를 만들지 않고 오류로 돌려보냄(0원 리뷰 저장 안 함).
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function withRetry<T>(label: string, fn: () => Promise<T>, ok: (v: T) => boolean, waits = [20000, 40000, 60000]): Promise<T> {
+  let last: any = null;
+  for (let i = 0; i <= waits.length; i++) {
+    try {
+      const v = await fn();
+      if (ok(v)) return v;
+      last = new Error(`${label}: 데이터가 비어 있음`);
+    } catch (e: any) {
+      last = e;
+    }
+    if (i < waits.length) await sleep(waits[i]);
+  }
+  throw new Error(`${label} 못 읽음(몇 번 다시 시도함) — ${String(last?.message || last).slice(0, 120)}`);
+}
+
 export async function buildDailyReview(day?: string) {
   const d = day || addDays(kstToday(), -1);
   const lw = addDays(d, -7), ly = addDays(d, -364);
   const lines: string[] = [];
   lines.push(`[MARK] 전일 리뷰 ${md(d)}(${dw(d)})`);
 
-  const rows = await readSalesSummaryRowsForReports();
+  const rows = await withRetry("매출탭 매출", () => readSalesSummaryRowsForReports(), (r) => r.some((x) => x.date === d && x.amount));
   const byStore = (date: string) => {
     const m = new Map<string, { a: number; t: number; g: string }>();
     for (const r of rows) {
@@ -64,6 +82,33 @@ export async function buildDailyReview(day?: string) {
   }
   lines.push(`📅 ${+d.slice(5, 7)}월 누계 ${eok(ma)}${mt ? ` · 목표 ${Math.round((ma / mt) * 100)}%` : ""} · 전년 ${pct(rate(ma, mly))}`);
 
+  // 월 착지 예상(매출탭과 같은 방식): 매장마다 지금까지 + 남은 날 × 그 매장 최근 8주 같은 요일 평균(공휴일 제외, 남은 공휴일은 일요일 취급)
+  try {
+    const { isKoreanHoliday } = await import("@/lib/koreanHolidays");
+    const y0 = +d.slice(0, 4), m0 = +d.slice(5, 7);
+    const monthEnd = new Date(Date.UTC(y0, m0, 0)).toISOString().slice(0, 10);
+    const refStart = addDays(d, -55);
+    const per = new Map<string, { sum: number[]; cnt: number[] }>();
+    let fullTarget = 0, lyMonth = 0;
+    const lyMs = addDays(ms, -364), lyMe = addDays(monthEnd, -364);
+    for (const r of rows) {
+      if (r.date >= ms && r.date <= monthEnd) fullTarget += r.target || 0;
+      if (r.date >= lyMs && r.date <= lyMe) lyMonth += r.amount || 0;
+      if (r.date < refStart || r.date > d || !r.amount || isKoreanHoliday(r.date)) continue;
+      const w = new Date(`${r.date}T00:00:00Z`).getUTCDay();
+      const x = per.get(r.storeName) || { sum: [0, 0, 0, 0, 0, 0, 0], cnt: [0, 0, 0, 0, 0, 0, 0] };
+      x.sum[w] += r.amount; x.cnt[w] += 1;
+      per.set(r.storeName, x);
+    }
+    let remain = 0;
+    for (let dd = addDays(d, 1); dd <= monthEnd; dd = addDays(dd, 1)) {
+      const w = isKoreanHoliday(dd) ? 0 : new Date(`${dd}T00:00:00Z`).getUTCDay();
+      for (const x of per.values()) if (x.cnt[w]) remain += x.sum[w] / x.cnt[w];
+    }
+    const landing = ma + remain;
+    if (d < monthEnd) lines.push(`🎯 ${m0}월 착지 예상 ${eok(landing)}${fullTarget ? ` · 월 목표 ${eok(fullTarget)}의 ${Math.round((landing / fullTarget) * 100)}%` : ""}${lyMonth ? ` · 전년 ${m0}월 ${pct(rate(landing, lyMonth))}` : ""}`);
+  } catch {}
+
   // 형태별 전주비
   const grp = new Map<string, [number, number]>();
   for (const [n, x] of cur) { const g = grp.get(x.g) || [0, 0]; g[0] += x.a; grp.set(x.g, g); }
@@ -96,7 +141,7 @@ export async function buildDailyReview(day?: string) {
 
   // 품번 TOP5(수량, 오프라인)
   try {
-    const { rows: sr } = await readOfflineSalesRows([d]);
+    const { rows: sr } = await withRetry("PIP 보관 판매", () => readOfflineSalesRows([d]), (v) => v.rows.length > 0, [20000, 40000]).catch(() => ({ rows: [] as any[] }));
     const by = new Map<string, [number, number]>();
     for (const r of sr) {
       if (!r.styleCode || isPromoExcludedStore(r.storeName)) continue;
@@ -154,7 +199,7 @@ export async function buildDailyReview(day?: string) {
 /** 회의 탭 "지난주" 칸 자동 초안을 카톡용 줄로 */
 export async function buildWeeklyReview(weekMonday?: string) {
   const wk = weekMonday || addDays(mondayOf(kstToday()), -7);
-  const auto = await buildMeetingAuto(wk);
+  const auto = await withRetry("주간 매출", () => buildMeetingAuto(wk), (a: any) => (a?.facts?.sales?.cur || 0) > 0);
   const lines: string[] = [`[MARK] 주간 리뷰 ${md(wk)}~${md(addDays(wk, 6))}`];
   const src = String(auto.lastWeek || "").split("\n");
   for (let raw of src) {
